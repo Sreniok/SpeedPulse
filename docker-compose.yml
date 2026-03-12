@@ -1,0 +1,72 @@
+services:
+  dashboard:
+    build: .
+    container_name: speedtest-dashboard
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      - .env
+    environment:
+      - TZ=${TZ:-UTC}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+    ports:
+      - "${DASHBOARD_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./config.json:/app/config.json
+      - ./.env:/app/.env
+      - ./Log:/app/Log
+      - ./Images:/app/Images
+      - ./Archive:/app/Archive
+      - ./cron.log:/app/cron.log
+      - ./errors.log:/app/errors.log
+      - ./last_alert.txt:/app/last_alert.txt
+      - ./chart_base64.txt:/app/chart_base64.txt
+
+  scheduler:
+    build: .
+    container_name: speedtest-scheduler
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      - .env
+    environment:
+      - TZ=${TZ:-UTC}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - HEALTH_CHECK_TIME=${HEALTH_CHECK_TIME:-07:00}
+      - LOG_ROTATION_TIME=${LOG_ROTATION_TIME:-02:00}
+      - RUN_STARTUP_SPEEDTEST=${RUN_STARTUP_SPEEDTEST:-false}
+    command: ["python", "scheduler_service.py"]
+    volumes:
+      - ./config.json:/app/config.json
+      - ./.env:/app/.env
+      - ./Log:/app/Log
+      - ./Images:/app/Images
+      - ./Archive:/app/Archive
+      - ./cron.log:/app/cron.log
+      - ./errors.log:/app/errors.log
+      - ./last_alert.txt:/app/last_alert.txt
+      - ./chart_base64.txt:/app/chart_base64.txt

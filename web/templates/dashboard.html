@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <title>Speed Monitor Dashboard</title>
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/vendor/chart.umd.min.js" defer></script>
+    <script src="/static/dashboard.js" defer></script>
+  </head>
+  <body class="dash-body" data-theme="dark">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <p class="eyebrow">LAN only</p>
+          <div class="brand">Speed Monitor</div>
+        </div>
+
+        <section class="sidebar-card sidebar-card-account">
+          <p class="eyebrow">Account</p>
+          <strong>{{ account_name }}</strong>
+          <p>{{ account_provider or "Provider not set" }}</p>
+          <p>Account No: {{ account_number }}</p>
+        </section>
+
+        <nav class="nav-block">
+          <a class="nav-link active" href="#overview">Overview</a>
+          <a class="nav-link" href="#charts">Charts</a>
+          <a class="nav-link" href="#latest-results">Results</a>
+          <a class="nav-link" href="/settings">Settings</a>
+        </nav>
+
+        <section class="sidebar-card">
+          <p class="eyebrow">Schedule</p>
+          <strong id="scan-plan">Loading...</strong>
+          <div id="schedule-times" class="schedule-chip-group">
+            <span class="schedule-chip">Loading...</span>
+          </div>
+          <div class="schedule-meta">
+            <div class="schedule-detail-row">
+              <span class="schedule-detail-label">Server</span>
+              <span id="schedule-server" class="schedule-detail-value"
+                >Loading...</span
+              >
+            </div>
+            <div class="schedule-detail-row schedule-detail-row-stack">
+              <span class="schedule-detail-label">Weekly report</span>
+              <span id="schedule-weekly" class="schedule-detail-value"
+                >Loading...</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <section id="sidebar-contract" class="sidebar-card hidden">
+          <p class="eyebrow">Contract</p>
+          <strong id="sidebar-contract-period">Not set</strong>
+          <p id="sidebar-contract-speeds" class="sidebar-contract-detail"></p>
+          <p
+            id="sidebar-contract-remaining"
+            class="sidebar-contract-remaining"
+          ></p>
+        </section>
+
+        <div class="sidebar-footer">
+          <span class="user-pill">{{ username }}</span>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar" id="overview">
+          <div class="topbar-copy">
+            <p class="eyebrow">Dashboard</p>
+            <h1>Speed Test Results</h1>
+            <p class="topbar-text">
+              Newest results first, all scheduled scans available, fast manual
+              reruns when needed.
+            </p>
+          </div>
+
+          <div class="topbar-controls">
+            <div class="control control-select">
+              <select id="range" aria-label="Select time range">
+                <option value="today" selected>Today</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="365">Last 365 days</option>
+              </select>
+            </div>
+            <button
+              id="theme-toggle"
+              class="btn-muted"
+              type="button"
+              aria-pressed="false"
+            >
+              Light mode
+            </button>
+            <button id="run-test" class="btn-primary" type="button">
+              Manual speed test
+            </button>
+            <a href="/logout" class="btn-ghost">Logout</a>
+          </div>
+        </header>
+
+        <section
+          id="message"
+          class="message hidden"
+          role="status"
+          aria-live="polite"
+        ></section>
+        <section class="status-line">
+          <span id="status">Loading...</span>
+        </section>
+
+        <dialog
+          id="server-modal"
+          class="dialog-modal"
+          aria-labelledby="server-modal-title"
+          aria-describedby="server-modal-copy"
+        >
+          <div class="dialog-card dialog-card-compact">
+            <div class="dialog-head">
+              <div>
+                <p class="eyebrow">Speedtest</p>
+                <h2 id="server-modal-title">Select Server</h2>
+              </div>
+              <button
+                id="server-modal-close"
+                class="icon-button"
+                type="button"
+                aria-label="Close server selection"
+              >
+                ×
+              </button>
+            </div>
+            <p id="server-modal-copy" class="dialog-copy">
+              Choose a server for this manual test. Leave it on auto to use the
+              nearest available option.
+            </p>
+            <label class="dialog-label" for="server-modal-select">Server</label>
+            <select
+              id="server-modal-select"
+              aria-label="Select server for manual speed test"
+            >
+              <option value="">Auto (nearest server)</option>
+            </select>
+            <p class="dialog-help">
+              Leave empty to run the speed test without specifying a server.
+              Blocked servers will be skipped.
+            </p>
+            <div class="dialog-actions">
+              <button id="server-modal-start" class="btn-primary" type="button">
+                Start
+              </button>
+              <button id="server-modal-cancel" class="btn-ghost" type="button">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </dialog>
+
+        <section
+          id="run-modal"
+          class="run-modal hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="run-modal-title"
+          aria-describedby="run-modal-copy"
+        >
+          <div class="run-modal-card">
+            <span class="run-pulse" aria-hidden="true"></span>
+            <div class="dialog-head run-modal-head">
+              <div>
+                <p class="eyebrow">Manual test</p>
+                <h2 id="run-modal-title">Running speed test</h2>
+              </div>
+              <span id="run-modal-server-pill" class="server-pill">Auto</span>
+            </div>
+            <p id="run-modal-copy" class="run-modal-copy">
+              Testing your line now. This window closes automatically when the
+              result is ready.
+            </p>
+            <p id="run-modal-stage" class="run-modal-stage">Preparing test</p>
+            <div class="run-modal-progress">
+              <span
+                id="run-modal-progress-bar"
+                class="run-modal-progress-bar"
+              ></span>
+            </div>
+            <div class="run-live-grid">
+              <article class="run-live-card">
+                <span class="run-live-label">Download</span>
+                <strong id="run-live-download">-- Mbps</strong>
+                <span id="run-live-download-note" class="run-live-note"
+                  >Waiting for measurement</span
+                >
+              </article>
+              <article class="run-live-card">
+                <span class="run-live-label">Upload</span>
+                <strong id="run-live-upload">-- Mbps</strong>
+                <span id="run-live-upload-note" class="run-live-note"
+                  >Waiting for measurement</span
+                >
+              </article>
+              <article class="run-live-card">
+                <span class="run-live-label">Latency</span>
+                <strong id="run-live-ping">-- ms</strong>
+                <span id="run-live-ping-note" class="run-live-note"
+                  >Waiting for connection</span
+                >
+              </article>
+            </div>
+            <div class="run-modal-status">
+              <span class="run-modal-dot" aria-hidden="true"></span>
+              <span id="run-modal-timer">Elapsed 0s</span>
+            </div>
+            <div
+              id="run-modal-log"
+              class="run-modal-log"
+              aria-live="polite"
+            ></div>
+          </div>
+        </section>
+
+        <section id="hero-metrics" class="hero-metrics"></section>
+
+        <section class="charts-grid" id="charts">
+          <section class="panel panel-large">
+            <div class="panel-head">
+              <p class="eyebrow">Speed</p>
+              <h2>Download / Upload</h2>
+            </div>
+            <canvas
+              id="speedChart"
+              aria-label="Download and upload speed chart over time"
+              role="img"
+            ></canvas>
+          </section>
+
+          <section class="panel panel-large">
+            <div class="panel-head">
+              <p class="eyebrow">Latency</p>
+              <h2>Ping / Jitter / Packet loss</h2>
+            </div>
+            <canvas
+              id="latencyChart"
+              aria-label="Ping, jitter, and packet loss chart over time"
+              role="img"
+            ></canvas>
+          </section>
+
+          <section class="panel panel-large panel-wide">
+            <div class="panel-head">
+              <p class="eyebrow">Reliability</p>
+              <h2>Threshold breaches</h2>
+              <p id="breach-summary" class="panel-subtext">
+                Comparing results against configured thresholds.
+              </p>
+            </div>
+            <canvas
+              id="thresholdChart"
+              aria-label="Threshold breach counts by metric"
+              role="img"
+            ></canvas>
+          </section>
+        </section>
+
+        <section class="panel results-panel" id="latest-results">
+          <div class="panel-head panel-head-row">
+            <div>
+              <p class="eyebrow">Results</p>
+              <h2>Latest measurements</h2>
+            </div>
+
+            <div class="results-actions">
+              <button id="export-results" class="btn-muted" type="button">
+                Export Results
+              </button>
+              <input
+                id="table-search"
+                class="table-search"
+                type="search"
+                placeholder="Search server or time"
+              />
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table id="latest-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Status</th>
+                  <th class="sortable" data-sort-key="server" aria-sort="none">
+                    Server
+                  </th>
+                  <th
+                    class="sortable"
+                    data-sort-key="download_mbps"
+                    aria-sort="none"
+                  >
+                    Download
+                  </th>
+                  <th
+                    class="sortable"
+                    data-sort-key="upload_mbps"
+                    aria-sort="none"
+                  >
+                    Upload
+                  </th>
+                  <th class="sortable" data-sort-key="ping_ms" aria-sort="none">
+                    Ping
+                  </th>
+                  <th
+                    class="sortable"
+                    data-sort-key="packet_loss_percent"
+                    aria-sort="none"
+                  >
+                    Packet loss
+                  </th>
+                  <th class="sortable" data-sort-key="healthy" aria-sort="none">
+                    Healthy
+                  </th>
+                  <th
+                    class="sortable sort-desc"
+                    data-sort-key="timestamp_iso"
+                    aria-sort="descending"
+                  >
+                    Created at
+                  </th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="results-footer">
+            <p id="results-count">Showing 0 results</p>
+            <div class="results-footer-controls">
+              <button id="page-prev" class="btn-ghost btn-small" type="button">
+                Previous
+              </button>
+              <span id="page-indicator" class="page-indicator">Page 1</span>
+              <button id="page-next" class="btn-ghost btn-small" type="button">
+                Next
+              </button>
+              <label class="control-inline" for="page-size">Per page</label>
+              <select id="page-size">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

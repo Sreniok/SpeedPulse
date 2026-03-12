@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <title>Speed Monitor Settings</title>
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/settings.js" defer></script>
+  </head>
+  <body class="dash-body" data-theme="dark">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <p class="eyebrow">LAN only</p>
+          <div class="brand">Speed Monitor</div>
+        </div>
+
+        <section class="sidebar-card sidebar-card-account">
+          <p class="eyebrow">Account</p>
+          <strong id="settings-sidebar-account-name">{{ account_name }}</strong>
+          <p id="settings-sidebar-account-provider">
+            {{ account_provider or "Provider not set" }}
+          </p>
+          <p id="settings-sidebar-account-number">
+            Account No: {{ account_number }}
+          </p>
+        </section>
+
+        <nav class="nav-block">
+          <a class="nav-link" href="/">Overview</a>
+          <a class="nav-link" href="/#charts">Charts</a>
+          <a class="nav-link" href="/#latest-results">Results</a>
+          <a class="nav-link active" href="/settings">Settings</a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="user-pill">{{ username }}</span>
+        </div>
+      </aside>
+
+      <main class="main-shell settings-shell">
+        <header class="topbar topbar-compact" id="settings">
+          <div class="topbar-copy">
+            <p class="eyebrow">Settings</p>
+            <h1>Account, Notifications & Security</h1>
+            <p class="topbar-text">
+              Keep the main dashboard clean. Manage broadband account info,
+              email delivery, push channels, and password settings here.
+            </p>
+          </div>
+
+          <div class="topbar-controls">
+            <button
+              id="theme-toggle"
+              class="btn-muted"
+              type="button"
+              aria-pressed="false"
+            >
+              Light mode
+            </button>
+            <a href="/" class="btn-muted">Back to dashboard</a>
+            <a href="/logout" class="btn-ghost">Logout</a>
+          </div>
+        </header>
+
+        <section
+          id="message"
+          class="message hidden"
+          role="status"
+          aria-live="polite"
+        ></section>
+
+        <section class="settings-hero">
+          <article class="metric-card">
+            <h3>Password</h3>
+            <p class="metric-value">Secure</p>
+            <p class="metric-note tone-muted">
+              Use the form below to rotate dashboard access without touching
+              files manually.
+            </p>
+          </article>
+          <article class="metric-card">
+            <h3>Realtime alerts</h3>
+            <p id="settings-alert-status" class="metric-value">Loading</p>
+            <p class="metric-note tone-muted">
+              Email, webhook, and ntfy can all be tested from this page.
+            </p>
+          </article>
+          <article class="metric-card">
+            <h3>Weekly reports</h3>
+            <p id="settings-weekly-status" class="metric-value">Loading</p>
+            <p class="metric-note tone-muted">
+              Scheduler changes apply after restarting the dashboard and
+              scheduler containers.
+            </p>
+          </article>
+        </section>
+
+        <section class="settings-grid settings-grid-stack">
+          <article class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">User</p>
+              <h2>Broadband account &amp; contract</h2>
+              <p class="panel-subtext">
+                Store account details and track your ISP contract period and
+                promised speeds. End a contract to archive it and compare with
+                future ones.
+              </p>
+            </div>
+            <div class="settings-fields settings-fields-split">
+              <div class="settings-field-group">
+                <label for="settings-account-name">Account holder name</label>
+                <input
+                  id="settings-account-name"
+                  type="text"
+                  placeholder="Your name or household account name"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-account-number"
+                  >Broadband account number</label
+                >
+                <input
+                  id="settings-account-number"
+                  type="text"
+                  placeholder="Account number"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-provider">Broadband provider</label>
+                <select id="settings-provider">
+                  <option value="">Select provider</option>
+                  <option value="BT">BT</option>
+                  <option value="Virgin Media">Virgin Media</option>
+                  <option value="Sky Broadband">Sky Broadband</option>
+                  <option value="TalkTalk">TalkTalk</option>
+                  <option value="Vodafone">Vodafone</option>
+                  <option value="Plusnet">Plusnet</option>
+                  <option value="EE">EE</option>
+                  <option value="Community Fibre">Community Fibre</option>
+                  <option value="Hyperoptic">Hyperoptic</option>
+                  <option value="custom">Custom provider</option>
+                </select>
+              </div>
+              <div
+                id="settings-provider-custom-group"
+                class="settings-field-group hidden"
+              >
+                <label for="settings-provider-custom"
+                  >Custom provider name</label
+                >
+                <input
+                  id="settings-provider-custom"
+                  type="text"
+                  placeholder="Enter broadband provider"
+                />
+              </div>
+            </div>
+
+            <h3 class="contract-heading">Contract</h3>
+            <div class="settings-fields settings-fields-split">
+              <div class="settings-field-group">
+                <label for="settings-contract-start">Contract start date</label>
+                <input id="settings-contract-start" type="date" />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-contract-end">Contract end date</label>
+                <input id="settings-contract-end" type="date" />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-contract-download"
+                  >Contracted download (Mbps)</label
+                >
+                <input
+                  id="settings-contract-download"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 500"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-contract-upload"
+                  >Contracted upload (Mbps)</label
+                >
+                <input
+                  id="settings-contract-upload"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 50"
+                />
+              </div>
+            </div>
+
+            <div class="settings-fields">
+              <div class="settings-field-group settings-field-group-inline">
+                <label class="toggle-label">
+                  <input id="settings-contract-reminder" type="checkbox" />
+                  Enable expiry reminder
+                </label>
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-contract-reminder-days"
+                  >Remind days before end</label
+                >
+                <input
+                  id="settings-contract-reminder-days"
+                  type="number"
+                  min="1"
+                  max="365"
+                  step="1"
+                  placeholder="31"
+                />
+              </div>
+            </div>
+
+            <div
+              id="contract-days-remaining"
+              class="panel-subtext contract-days-remaining"
+            ></div>
+
+            <div class="settings-actions">
+              <button
+                id="settings-save-account"
+                class="btn-primary"
+                type="button"
+                data-save-settings
+              >
+                Save account &amp; contract
+              </button>
+              <button
+                id="settings-end-contract"
+                class="btn-ghost"
+                type="button"
+              >
+                End contract &amp; archive
+              </button>
+            </div>
+
+            <div
+              id="contract-history-section"
+              class="hidden contract-history-section"
+            >
+              <h3 class="contract-history-heading">Previous contracts</h3>
+              <div id="contract-history-list"></div>
+            </div>
+          </article>
+
+          <article class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Schedule</p>
+              <h2>Automation schedule</h2>
+              <p class="panel-subtext">
+                Choose how many daily scans run and set the exact times for each
+                one.
+              </p>
+            </div>
+            <div class="settings-schedule-shell">
+              <section class="settings-schedule-block">
+                <div class="settings-section-head">
+                  <div>
+                    <h3>Daily scans</h3>
+                    <p class="panel-subtext">
+                      These run every day at the times below.
+                    </p>
+                  </div>
+                  <span id="settings-scan-count" class="settings-status-pill"
+                    >0 scans</span
+                  >
+                </div>
+                <div
+                  id="settings-scan-times"
+                  class="settings-scan-list"
+                  aria-live="polite"
+                ></div>
+                <div class="settings-actions">
+                  <button
+                    id="settings-add-scan-time"
+                    class="btn-muted"
+                    type="button"
+                  >
+                    Add scan time
+                  </button>
+                </div>
+              </section>
+
+              <section class="settings-schedule-block">
+                <div class="settings-section-head">
+                  <div>
+                    <h3>Weekly report</h3>
+                    <p class="panel-subtext">
+                      Choose whether the weekly email report runs and when it
+                      should be sent.
+                    </p>
+                  </div>
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-schedule-server"
+                    >Scheduled scan server</label
+                  >
+                  <select id="settings-schedule-server">
+                    <option value="">Loading server list...</option>
+                  </select>
+                  <p class="panel-subtext">
+                    Use Auto for the nearest server, or pin one server for all
+                    scheduled scans.
+                  </p>
+                </div>
+                <div class="toggle-grid">
+                  <label class="toggle-row" for="settings-weekly-enabled">
+                    <input id="settings-weekly-enabled" type="checkbox" />
+                    <span>Enable weekly email report job</span>
+                  </label>
+                </div>
+                <div class="settings-fields settings-fields-schedule">
+                  <div class="settings-field-group">
+                    <label for="settings-weekly-day">Weekly report day</label>
+                    <select id="settings-weekly-day">
+                      <option value="Monday">Monday</option>
+                      <option value="Tuesday">Tuesday</option>
+                      <option value="Wednesday">Wednesday</option>
+                      <option value="Thursday">Thursday</option>
+                      <option value="Friday">Friday</option>
+                      <option value="Saturday">Saturday</option>
+                      <option value="Sunday">Sunday</option>
+                    </select>
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-weekly-time">Weekly report time</label>
+                    <input id="settings-weekly-time" type="time" step="60" />
+                  </div>
+                </div>
+              </section>
+            </div>
+            <div class="settings-actions">
+              <button
+                id="settings-save-schedule"
+                class="btn-primary"
+                type="button"
+                data-save-settings
+              >
+                Save schedule
+              </button>
+            </div>
+          </article>
+
+          <article class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Security</p>
+              <h2>Dashboard password</h2>
+              <p class="panel-subtext">
+                Password changes take effect immediately for new logins.
+              </p>
+            </div>
+            <div class="settings-fields settings-fields-single">
+              <label for="settings-current-password">Current password</label>
+              <input
+                id="settings-current-password"
+                type="password"
+                autocomplete="current-password"
+              />
+              <label for="settings-new-password">New password</label>
+              <input
+                id="settings-new-password"
+                type="password"
+                autocomplete="new-password"
+              />
+              <label for="settings-confirm-password"
+                >Confirm new password</label
+              >
+              <input
+                id="settings-confirm-password"
+                type="password"
+                autocomplete="new-password"
+              />
+            </div>
+            <div class="settings-actions">
+              <button
+                id="settings-password-save"
+                class="btn-primary"
+                type="button"
+              >
+                Update password
+              </button>
+            </div>
+          </article>
+
+          <article class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Email</p>
+              <h2>SMTP & reports</h2>
+              <p class="panel-subtext">
+                Configure email sender, recipient, realtime alerting, and weekly
+                reports.
+              </p>
+            </div>
+            <div class="settings-fields settings-fields-split">
+              <div class="settings-field-group">
+                <label for="settings-smtp-server">SMTP server</label>
+                <input id="settings-smtp-server" type="text" />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-smtp-port">SMTP port</label>
+                <input
+                  id="settings-smtp-port"
+                  type="number"
+                  min="1"
+                  max="65535"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-smtp-username">SMTP username</label>
+                <input id="settings-smtp-username" type="text" />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-smtp-password"
+                  >SMTP password (leave blank to keep)</label
+                >
+                <input
+                  id="settings-smtp-password"
+                  type="password"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-email-from">Email from</label>
+                <input id="settings-email-from" type="email" />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-email-to">Email to</label>
+                <input id="settings-email-to" type="email" />
+              </div>
+            </div>
+            <div class="toggle-grid">
+              <label class="toggle-row" for="settings-realtime-alerts">
+                <input id="settings-realtime-alerts" type="checkbox" />
+                <span>Enable realtime email alerts</span>
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button
+                id="settings-save-email"
+                class="btn-primary"
+                type="button"
+                data-save-settings
+              >
+                Save email
+              </button>
+              <button id="settings-test-email" class="btn-muted" type="button">
+                Test email
+              </button>
+            </div>
+          </article>
+
+          <article class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Push</p>
+              <h2>Webhook & ntfy</h2>
+              <p class="panel-subtext">
+                Use webhook for automation pipelines or ntfy for direct
+                mobile/desktop push alerts.
+              </p>
+            </div>
+            <div class="settings-grid settings-grid-two-col">
+              <section class="settings-channel">
+                <label class="toggle-row" for="settings-webhook-enabled">
+                  <input id="settings-webhook-enabled" type="checkbox" />
+                  <span>Enable webhook alerts</span>
+                </label>
+                <label for="settings-webhook-url">Webhook URL</label>
+                <input
+                  id="settings-webhook-url"
+                  type="url"
+                  placeholder="https://example.com/webhook"
+                />
+                <div class="settings-actions">
+                  <button
+                    id="settings-test-webhook"
+                    class="btn-muted btn-small"
+                    type="button"
+                  >
+                    Test webhook
+                  </button>
+                </div>
+              </section>
+              <section class="settings-channel">
+                <label class="toggle-row" for="settings-ntfy-enabled">
+                  <input id="settings-ntfy-enabled" type="checkbox" />
+                  <span>Enable ntfy alerts</span>
+                </label>
+                <label for="settings-ntfy-server">ntfy server</label>
+                <input
+                  id="settings-ntfy-server"
+                  type="url"
+                  placeholder="https://ntfy.sh"
+                />
+                <label for="settings-ntfy-topic">ntfy topic</label>
+                <input
+                  id="settings-ntfy-topic"
+                  type="text"
+                  placeholder="your-topic"
+                />
+                <div class="settings-actions">
+                  <button
+                    id="settings-test-ntfy"
+                    class="btn-muted btn-small"
+                    type="button"
+                  >
+                    Test ntfy
+                  </button>
+                </div>
+              </section>
+            </div>
+            <div class="settings-actions">
+              <button
+                id="settings-save-push"
+                class="btn-primary"
+                type="button"
+                data-save-settings
+              >
+                Save push
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel settings-footer-panel">
+          <div class="panel-head panel-head-row">
+            <div>
+              <p class="eyebrow">Notes</p>
+              <h2>Apply changes</h2>
+            </div>
+            <p class="panel-subtext">
+              Save settings before testing changed delivery values. After SMTP
+              or weekly schedule changes, restart `dashboard` and `scheduler`
+              containers.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

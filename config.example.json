@@ -1,0 +1,68 @@
+{
+  "account": {
+    "name": "",
+    "provider": "",
+    "number": ""
+  },
+  "paths": {
+    "speedtest_exe": "speedtest",
+    "log_directory": "Log",
+    "images_directory": "Images",
+    "chart_base64": "chart_base64.txt",
+    "email_credentials": "email_cred.xml",
+    "error_log": "errors.log"
+  },
+  "thresholds": {
+    "download_mbps": 500,
+    "upload_mbps": 50,
+    "ping_ms": 20,
+    "packet_loss_percent": 1.0
+  },
+  "chart": {
+    "y_max": 1000,
+    "width": 20,
+    "height": 6,
+    "dpi": 150
+  },
+  "speedtest": {
+    "server_id": "",
+    "max_retries": 3,
+    "retry_delay_seconds": 30,
+    "timeout_seconds": 120
+  },
+  "email": {
+    "from": "",
+    "to": "",
+    "smtp_server": "",
+    "smtp_port": 465,
+    "send_realtime_alerts": true,
+    "alert_cooldown_minutes": 60
+  },
+  "data_retention": {
+    "keep_weeks": 52,
+    "archive_older_than_weeks": 26
+  },
+  "scheduling": {
+    "test_times": ["08:00", "16:00", "22:00"],
+    "weekly_report_time": "Monday 08:00"
+  },
+  "notifications": {
+    "weekly_report_enabled": true,
+    "webhook_enabled": false,
+    "webhook_url": "",
+    "ntfy_enabled": false,
+    "ntfy_server": "https://ntfy.sh",
+    "ntfy_topic": ""
+  },
+  "contract": {
+    "current": {
+      "start_date": "",
+      "end_date": "",
+      "download_mbps": 0,
+      "upload_mbps": 0,
+      "reminder_enabled": false,
+      "reminder_days": 31
+    },
+    "history": []
+  }
+}

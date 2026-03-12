@@ -1,0 +1,72 @@
+# Speedtest Project - Git Ignore Rules
+
+# Secrets and environment files
+config.json
+.env
+.env.*
+!.env.example
+*.enc
+.encryption_key
+credentials.enc
+email_cred.xml
+email_cred_metadata.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime logs and generated runtime files
+*.log
+cron.log
+errors.log
+last_alert.txt
+last_contract_reminder.txt
+chart_base64.txt
+
+# Project-generated data
+Log/*.txt
+Images/*.png
+!Images/.gitkeep
+Archive/
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.old
+*~
+
+# Docker local overrides
+docker-compose.override.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+@eaDir/
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archives
+*.zip
+*.rar
+*.7z
+*.tar.gz

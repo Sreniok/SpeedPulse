@@ -1,0 +1,18 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]
+# E501 is relaxed via the generous line-length above.
+
+[tool.ruff.lint.isort]
+known-first-party = ["log_parser", "mail_settings", "logger_setup"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false      # Gradual adoption — don't block on untyped legacy code.
+check_untyped_defs = true
+ignore_missing_imports = true      # Third-party stubs not installed yet.
