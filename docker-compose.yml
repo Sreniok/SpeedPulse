@@ -1,8 +1,19 @@
 services:
+  init:
+    image: busybox:latest
+    container_name: speedtest-init
+    restart: "no"
+    volumes:
+      - .:/workspace
+    command: ["sh", "/workspace/init.sh"]
+
   dashboard:
     build: .
     container_name: speedtest-dashboard
     restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -11,7 +22,8 @@ services:
     tmpfs:
       - /tmp
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
@@ -44,6 +56,9 @@ services:
     build: .
     container_name: speedtest-scheduler
     restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -52,7 +67,8 @@ services:
     tmpfs:
       - /tmp
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}

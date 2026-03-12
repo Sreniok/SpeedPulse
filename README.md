@@ -41,51 +41,44 @@ This project can run fully in Docker with:
 
 ### Quick Start
 
-1. Clone the repository:
+1. Clone and start:
+
    ```bash
    git clone https://github.com/Sreniok/broadband-speed-monitor.git
    cd broadband-speed-monitor
+   docker compose up -d --build
    ```
-2. Edit `.env` with your credentials:
+
+   On the first run an **init** container automatically creates `.env`
+   (with generated secrets and a random dashboard password), `config.json`,
+   and all required directories.
+
+2. Get your generated password:
 
    ```bash
-   make setup          # creates .env and config.json from templates
-   nano .env           # set SMTP, dashboard password, secret key
+   docker compose logs init
    ```
 
-   At minimum set: `APP_SECRET_KEY`, `DASHBOARD_USERNAME`,
-   `DASHBOARD_PASSWORD_HASH`, `SMTP_SERVER`, `SMTP_PORT`,
-   `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`.
+3. Open the dashboard and log in:
 
-   Generate a password hash with:
-
-   ```bash
-   make password
-   ```
-
-3. Start services:
-   ```bash
-   make up
-   ```
-4. Open dashboard:
    ```text
    http://localhost:8000
    ```
 
-> **Tip:** All account details, thresholds, schedules, and contract info can be
-> configured from the **Settings** page in the dashboard — no need to
-> hand-edit `config.json`.
+   Default username: **monitor-admin**
+
+4. _(Optional)_ Edit `.env` to configure SMTP for email reports/alerts,
+   then restart:
+   ```bash
+   nano .env
+   docker compose restart
+   ```
+
+> **Tip:** Account details, thresholds, schedules, and contract info can all be
+> configured from the **Settings** page — no need to hand-edit `config.json`.
 >
-> **Without `make`:** Run the commands in the
-> [Makefile](Makefile) manually, or just:
->
-> ```bash
-> cp .env.example .env && cp config.example.json config.json
-> mkdir -p Log Images Archive
-> touch cron.log errors.log last_alert.txt chart_base64.txt
-> # edit .env
-> docker compose up -d --build
-> ```
+> **With `make`:** You can also use `make up`, `make down`, `make logs`,
+> `make password` — see the [Makefile](Makefile).
 
 ### Docker Services
 
