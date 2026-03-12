@@ -43,38 +43,27 @@ This project can run fully in Docker with:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/internet-speed-monitor.git
-   cd internet-speed-monitor
+   git clone https://github.com/Sreniok/broadband-speed-monitor.git
+   cd broadband-speed-monitor
    ```
-2. Create env file:
+2. Edit `.env` with your credentials:
    ```bash
-   cp .env.example .env
+   make setup          # creates .env and config.json from templates
+   nano .env           # set SMTP, dashboard password, secret key
    ```
-3. Generate dashboard password hash:
+   At minimum set: `APP_SECRET_KEY`, `DASHBOARD_USERNAME`,
+   `DASHBOARD_PASSWORD_HASH`, `SMTP_SERVER`, `SMTP_PORT`,
+   `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`.
+
+   Generate a password hash with:
    ```bash
-   python3 generate_password_hash.py
+   make password
    ```
-4. Edit `.env` and set at minimum:
-   - `APP_SECRET_KEY`
-   - `DASHBOARD_USERNAME`
-   - `DASHBOARD_PASSWORD_HASH`
-   - `SMTP_SERVER`
-   - `SMTP_PORT`
-   - `SMTP_USERNAME`
-   - `SMTP_PASSWORD`
-   - `EMAIL_FROM`
-   - `EMAIL_TO`
-5. Initialise config and runtime files:
+3. Start services:
    ```bash
-   cp config.example.json config.json
-   mkdir -p Log Images Archive
-   touch cron.log errors.log last_alert.txt chart_base64.txt
+   make up
    ```
-6. Start services:
-   ```bash
-   docker compose up -d --build
-   ```
-7. Open dashboard:
+4. Open dashboard:
    ```text
    http://localhost:8000
    ```
@@ -82,6 +71,16 @@ This project can run fully in Docker with:
 > **Tip:** All account details, thresholds, schedules, and contract info can be
 > configured from the **Settings** page in the dashboard — no need to
 > hand-edit `config.json`.
+>
+> **Without `make`:** Run the commands in the
+> [Makefile](Makefile) manually, or just:
+> ```bash
+> cp .env.example .env && cp config.example.json config.json
+> mkdir -p Log Images Archive
+> touch cron.log errors.log last_alert.txt chart_base64.txt
+> # edit .env
+> docker compose up -d --build
+> ```
 
 ### Docker Services
 
