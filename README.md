@@ -47,18 +47,22 @@ This project can run fully in Docker with:
    cd broadband-speed-monitor
    ```
 2. Edit `.env` with your credentials:
+
    ```bash
    make setup          # creates .env and config.json from templates
    nano .env           # set SMTP, dashboard password, secret key
    ```
+
    At minimum set: `APP_SECRET_KEY`, `DASHBOARD_USERNAME`,
    `DASHBOARD_PASSWORD_HASH`, `SMTP_SERVER`, `SMTP_PORT`,
    `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`.
 
    Generate a password hash with:
+
    ```bash
    make password
    ```
+
 3. Start services:
    ```bash
    make up
@@ -74,6 +78,7 @@ This project can run fully in Docker with:
 >
 > **Without `make`:** Run the commands in the
 > [Makefile](Makefile) manually, or just:
+>
 > ```bash
 > cp .env.example .env && cp config.example.json config.json
 > mkdir -p Log Images Archive
