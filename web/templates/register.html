@@ -17,15 +17,13 @@
         {% endif %}
 
         <form method="post" action="/register" class="login-form">
-          <label for="username">Username</label>
+          <label for="email">Email</label>
           <input
-            id="username"
-            name="username"
-            type="text"
-            autocomplete="username"
-            minlength="3"
-            pattern="[a-zA-Z0-9_\-]+"
-            placeholder="e.g. monitor-admin"
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
             required
           />
 

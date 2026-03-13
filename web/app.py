@@ -73,6 +73,7 @@ MANUAL_RUN_STATE = {
 }
 SERVER_OPTIONS_CACHE_TTL_SECONDS = 600
 SERVER_OPTIONS_CACHE = {"fetched_at": 0.0, "options": []}
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -310,6 +311,44 @@ def build_password_hash(password: str, iterations: int = 390000) -> str:
     return f"pbkdf2_sha256:{iterations}:{salt_hex}:{digest}"
 
 
+def _normalize_email(value: object) -> str:
+    return _clean_env_value(value).lower()
+
+
+def _is_valid_email(value: object) -> bool:
+    return bool(_EMAIL_PATTERN.fullmatch(_normalize_email(value)))
+
+
+def _resolve_notification_email(config: dict | None = None) -> str:
+    notification_email = _normalize_email(os.getenv("EMAIL_TO", ""))
+    if notification_email:
+        return notification_email
+
+    loaded = config or load_config()
+    email_cfg = loaded.get("email", {})
+    return _normalize_email(email_cfg.get("to", ""))
+
+
+def _resolve_login_email(config: dict | None = None) -> str:
+    login_email = _normalize_email(os.getenv("DASHBOARD_LOGIN_EMAIL", ""))
+    if _is_valid_email(login_email):
+        return login_email
+
+    legacy_username = _normalize_email(os.getenv("DASHBOARD_USERNAME", ""))
+    if _is_valid_email(legacy_username):
+        return legacy_username
+
+    recovery_email = _normalize_email(os.getenv("RECOVERY_EMAIL", ""))
+    if _is_valid_email(recovery_email):
+        return recovery_email
+
+    notification_email = _resolve_notification_email(config)
+    if _is_valid_email(notification_email):
+        return notification_email
+
+    return ""
+
+
 def dashboard_settings_payload(config: dict | None = None) -> dict:
     loaded = config or load_config()
     account_cfg = loaded.get("account", {})
@@ -329,10 +368,14 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     contract_cfg = loaded.get("contract", {})
     current_contract = contract_cfg.get("current", {})
     contract_history = contract_cfg.get("history", [])
+    login_email = _resolve_login_email(loaded)
+    notification_email = _resolve_notification_email(loaded)
 
     return {
-        "username": os.getenv("DASHBOARD_USERNAME", "").strip(),
-        "user_email": os.getenv("EMAIL_TO", email_cfg.get("to", "")).strip(),
+        "login_email": login_email,
+        "notification_email": notification_email,
+        "username": login_email,
+        "user_email": notification_email,
         "account": {
             "name": str(account_cfg.get("name", "")),
             "number": str(account_cfg.get("number", "")),
@@ -373,18 +416,12 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
 
 
 def _resolve_recovery_email(config: dict | None = None) -> str:
-    """Use the dedicated recovery address first, then fall back to the saved user email."""
-    recovery_email = _clean_env_value(os.getenv("RECOVERY_EMAIL", ""))
-    if recovery_email:
+    """Use the dedicated recovery address first, then fall back to the login email."""
+    recovery_email = _normalize_email(os.getenv("RECOVERY_EMAIL", ""))
+    if _is_valid_email(recovery_email):
         return recovery_email
 
-    user_email = _clean_env_value(os.getenv("EMAIL_TO", ""))
-    if user_email:
-        return user_email
-
-    loaded = config or load_config()
-    email_cfg = loaded.get("email", {})
-    return _clean_env_value(email_cfg.get("to", ""))
+    return _resolve_login_email(config)
 
 
 def _validate_weekly_schedule(value: str) -> bool:
@@ -694,6 +731,28 @@ def _ensure_crypto_keys() -> None:
             pass
 
 
+def _maybe_migrate_login_email() -> str:
+    current_login_email = _normalize_email(os.getenv("DASHBOARD_LOGIN_EMAIL", ""))
+    if _is_valid_email(current_login_email):
+        return current_login_email
+
+    candidate = _resolve_login_email()
+    if not _is_valid_email(candidate):
+        return ""
+
+    env_updates = {"DASHBOARD_LOGIN_EMAIL": candidate}
+    if not _is_valid_email(os.getenv("RECOVERY_EMAIL", "")):
+        env_updates["RECOVERY_EMAIL"] = candidate
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        LOGGER.warning("Could not persist migrated dashboard login email to .env: %s", exc)
+
+    _apply_runtime_env(env_updates)
+    return candidate
+
+
 def _cleanup_expired_tokens() -> None:
     now = time.time()
     expired = [t for t, e in _RESET_TOKENS.items() if now > e["expires"]]
@@ -701,13 +760,16 @@ def _cleanup_expired_tokens() -> None:
         del _RESET_TOKENS[t]
 
 
-def _create_reset_token(username: str) -> str:
+def _create_reset_token(login_email: str) -> str:
     token = secrets.token_urlsafe(32)
     with _RESET_TOKEN_LOCK:
         _cleanup_expired_tokens()
         if len(_RESET_TOKENS) >= 10:
             raise RuntimeError("Too many pending reset requests")
-        _RESET_TOKENS[token] = {"username": username, "expires": time.time() + 900}
+        _RESET_TOKENS[token] = {
+            "login_email": _normalize_email(login_email),
+            "expires": time.time() + 900,
+        }
     return token
 
 
@@ -719,7 +781,7 @@ def _consume_reset_token(token: str) -> str | None:
             return None
         if time.time() > entry["expires"]:
             return None
-        return entry["username"]
+        return _normalize_email(entry.get("login_email", ""))
 
 
 def _send_reset_email(to_addr: str, token: str, base_url: str) -> None:
@@ -794,10 +856,11 @@ def _validate_password_hash_format(password_hash: str) -> bool:
 def validate_security_configuration() -> None:
     password_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
     password_plain = os.getenv("DASHBOARD_PASSWORD", "").strip()
-    username = os.getenv("DASHBOARD_USERNAME", "").strip()
+    login_email_env = _normalize_email(os.getenv("DASHBOARD_LOGIN_EMAIL", ""))
+    legacy_username = _clean_env_value(os.getenv("DASHBOARD_USERNAME", ""))
 
     # ── Setup mode: no credentials at all → allow registration ──
-    if not password_hash and not password_plain and not username:
+    if not password_hash and not password_plain and not login_email_env and not legacy_username:
         LOGGER.info("No dashboard credentials — starting in setup mode (visit /register)")
         _ensure_crypto_keys()
         return
@@ -810,8 +873,9 @@ def validate_security_configuration() -> None:
     if not secret_key or secret_key in {"change-me", "replace-with-long-random-secret"} or len(secret_key) < 32:
         raise RuntimeError("APP_SECRET_KEY must be set to a strong random value (minimum 32 characters)")
 
-    if not username:
-        raise RuntimeError("DASHBOARD_USERNAME must be set")
+    login_email = _maybe_migrate_login_email()
+    if not _is_valid_email(login_email):
+        raise RuntimeError("DASHBOARD_LOGIN_EMAIL must be set to a valid email address")
 
     if password_hash:
         if not _validate_password_hash_format(password_hash):
@@ -883,13 +947,13 @@ def _clear_failed_logins(client_ip: str) -> None:
         BLOCKED_UNTIL.pop(client_ip, None)
 
 
-def verify_login_credentials(username: str, password: str) -> bool:
-    expected_user = os.getenv("DASHBOARD_USERNAME", "")
+def verify_login_credentials(login_email: str, password: str) -> bool:
+    expected_login_email = _resolve_login_email()
     password_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
     password_plain = os.getenv("DASHBOARD_PASSWORD", "").strip()
 
-    user_ok = hmac.compare_digest(username, expected_user)
-    if not user_ok:
+    provided_login_email = _normalize_email(login_email)
+    if not expected_login_email or not hmac.compare_digest(provided_login_email, expected_login_email):
         return False
 
     if password_hash:
@@ -908,11 +972,16 @@ def current_session(request: Request) -> dict | None:
     except BadSignature:
         return None
 
-    username = payload.get("username")
+    login_email = _normalize_email(
+        payload.get("login_email") or payload.get("username") or "",
+    )
     exp = payload.get("exp")
     csrf = payload.get("csrf")
 
-    if not username or not exp or not csrf:
+    if not login_email:
+        login_email = _resolve_login_email()
+
+    if not login_email or not exp or not csrf:
         return None
 
     if int(exp) < int(time.time()):
@@ -924,6 +993,8 @@ def current_session(request: Request) -> dict | None:
     if token_version < required_version:
         return None
 
+    payload["login_email"] = login_email
+    payload["username"] = login_email
     return payload
 
 
@@ -1137,17 +1208,23 @@ def login_page(request: Request) -> HTMLResponse:
 
 
 @APP.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...)) -> RedirectResponse:
+def login(
+    request: Request,
+    email: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(...),
+) -> RedirectResponse:
     if _is_setup_mode():
         return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
 
+    login_email = _normalize_email(email or username)
     client_ip = _extract_client_ip(request)
     blocked_for = _is_login_blocked(client_ip)
     if blocked_for > 0:
         response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
         return _set_flash(response, f"Too many attempts. Retry in {blocked_for}s")
 
-    if not verify_login_credentials(username, password):
+    if not verify_login_credentials(login_email, password):
         new_block_seconds = _register_failed_login(client_ip)
         if new_block_seconds > 0:
             LOGGER.warning("Login blocked for %ss from IP %s", new_block_seconds, client_ip)
@@ -1165,7 +1242,15 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     csrf_token = secrets.token_urlsafe(24)
     with SESSION_VERSION_LOCK:
         sv = SESSION_VERSION
-    token = get_serializer().dumps({"username": username, "exp": exp_ts, "csrf": csrf_token, "sv": sv})
+    token = get_serializer().dumps(
+        {
+            "login_email": login_email,
+            "username": login_email,
+            "exp": exp_ts,
+            "csrf": csrf_token,
+            "sv": sv,
+        }
+    )
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     response.set_cookie(
@@ -1204,21 +1289,18 @@ def register_page(request: Request) -> HTMLResponse:
 @APP.post("/register")
 def register(
     request: Request,
-    username: str = Form(...),
+    email: str = Form(""),
+    username: str = Form(""),
     password: str = Form(...),
     confirm_password: str = Form(...),
 ) -> RedirectResponse:
     if not _is_setup_mode():
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
-    username = username.strip()
-    if not username or len(username) < 3:
+    login_email = _normalize_email(email or username)
+    if not _is_valid_email(login_email):
         response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Username must be at least 3 characters", path="/register")
-
-    if not re.match(r'^[a-zA-Z0-9_-]+$', username):
-        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Username may only contain letters, digits, hyphens, and underscores", path="/register")
+        return _set_flash(response, "Enter a valid login email address", path="/register")
 
     if len(password) < 10:
         response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
@@ -1230,7 +1312,9 @@ def register(
 
     password_hash = build_password_hash(password)
     env_updates = {
-        "DASHBOARD_USERNAME": username,
+        "DASHBOARD_LOGIN_EMAIL": login_email,
+        "DASHBOARD_USERNAME": "",
+        "RECOVERY_EMAIL": login_email,
         "DASHBOARD_PASSWORD_HASH": password_hash,
         "DASHBOARD_PASSWORD": "",
     }
@@ -1243,7 +1327,7 @@ def register(
         return _set_flash(response, "Failed to save credentials", path="/register")
 
     _apply_runtime_env(env_updates)
-    LOGGER.info("Account created for user '%s' via setup wizard", username)
+    LOGGER.info("Account created for login email '%s' via setup wizard", login_email)
 
     # Auto-login the new user
     ttl_seconds = _env_int("SESSION_TTL_SECONDS", 60 * 60 * 12)
@@ -1251,7 +1335,15 @@ def register(
     csrf_token = secrets.token_urlsafe(24)
     with SESSION_VERSION_LOCK:
         sv = SESSION_VERSION
-    token = get_serializer().dumps({"username": username, "exp": exp_ts, "csrf": csrf_token, "sv": sv})
+    token = get_serializer().dumps(
+        {
+            "login_email": login_email,
+            "username": login_email,
+            "exp": exp_ts,
+            "csrf": csrf_token,
+            "sv": sv,
+        }
+    )
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     response.set_cookie(
@@ -1281,10 +1373,11 @@ def forgot_password_page(request: Request) -> HTMLResponse:
 
 
 @APP.post("/forgot-password")
-def forgot_password(request: Request, username: str = Form(...)) -> HTMLResponse:
+def forgot_password(request: Request, email: str = Form(""), username: str = Form("")) -> HTMLResponse:
     if _is_setup_mode():
         return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
 
+    login_email = _normalize_email(email or username)
     client_ip = _extract_client_ip(request)
     blocked_for = _is_login_blocked(client_ip)
     if blocked_for > 0:
@@ -1293,25 +1386,25 @@ def forgot_password(request: Request, username: str = Form(...)) -> HTMLResponse
             {"request": request, "error": f"Too many attempts. Retry in {blocked_for}s", "sent": False},
         )
 
-    # Always show success to prevent username enumeration
+    # Always show success to prevent login email enumeration
     success_response = TEMPLATES.TemplateResponse(
         "forgot_password.html",
         {"request": request, "error": None, "sent": True},
     )
 
     recovery_email = _resolve_recovery_email()
-    expected_user = os.getenv("DASHBOARD_USERNAME", "")
+    expected_login_email = _resolve_login_email()
 
-    if not recovery_email or not hmac.compare_digest(username.strip(), expected_user):
+    if not recovery_email or not hmac.compare_digest(login_email, expected_login_email):
         _register_failed_login(client_ip)
-        LOGGER.info("Forgot-password request — no action (user mismatch or no recovery email)")
+        LOGGER.info("Forgot-password request — no action (email mismatch or no recovery email)")
         return success_response
 
     try:
-        token = _create_reset_token(username.strip())
+        token = _create_reset_token(login_email)
         base_url = str(request.base_url)
         _send_reset_email(recovery_email, token, base_url)
-        LOGGER.info("Password reset email sent for user '%s'", username.strip())
+        LOGGER.info("Password reset email sent for login email '%s'", login_email)
     except Exception as exc:
         LOGGER.error("Failed to send password reset email: %s", exc)
 
@@ -1354,8 +1447,8 @@ def reset_password(
         response.set_cookie(key=FLASH_COOKIE, value=get_serializer().dumps({"msg": "Passwords do not match", "t": int(time.time())}), httponly=True, samesite="strict", max_age=60, path="/reset-password")
         return response
 
-    username = _consume_reset_token(token)
-    if not username:
+    login_email = _consume_reset_token(token)
+    if not login_email:
         return TEMPLATES.TemplateResponse(
             "reset_password.html",
             {"request": request, "token": "", "error": "Reset link is invalid or has expired. Please request a new one.", "success": False},
@@ -1378,7 +1471,7 @@ def reset_password(
     global SESSION_VERSION
     with SESSION_VERSION_LOCK:
         SESSION_VERSION += 1
-    LOGGER.info("Password reset completed for user '%s' — all sessions invalidated", username)
+    LOGGER.info("Password reset completed for login email '%s' — all sessions invalidated", login_email)
 
     return TEMPLATES.TemplateResponse(
         "reset_password.html",
@@ -1399,7 +1492,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
         "dashboard.html",
         {
             "request": request,
-            "username": session["username"],
+            "login_email": session["login_email"],
             "account_name": account.get("name", "N/A"),
             "account_number": account.get("number", "N/A"),
             "account_provider": account.get("provider", ""),
@@ -1425,7 +1518,7 @@ def settings_page(request: Request) -> HTMLResponse:
         "settings.html",
         {
             "request": request,
-            "username": session["username"],
+            "login_email": session["login_email"],
             "account_name": account.get("name", "N/A"),
             "account_number": account.get("number", "N/A"),
             "account_provider": account.get("provider", ""),
@@ -1648,7 +1741,7 @@ async def update_dashboard_password(request: Request) -> JSONResponse:
     if not current_password or not new_password or not confirm_password:
         raise HTTPException(status_code=400, detail="Current password, new password, and confirmation are required")
 
-    if not verify_login_credentials(str(session.get("username", "")), current_password):
+    if not verify_login_credentials(str(session.get("login_email", "")), current_password):
         raise HTTPException(status_code=403, detail="Current password is incorrect")
 
     if new_password != confirm_password:
@@ -1678,28 +1771,32 @@ async def update_dashboard_password(request: Request) -> JSONResponse:
     return JSONResponse({"message": "Dashboard password updated. You will be redirected to login."})
 
 
+@APP.post("/api/settings/login-email")
 @APP.post("/api/settings/username")
-async def update_dashboard_username(request: Request) -> JSONResponse:
+async def update_dashboard_login_email(request: Request) -> JSONResponse:
     session = require_session(request)
     require_csrf(request, session)
 
     payload = await request.json()
     current_password = str(payload.get("current_password", "") or "")
-    new_username = _clean_env_value(payload.get("new_username", ""))
+    new_login_email = _normalize_email(
+        payload.get("new_login_email", "") or payload.get("new_username", ""),
+    )
 
     if not current_password:
-        raise HTTPException(status_code=400, detail="Current password is required to change username")
+        raise HTTPException(status_code=400, detail="Current password is required to change login email")
 
-    if not new_username or len(new_username) < 3:
-        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if not _is_valid_email(new_login_email):
+        raise HTTPException(status_code=400, detail="Enter a valid login email address")
 
-    if not re.match(r'^[a-zA-Z0-9_-]+$', new_username):
-        raise HTTPException(status_code=400, detail="Username may only contain letters, digits, hyphens, and underscores")
-
-    if not verify_login_credentials(str(session.get("username", "")), current_password):
+    if not verify_login_credentials(str(session.get("login_email", "")), current_password):
         raise HTTPException(status_code=403, detail="Current password is incorrect")
 
-    env_updates = {"DASHBOARD_USERNAME": new_username}
+    env_updates = {
+        "DASHBOARD_LOGIN_EMAIL": new_login_email,
+        "DASHBOARD_USERNAME": "",
+        "RECOVERY_EMAIL": new_login_email,
+    }
 
     try:
         _update_env_file(env_updates)
@@ -1711,26 +1808,24 @@ async def update_dashboard_username(request: Request) -> JSONResponse:
     global SESSION_VERSION
     with SESSION_VERSION_LOCK:
         SESSION_VERSION += 1
-    LOGGER.info("Username changed to '%s' — all sessions invalidated", new_username)
+    LOGGER.info("Login email changed to '%s' — all sessions invalidated", new_login_email)
 
-    return JSONResponse({"message": "Username updated. You will be redirected to login."})
+    return JSONResponse({"message": "Login email updated. You will be redirected to sign in again."})
 
 
+@APP.post("/api/settings/notification-email")
 @APP.post("/api/settings/user-email")
-async def update_user_email(request: Request) -> JSONResponse:
+async def update_notification_email(request: Request) -> JSONResponse:
     session = require_session(request)
     require_csrf(request, session)
 
     payload = await request.json()
-    email = _clean_env_value(payload.get("email", ""))
+    email = _normalize_email(payload.get("email", ""))
 
-    if not email:
-        raise HTTPException(status_code=400, detail="Email address is required")
+    if not _is_valid_email(email):
+        raise HTTPException(status_code=400, detail="Enter a valid notification email address")
 
-    env_updates = {
-        "EMAIL_TO": email,
-        "RECOVERY_EMAIL": email,
-    }
+    env_updates = {"EMAIL_TO": email}
 
     config = load_config()
     config.setdefault("email", {})["to"] = email
@@ -1743,7 +1838,7 @@ async def update_user_email(request: Request) -> JSONResponse:
 
     _apply_runtime_env(env_updates)
 
-    return JSONResponse({"message": "Email address saved. Used for notifications and password recovery."})
+    return JSONResponse({"message": "Notification email saved. Used for alerts and weekly reports."})
 
 
 def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:

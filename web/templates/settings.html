@@ -64,8 +64,8 @@
         </nav>
 
         <div class="sidebar-footer">
-          <span class="user-pill" id="settings-sidebar-username"
-            >{{ username }}</span
+          <span class="user-pill" id="settings-sidebar-login-email"
+            >{{ login_email }}</span
           >
         </div>
       </aside>
@@ -105,38 +105,39 @@
               <p class="eyebrow">User</p>
               <h2>Your account</h2>
               <p class="panel-subtext">
-                Manage your login credentials and contact email. Your email is
-                used for notifications, weekly reports, and password recovery.
+                Manage your sign-in email, password, and the separate email
+                address used for alerts and weekly reports.
               </p>
             </div>
 
             <div class="user-account-sections">
-              <!-- Username -->
+              <!-- Login email -->
               <div class="user-account-row">
                 <div class="user-account-row-head">
                   <div>
-                    <h3>Username</h3>
+                    <h3>Login email</h3>
                     <p class="panel-subtext">
-                      Your login name. Changing it will log you out.
+                      Used to sign in and receive password reset links.
+                      Changing it will log you out.
                     </p>
                   </div>
                 </div>
                 <div class="settings-fields settings-fields-single">
                   <div class="settings-field-group">
-                    <label for="settings-username">Username</label>
+                    <label for="settings-login-email">Login email</label>
                     <input
-                      id="settings-username"
-                      type="text"
-                      autocomplete="username"
-                      placeholder="your-username"
+                      id="settings-login-email"
+                      type="email"
+                      autocomplete="email"
+                      placeholder="you@example.com"
                     />
                   </div>
                   <div class="settings-field-group">
-                    <label for="settings-username-password"
+                    <label for="settings-login-email-password"
                       >Current password</label
                     >
                     <input
-                      id="settings-username-password"
+                      id="settings-login-email-password"
                       type="password"
                       autocomplete="current-password"
                       placeholder="Required to confirm change"
@@ -145,11 +146,11 @@
                 </div>
                 <div class="settings-actions">
                   <button
-                    id="settings-save-username"
+                    id="settings-save-login-email"
                     class="btn-primary"
                     type="button"
                   >
-                    Update username
+                    Update login email
                   </button>
                 </div>
               </div>
@@ -205,21 +206,24 @@
                 </div>
               </div>
 
-              <!-- Email -->
+              <!-- Notification email -->
               <div class="user-account-row">
                 <div class="user-account-row-head">
                   <div>
-                    <h3>Email address</h3>
+                    <h3>Notification email</h3>
                     <p class="panel-subtext">
-                      Used for alerts, weekly reports, and password recovery.
+                      Used for alerts and weekly reports. This does not affect
+                      sign-in.
                     </p>
                   </div>
                 </div>
                 <div class="settings-fields settings-fields-single">
                   <div class="settings-field-group">
-                    <label for="settings-user-email">Email</label>
+                    <label for="settings-notification-email"
+                      >Notification email</label
+                    >
                     <input
-                      id="settings-user-email"
+                      id="settings-notification-email"
                       type="email"
                       placeholder="you@example.com"
                       autocomplete="email"
@@ -228,11 +232,11 @@
                 </div>
                 <div class="settings-actions">
                   <button
-                    id="settings-save-user-email"
+                    id="settings-save-notification-email"
                     class="btn-primary"
                     type="button"
                   >
-                    Save email
+                    Save notification email
                   </button>
                 </div>
               </div>

@@ -243,13 +243,16 @@ function populateSettingsForm(payload) {
   const contract = payload.contract || {};
   const currentContract = contract.current || {};
   settingsServerSelectionId = String(payload.server_selection_id || "");
+  const loginEmail = payload.login_email || payload.username || "";
+  const notificationEmail =
+    payload.notification_email || payload.user_email || "";
 
   // User account fields
-  byId("settings-username").value = payload.username || "";
-  byId("settings-user-email").value = payload.user_email || "";
-  const sidebarUsername = byId("settings-sidebar-username");
-  if (sidebarUsername) {
-    sidebarUsername.textContent = payload.username || "";
+  byId("settings-login-email").value = loginEmail;
+  byId("settings-notification-email").value = notificationEmail;
+  const sidebarLoginEmail = byId("settings-sidebar-login-email");
+  if (sidebarLoginEmail) {
+    sidebarLoginEmail.textContent = loginEmail;
   }
 
   byId("settings-contract-start").value = currentContract.start_date || "";
@@ -472,20 +475,20 @@ async function updateDashboardPassword() {
   }
 }
 
-async function updateDashboardUsername() {
-  const saveButton = byId("settings-save-username");
+async function updateDashboardLoginEmail() {
+  const saveButton = byId("settings-save-login-email");
   saveButton.disabled = true;
 
   try {
-    const response = await fetch("/api/settings/username", {
+    const response = await fetch("/api/settings/login-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRF-Token": csrfToken,
       },
       body: JSON.stringify({
-        new_username: byId("settings-username").value.trim(),
-        current_password: byId("settings-username-password").value,
+        new_login_email: byId("settings-login-email").value.trim(),
+        current_password: byId("settings-login-email-password").value,
       }),
     });
 
@@ -497,35 +500,35 @@ async function updateDashboardUsername() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(
-        payload.detail || payload.message || "Failed to update username",
+        payload.detail || payload.message || "Failed to update login email",
       );
     }
 
-    byId("settings-username-password").value = "";
-    showMessage(payload.message || "Username updated.", "success");
+    byId("settings-login-email-password").value = "";
+    showMessage(payload.message || "Login email updated.", "success");
     setTimeout(() => {
       window.location.href = "/login";
     }, 1500);
   } catch (error) {
-    showMessage(error.message || "Failed to update username.", "error");
+    showMessage(error.message || "Failed to update login email.", "error");
   } finally {
     saveButton.disabled = false;
   }
 }
 
-async function saveUserEmail() {
-  const saveButton = byId("settings-save-user-email");
+async function saveNotificationEmail() {
+  const saveButton = byId("settings-save-notification-email");
   saveButton.disabled = true;
 
   try {
-    const response = await fetch("/api/settings/user-email", {
+    const response = await fetch("/api/settings/notification-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRF-Token": csrfToken,
       },
       body: JSON.stringify({
-        email: byId("settings-user-email").value.trim(),
+        email: byId("settings-notification-email").value.trim(),
       }),
     });
 
@@ -537,13 +540,13 @@ async function saveUserEmail() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(
-        payload.detail || payload.message || "Failed to save email",
+        payload.detail || payload.message || "Failed to save notification email",
       );
     }
 
-    showMessage(payload.message || "Email saved.", "success");
+    showMessage(payload.message || "Notification email saved.", "success");
   } catch (error) {
-    showMessage(error.message || "Failed to save email.", "error");
+    showMessage(error.message || "Failed to save notification email.", "error");
   } finally {
     saveButton.disabled = false;
   }
@@ -706,11 +709,11 @@ function bindEvents() {
   byId("settings-password-save").addEventListener("click", () => {
     void updateDashboardPassword();
   });
-  byId("settings-save-username").addEventListener("click", () => {
-    void updateDashboardUsername();
+  byId("settings-save-login-email").addEventListener("click", () => {
+    void updateDashboardLoginEmail();
   });
-  byId("settings-save-user-email").addEventListener("click", () => {
-    void saveUserEmail();
+  byId("settings-save-notification-email").addEventListener("click", () => {
+    void saveNotificationEmail();
   });
   byId("settings-test-email").addEventListener("click", () => {
     void sendSettingsTestNotification("email", "settings-test-email");

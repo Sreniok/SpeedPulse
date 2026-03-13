@@ -65,8 +65,6 @@ This project can run fully in Docker with:
    http://localhost:8000
    ```
 
-   Default username: **monitor-admin**
-
 4. _(Optional)_ Edit `.env` to configure SMTP for email reports/alerts,
    then restart:
    ```bash
@@ -271,7 +269,7 @@ configured.
 
 | Setting                       | `.env` variable                     | `config.json` key           | Default                 |
 | ----------------------------- | ----------------------------------- | --------------------------- | ----------------------- |
-| Dashboard username            | `DASHBOARD_USERNAME`                | —                           | _(required)_            |
+| Dashboard login email         | `DASHBOARD_LOGIN_EMAIL`             | —                           | _(required)_            |
 | Dashboard password hash       | `DASHBOARD_PASSWORD_HASH`           | —                           | _(required)_            |
 | App secret key                | `APP_SECRET_KEY`                    | —                           | _(required, 32+ chars)_ |
 | Auth salt                     | `AUTH_SALT`                         | —                           | _(required)_            |
@@ -826,7 +824,7 @@ tail -f ~/Scripts/Speedtest/cron.log
   python3 -c 'import secrets; print(secrets.token_hex(16))'
   ```
 - `RuntimeError: APP_SECRET_KEY must be set` — generate a 32+ char random string
-- `RuntimeError: DASHBOARD_USERNAME must be set` — check `.env` has a username
+- `RuntimeError: DASHBOARD_LOGIN_EMAIL must be set` — check `.env` has a valid login email
 - Check container logs: `docker compose logs dashboard`
 
 **8. Sessions expire after container restart**

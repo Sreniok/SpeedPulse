@@ -11,7 +11,8 @@ def _auth_env(monkeypatch: pytest.MonkeyPatch):
     """Set the minimum env vars required for the app to start."""
     monkeypatch.setenv("AUTH_SALT", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")
     monkeypatch.setenv("APP_SECRET_KEY", "test-secret-key-that-is-long-enough-for-validation-1234567890")
-    monkeypatch.setenv("DASHBOARD_USERNAME", "testuser")
+    monkeypatch.setenv("DASHBOARD_LOGIN_EMAIL", "testuser@example.com")
+    monkeypatch.setenv("DASHBOARD_USERNAME", "")
     monkeypatch.setenv("DASHBOARD_PASSWORD_HASH", "pbkdf2_sha256:260000:salt:hash")
 
 
