@@ -755,12 +755,14 @@ function bindMobileNav() {
     sidebar.classList.add("open");
     backdrop.classList.remove("hidden");
     toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("nav-open");
   }
 
   function closeSidebar() {
     sidebar.classList.remove("open");
     backdrop.classList.add("hidden");
     toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("nav-open");
   }
 
   toggle.addEventListener("click", () => {
@@ -773,6 +775,14 @@ function bindMobileNav() {
     link.addEventListener("click", () => {
       if (window.innerWidth <= 1080) closeSidebar();
     });
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 1080) closeSidebar();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSidebar();
   });
 }
 

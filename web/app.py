@@ -372,6 +372,21 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     }
 
 
+def _resolve_recovery_email(config: dict | None = None) -> str:
+    """Use the dedicated recovery address first, then fall back to the saved user email."""
+    recovery_email = _clean_env_value(os.getenv("RECOVERY_EMAIL", ""))
+    if recovery_email:
+        return recovery_email
+
+    user_email = _clean_env_value(os.getenv("EMAIL_TO", ""))
+    if user_email:
+        return user_email
+
+    loaded = config or load_config()
+    email_cfg = loaded.get("email", {})
+    return _clean_env_value(email_cfg.get("to", ""))
+
+
 def _validate_weekly_schedule(value: str) -> bool:
     return bool(re.match(r"^[A-Za-z]+\s+\d{2}:\d{2}$", value.strip()))
 
@@ -1108,7 +1123,7 @@ def login_page(request: Request) -> HTMLResponse:
     if _is_setup_mode():
         return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
 
-    recovery_email = os.getenv("RECOVERY_EMAIL", "").strip()
+    recovery_email = _resolve_recovery_email()
     error = _consume_flash(request)
     response = TEMPLATES.TemplateResponse(
         "login.html",
@@ -1284,7 +1299,7 @@ def forgot_password(request: Request, username: str = Form(...)) -> HTMLResponse
         {"request": request, "error": None, "sent": True},
     )
 
-    recovery_email = os.getenv("RECOVERY_EMAIL", "").strip()
+    recovery_email = _resolve_recovery_email()
     expected_user = os.getenv("DASHBOARD_USERNAME", "")
 
     if not recovery_email or not hmac.compare_digest(username.strip(), expected_user):
