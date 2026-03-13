@@ -287,6 +287,50 @@
           </section>
         </section>
 
+        <section class="insights-grid" id="reliability">
+          <section class="panel panel-large sla-panel">
+            <div class="panel-head">
+              <p class="eyebrow">SLA</p>
+              <h2>Threshold compliance</h2>
+              <p id="sla-summary" class="panel-subtext">
+                Based on your configured thresholds across the selected window.
+              </p>
+            </div>
+            <div id="sla-cards" class="sla-cards"></div>
+            <div class="sla-deep-dive">
+              <section class="sla-chart-card">
+                <div class="panel-head sla-section-head">
+                  <div>
+                    <h3>Breach breakdown</h3>
+                    <p id="sla-breakdown-summary" class="panel-subtext">
+                      Which thresholds are failing most often in this window.
+                    </p>
+                  </div>
+                </div>
+                <div class="sla-chart-wrap">
+                  <canvas
+                    id="slaBreakdownChart"
+                    aria-label="Breach breakdown by threshold type"
+                    role="img"
+                  ></canvas>
+                </div>
+              </section>
+              <div id="sla-highlights" class="sla-highlights"></div>
+            </div>
+          </section>
+
+          <section class="panel panel-large">
+            <div class="panel-head">
+              <p class="eyebrow">Incidents</p>
+              <h2>Incident history</h2>
+              <p id="incident-summary" class="panel-subtext">
+                Grouped from consecutive breached tests in the selected range.
+              </p>
+            </div>
+            <div id="incident-list" class="incident-list"></div>
+          </section>
+        </section>
+
         <section class="panel results-panel" id="latest-results">
           <div class="panel-head panel-head-row">
             <div>

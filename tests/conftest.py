@@ -22,6 +22,12 @@ def tmp_log_dir(tmp_path: Path) -> Path:
     return log_dir
 
 
+@pytest.fixture(autouse=True)
+def isolated_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Isolate the SQLite runtime-state store for every test."""
+    monkeypatch.setenv("STATE_DB_PATH", str(tmp_path / "runtime_state.sqlite3"))
+
+
 @pytest.fixture()
 def sample_config(tmp_path: Path) -> dict:
     """Return a minimal config dict and write it to a temp config.json."""

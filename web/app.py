@@ -15,10 +15,13 @@ import shutil
 import smtplib
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -32,13 +35,23 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from log_parser import load_all_log_entries
 from mail_settings import load_mail_settings
+from state_store import (
+    blocked_seconds as state_blocked_seconds,
+    bump_session_version,
+    clear_login_failures as state_clear_login_failures,
+    consume_reset_token as state_consume_reset_token,
+    get_session_version,
+    initialize_state_store,
+    load_manual_runtime_state,
+    register_failed_login as state_register_failed_login,
+    save_manual_runtime_state,
+    store_reset_token,
+)
 
-APP = FastAPI(title="Speed Monitor Dashboard", version="1.1.0")
 SCRIPT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 ENV_PATH = SCRIPT_DIR / ".env"
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 LOGGER = logging.getLogger("speed-monitor.web")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -47,19 +60,13 @@ SESSION_COOKIE = "speedtest_session"
 FLASH_COOKIE = "speedtest_flash"
 AUTH_SALT = os.getenv("AUTH_SALT", "")
 
-FAILED_LOGINS: dict[str, list[float]] = {}
-BLOCKED_UNTIL: dict[str, float] = {}
-AUTH_LOCK = threading.Lock()
 SESSION_VERSION = 1
 SESSION_VERSION_LOCK = threading.Lock()
-
-_RESET_TOKENS: dict[str, dict] = {}
-_RESET_TOKEN_LOCK = threading.Lock()
 
 MANUAL_SPEEDTEST_LOCK = threading.Lock()
 LAST_MANUAL_SPEEDTEST_AT = 0.0
 MANUAL_RUN_STATE_LOCK = threading.Lock()
-MANUAL_RUN_STATE = {
+DEFAULT_MANUAL_RUN_STATE = {
     "status": "idle",
     "stage": "Idle",
     "message": "",
@@ -71,9 +78,28 @@ MANUAL_RUN_STATE = {
     "updated_at": None,
     "exit_code": None,
 }
+MANUAL_RUN_STATE = dict(DEFAULT_MANUAL_RUN_STATE)
 SERVER_OPTIONS_CACHE_TTL_SECONDS = 600
 SERVER_OPTIONS_CACHE = {"fetched_at": 0.0, "options": []}
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _resolve_runtime_path(default_path: Path, env_name: str) -> Path:
+    raw_value = os.getenv(env_name, "").strip()
+    if not raw_value:
+        return default_path
+    path = Path(raw_value)
+    if path.is_absolute():
+        return path
+    return SCRIPT_DIR / path
+
+
+def _config_path() -> Path:
+    return _resolve_runtime_path(CONFIG_PATH, "CONFIG_PATH")
+
+
+def _env_path() -> Path:
+    return _resolve_runtime_path(ENV_PATH, "ENV_PATH")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -97,10 +123,16 @@ def _manual_run_snapshot() -> dict:
         return payload
 
 
+def _persist_manual_runtime_state() -> None:
+    snapshot = _manual_run_snapshot()
+    save_manual_runtime_state(snapshot, LAST_MANUAL_SPEEDTEST_AT)
+
+
 def _update_manual_run_state(**changes: object) -> None:
     with MANUAL_RUN_STATE_LOCK:
         MANUAL_RUN_STATE.update(changes)
         MANUAL_RUN_STATE["updated_at"] = _iso_now()
+    _persist_manual_runtime_state()
 
 
 def _append_manual_run_log(line: str) -> None:
@@ -109,6 +141,7 @@ def _append_manual_run_log(line: str) -> None:
         logs.append(line)
         MANUAL_RUN_STATE["logs"] = logs[-14:]
         MANUAL_RUN_STATE["updated_at"] = _iso_now()
+    _persist_manual_runtime_state()
 
 
 def _resolve_server_label(server_id: str, config: dict | None = None) -> str:
@@ -146,6 +179,44 @@ def _start_manual_run_state(selected_server_id: str = "", selected_server_label:
                 "exit_code": None,
             }
         )
+    _persist_manual_runtime_state()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global SESSION_VERSION, LAST_MANUAL_SPEEDTEST_AT, MANUAL_RUN_STATE
+
+    validate_security_configuration()
+    initialize_state_store(DEFAULT_MANUAL_RUN_STATE)
+    with SESSION_VERSION_LOCK:
+        SESSION_VERSION = get_session_version()
+
+    last_run_at, persisted_manual_state = load_manual_runtime_state(DEFAULT_MANUAL_RUN_STATE)
+    with MANUAL_RUN_STATE_LOCK:
+        MANUAL_RUN_STATE = dict(DEFAULT_MANUAL_RUN_STATE)
+        MANUAL_RUN_STATE.update(persisted_manual_state or {})
+        LAST_MANUAL_SPEEDTEST_AT = float(last_run_at or 0.0)
+
+        if MANUAL_RUN_STATE.get("status") == "running":
+            now = _iso_now()
+            MANUAL_RUN_STATE.update(
+                {
+                    "status": "failed",
+                    "stage": "Interrupted",
+                    "message": "Manual speed test was interrupted by an application restart.",
+                    "completed_at": now,
+                    "updated_at": now,
+                    "exit_code": -1,
+                }
+            )
+
+    _persist_manual_runtime_state()
+    LOGGER.info("Web security configuration validated")
+    yield
+
+
+APP = FastAPI(title="Speed Monitor Dashboard", version="1.1.0", lifespan=lifespan)
+APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
 def _infer_manual_run_stage(line: str) -> str | None:
@@ -255,19 +326,63 @@ def _manual_speedtest_worker(selected_server_id: str = "") -> None:
 
 
 def load_config() -> dict:
-    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+    with _config_path().open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 CONFIG_LOCK = threading.Lock()
+ENV_LOCK = threading.Lock()
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path: Path | None = None
+    try:
+        try:
+            fd, raw_temp_path = tempfile.mkstemp(
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                dir=path.parent,
+            )
+        except OSError:
+            fd, raw_temp_path = tempfile.mkstemp(
+                prefix=f"{path.name}.",
+                suffix=".tmp",
+            )
+
+        temp_path = Path(raw_temp_path)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        os.replace(temp_path, path)
+        temp_path = None
+        return
+    except OSError:
+        # Some read-only-container setups allow writing the bind-mounted file
+        # itself but not creating sibling temp files. Fall back to a locked
+        # in-place rewrite in that case.
+        with path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            handle.seek(0)
+            handle.write(content)
+            handle.truncate()
+            handle.flush()
+            os.fsync(handle.fileno())
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def save_config(config: dict) -> None:
     with CONFIG_LOCK:
-        with CONFIG_PATH.open("w", encoding="utf-8") as handle:
-            fcntl.flock(handle, fcntl.LOCK_EX)
-            json.dump(config, handle, indent=2)
-            handle.write("\n")
+        rendered = json.dumps(config, indent=2) + "\n"
+        _atomic_write_text(_config_path(), rendered)
 
 
 def _clean_env_value(value: str) -> str:
@@ -275,29 +390,32 @@ def _clean_env_value(value: str) -> str:
 
 
 def _update_env_file(updates: dict[str, str]) -> None:
-    lines: list[str] = []
-    if ENV_PATH.exists():
-        lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
+    with ENV_LOCK:
+        lines: list[str] = []
+        env_path = _env_path()
+        if env_path.exists():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
 
-    positions: dict[str, int] = {}
-    for index, raw_line in enumerate(lines):
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in raw_line:
-            continue
-        key = raw_line.split("=", 1)[0].strip()
-        if key:
-            positions[key] = index
+        positions: dict[str, int] = {}
+        for index, raw_line in enumerate(lines):
+            stripped = raw_line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in raw_line:
+                continue
+            key = raw_line.split("=", 1)[0].strip()
+            if key:
+                positions[key] = index
 
-    for key, value in updates.items():
-        sanitized = _clean_env_value(value)
-        escaped = sanitized.replace("\\", "\\\\").replace('"', '\\"')
-        line = f'{key}="{escaped}"'
-        if key in positions:
-            lines[positions[key]] = line
-        else:
-            lines.append(line)
+        for key, value in updates.items():
+            sanitized = _clean_env_value(value)
+            escaped = sanitized.replace("\\", "\\\\").replace('"', '\\"')
+            line = f'{key}="{escaped}"'
+            if key in positions:
+                lines[positions[key]] = line
+            else:
+                lines.append(line)
 
-    ENV_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        rendered = "\n".join(lines).rstrip() + "\n"
+        _atomic_write_text(env_path, rendered)
 
 
 def _apply_runtime_env(updates: dict[str, str]) -> None:
@@ -753,35 +871,24 @@ def _maybe_migrate_login_email() -> str:
     return candidate
 
 
-def _cleanup_expired_tokens() -> None:
-    now = time.time()
-    expired = [t for t, e in _RESET_TOKENS.items() if now > e["expires"]]
-    for t in expired:
-        del _RESET_TOKENS[t]
-
-
 def _create_reset_token(login_email: str) -> str:
     token = secrets.token_urlsafe(32)
-    with _RESET_TOKEN_LOCK:
-        _cleanup_expired_tokens()
-        if len(_RESET_TOKENS) >= 10:
-            raise RuntimeError("Too many pending reset requests")
-        _RESET_TOKENS[token] = {
-            "login_email": _normalize_email(login_email),
-            "expires": time.time() + 900,
-        }
+    now = time.time()
+    store_reset_token(
+        token,
+        _normalize_email(login_email),
+        now + 900,
+        now=now,
+        max_pending=10,
+    )
     return token
 
 
 def _consume_reset_token(token: str) -> str | None:
-    with _RESET_TOKEN_LOCK:
-        _cleanup_expired_tokens()
-        entry = _RESET_TOKENS.pop(token, None)
-        if not entry:
-            return None
-        if time.time() > entry["expires"]:
-            return None
-        return _normalize_email(entry.get("login_email", ""))
+    login_email = state_consume_reset_token(token, time.time())
+    if not login_email:
+        return None
+    return _normalize_email(login_email)
 
 
 def _send_reset_email(to_addr: str, token: str, base_url: str) -> None:
@@ -913,38 +1020,24 @@ def _extract_client_ip(request: Request) -> str:
 
 
 def _is_login_blocked(client_ip: str) -> int:
-    now = time.time()
-    with AUTH_LOCK:
-        blocked_until = BLOCKED_UNTIL.get(client_ip, 0)
-        if blocked_until <= now:
-            BLOCKED_UNTIL.pop(client_ip, None)
-            return 0
-        return int(blocked_until - now)
+    return state_blocked_seconds(client_ip, time.time())
 
 
 def _register_failed_login(client_ip: str) -> int:
     max_attempts = _env_int("LOGIN_MAX_ATTEMPTS", 5)
     window_seconds = _env_int("LOGIN_WINDOW_SECONDS", 900)
     block_seconds = _env_int("LOGIN_BLOCK_SECONDS", 900)
-
-    now = time.time()
-    with AUTH_LOCK:
-        recent = [attempt for attempt in FAILED_LOGINS.get(client_ip, []) if now - attempt <= window_seconds]
-        recent.append(now)
-        FAILED_LOGINS[client_ip] = recent
-
-        if len(recent) >= max_attempts:
-            BLOCKED_UNTIL[client_ip] = now + block_seconds
-            FAILED_LOGINS[client_ip] = []
-            return block_seconds
-
-    return 0
+    return state_register_failed_login(
+        client_ip,
+        time.time(),
+        max_attempts=max_attempts,
+        window_seconds=window_seconds,
+        block_seconds=block_seconds,
+    )
 
 
 def _clear_failed_logins(client_ip: str) -> None:
-    with AUTH_LOCK:
-        FAILED_LOGINS.pop(client_ip, None)
-        BLOCKED_UNTIL.pop(client_ip, None)
+    state_clear_login_failures(client_ip)
 
 
 def verify_login_credentials(login_email: str, password: str) -> bool:
@@ -1030,6 +1123,149 @@ def _entry_is_healthy(entry: dict, thresholds: dict) -> bool:
     )
 
 
+def _entry_breach_types(entry: dict, thresholds: dict) -> list[str]:
+    breach_types: list[str] = []
+    if entry["download_mbps"] < thresholds.get("download_mbps", 0):
+        breach_types.append("download")
+    if entry["upload_mbps"] < thresholds.get("upload_mbps", 0):
+        breach_types.append("upload")
+    if entry["ping_ms"] > thresholds.get("ping_ms", 999999):
+        breach_types.append("ping")
+    if entry["packet_loss_percent"] > thresholds.get("packet_loss_percent", 999999):
+        breach_types.append("packet_loss")
+    return breach_types
+
+
+def _incident_severity(breach_counts: Counter[str]) -> str:
+    if not breach_counts:
+        return "low"
+    if len(breach_counts) >= 3:
+        return "high"
+    if "download" in breach_counts or "upload" in breach_counts:
+        return "high" if len(breach_counts) >= 2 else "medium"
+    return "medium" if len(breach_counts) >= 2 else "low"
+
+
+def _sla_grade(compliance_pct: float, total_tests: int) -> str:
+    if total_tests == 0:
+        return "N/A"
+    if compliance_pct >= 99:
+        return "A"
+    if compliance_pct >= 97:
+        return "B"
+    if compliance_pct >= 94:
+        return "C"
+    if compliance_pct >= 90:
+        return "D"
+    return "F"
+
+
+def _finalize_incident(raw_incident: dict, ongoing: bool) -> dict:
+    breach_counts: Counter[str] = raw_incident["breach_counts"]
+    breach_types = [name for name, _ in breach_counts.most_common()]
+    primary_server = "Unknown"
+    if raw_incident["servers"]:
+        primary_server = raw_incident["servers"].most_common(1)[0][0]
+
+    end_marker = raw_incident["end_at"]
+    if not ongoing and raw_incident.get("resolved_at") is not None:
+        end_marker = raw_incident["resolved_at"]
+
+    duration_minutes = max(0.0, round((end_marker - raw_incident["start_at"]).total_seconds() / 60, 1))
+    headline = " / ".join(
+        {
+            "download": "Download below floor",
+            "upload": "Upload below floor",
+            "ping": "Ping above ceiling",
+            "packet_loss": "Packet loss above ceiling",
+        }[breach_type]
+        for breach_type in breach_types[:3]
+    )
+
+    return {
+        "started_at": raw_incident["start_at"].isoformat(),
+        "ended_at": raw_incident["end_at"].isoformat(),
+        "resolved_at": raw_incident.get("resolved_at").isoformat() if raw_incident.get("resolved_at") else None,
+        "ongoing": ongoing,
+        "tests_affected": raw_incident["tests_affected"],
+        "duration_minutes": duration_minutes,
+        "breach_types": breach_types,
+        "breach_counts": dict(breach_counts),
+        "primary_server": primary_server,
+        "severity": _incident_severity(breach_counts),
+        "headline": headline,
+        "summary": (
+            f"{raw_incident['tests_affected']} affected test"
+            f"{'' if raw_incident['tests_affected'] == 1 else 's'}"
+            f"{' and still ongoing' if ongoing else ''}"
+        ),
+    }
+
+
+def _build_incident_history(entries: list[dict], thresholds: dict) -> list[dict]:
+    incidents: list[dict] = []
+    current: dict | None = None
+
+    for entry in entries:
+        breach_types = _entry_breach_types(entry, thresholds)
+        if breach_types:
+            if current is None:
+                current = {
+                    "start_at": entry["timestamp"],
+                    "end_at": entry["timestamp"],
+                    "resolved_at": None,
+                    "tests_affected": 0,
+                    "breach_counts": Counter(),
+                    "servers": Counter(),
+                }
+            current["end_at"] = entry["timestamp"]
+            current["tests_affected"] += 1
+            current["breach_counts"].update(breach_types)
+            current["servers"].update([entry.get("server", "Unknown")])
+            continue
+
+        if current is not None:
+            current["resolved_at"] = entry["timestamp"]
+            incidents.append(_finalize_incident(current, ongoing=False))
+            current = None
+
+    if current is not None:
+        incidents.append(_finalize_incident(current, ongoing=True))
+
+    incidents.sort(key=lambda incident: incident["started_at"], reverse=True)
+    return incidents[:8]
+
+
+def _build_sla_summary(
+    recent_entries: list[dict],
+    thresholds: dict,
+    incidents: list[dict],
+    scheduled_tests_per_day: int,
+    days: int,
+    mode: str,
+) -> dict:
+    total_tests = len(recent_entries)
+    healthy_tests = sum(1 for entry in recent_entries if _entry_is_healthy(entry, thresholds))
+    breach_tests = total_tests - healthy_tests
+    compliance_pct = round((healthy_tests / total_tests) * 100, 1) if total_tests else 0.0
+
+    expected_tests = 0
+    if scheduled_tests_per_day > 0:
+        expected_tests = scheduled_tests_per_day if mode == "today" else scheduled_tests_per_day * max(days, 1)
+    coverage_pct = round(min(total_tests / expected_tests, 1) * 100, 1) if expected_tests else 100.0
+
+    return {
+        "grade": _sla_grade(compliance_pct, total_tests),
+        "compliance_pct": compliance_pct,
+        "healthy_tests": healthy_tests,
+        "breach_tests": breach_tests,
+        "incident_count": len(incidents),
+        "sample_coverage_pct": coverage_pct,
+        "expected_tests": expected_tests,
+        "window_label": "Today" if mode == "today" else f"Last {days} days",
+    }
+
+
 def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
     config = load_config()
     server_settings = server_setting_payload(config)
@@ -1060,6 +1296,15 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
             1 for value in packet_loss_values if value > thresholds.get("packet_loss_percent", 999999)
         ),
     }
+    incidents = _build_incident_history(recent_entries, thresholds)
+    sla = _build_sla_summary(
+        recent_entries,
+        thresholds,
+        incidents,
+        scheduled_tests_per_day,
+        days,
+        mode,
+    )
 
     timeseries = [
         {
@@ -1122,8 +1367,10 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
         },
         "timeseries": timeseries,
         "latest_tests": latest_entries,
+        "incidents": incidents,
         "last_test_at": last_test_at,
         "range_label": "Today" if mode == "today" else f"Last {days} days",
+        "sla": sla,
         "server_selection_id": server_settings["selected_id"],
         "server_selection_label": server_settings["selected_label"],
     }
@@ -1147,12 +1394,6 @@ async def add_security_headers(request: Request, call_next):
         "form-action 'self'"
     )
     return response
-
-
-@APP.on_event("startup")
-def on_startup() -> None:
-    validate_security_configuration()
-    LOGGER.info("Web security configuration validated")
 
 
 @APP.get("/health")
@@ -1197,6 +1438,7 @@ def login_page(request: Request) -> HTMLResponse:
     recovery_email = _resolve_recovery_email()
     error = _consume_flash(request)
     response = TEMPLATES.TemplateResponse(
+        request,
         "login.html",
         {"request": request, "error": error, "has_recovery_email": bool(recovery_email)},
     )
@@ -1280,7 +1522,7 @@ def register_page(request: Request) -> HTMLResponse:
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
     error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse("register.html", {"request": request, "error": error})
+    response = TEMPLATES.TemplateResponse(request, "register.html", {"request": request, "error": error})
     response.delete_cookie(FLASH_COOKIE, path="/register")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
@@ -1366,7 +1608,11 @@ def forgot_password_page(request: Request) -> HTMLResponse:
         return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
 
     error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse("forgot_password.html", {"request": request, "error": error, "sent": False})
+    response = TEMPLATES.TemplateResponse(
+        request,
+        "forgot_password.html",
+        {"request": request, "error": error, "sent": False},
+    )
     response.delete_cookie(FLASH_COOKIE, path="/forgot-password")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
@@ -1382,12 +1628,14 @@ def forgot_password(request: Request, email: str = Form(""), username: str = For
     blocked_for = _is_login_blocked(client_ip)
     if blocked_for > 0:
         return TEMPLATES.TemplateResponse(
+            request,
             "forgot_password.html",
             {"request": request, "error": f"Too many attempts. Retry in {blocked_for}s", "sent": False},
         )
 
     # Always show success to prevent login email enumeration
     success_response = TEMPLATES.TemplateResponse(
+        request,
         "forgot_password.html",
         {"request": request, "error": None, "sent": True},
     )
@@ -1419,6 +1667,7 @@ def reset_password_page(request: Request) -> HTMLResponse:
     token = request.query_params.get("token", "")
     error = _consume_flash(request)
     response = TEMPLATES.TemplateResponse(
+        request,
         "reset_password.html",
         {"request": request, "token": token, "error": error, "success": False},
     )
@@ -1450,6 +1699,7 @@ def reset_password(
     login_email = _consume_reset_token(token)
     if not login_email:
         return TEMPLATES.TemplateResponse(
+            request,
             "reset_password.html",
             {"request": request, "token": "", "error": "Reset link is invalid or has expired. Please request a new one.", "success": False},
         )
@@ -1462,6 +1712,7 @@ def reset_password(
     except OSError as exc:
         LOGGER.error("Failed to persist password reset: %s", exc)
         return TEMPLATES.TemplateResponse(
+            request,
             "reset_password.html",
             {"request": request, "token": "", "error": "Failed to save new password.", "success": False},
         )
@@ -1470,10 +1721,11 @@ def reset_password(
 
     global SESSION_VERSION
     with SESSION_VERSION_LOCK:
-        SESSION_VERSION += 1
+        SESSION_VERSION = bump_session_version()
     LOGGER.info("Password reset completed for login email '%s' — all sessions invalidated", login_email)
 
     return TEMPLATES.TemplateResponse(
+        request,
         "reset_password.html",
         {"request": request, "token": "", "error": None, "success": True},
     )
@@ -1489,6 +1741,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
     account = config.get("account", {})
 
     response = TEMPLATES.TemplateResponse(
+        request,
         "dashboard.html",
         {
             "request": request,
@@ -1515,6 +1768,7 @@ def settings_page(request: Request) -> HTMLResponse:
     account = config.get("account", {})
 
     response = TEMPLATES.TemplateResponse(
+        request,
         "settings.html",
         {
             "request": request,
@@ -1765,7 +2019,7 @@ async def update_dashboard_password(request: Request) -> JSONResponse:
 
     global SESSION_VERSION
     with SESSION_VERSION_LOCK:
-        SESSION_VERSION += 1
+        SESSION_VERSION = bump_session_version()
     LOGGER.info("Session version bumped — all existing sessions invalidated after password change")
 
     return JSONResponse({"message": "Dashboard password updated. You will be redirected to login."})
@@ -1807,7 +2061,7 @@ async def update_dashboard_login_email(request: Request) -> JSONResponse:
 
     global SESSION_VERSION
     with SESSION_VERSION_LOCK:
-        SESSION_VERSION += 1
+        SESSION_VERSION = bump_session_version()
     LOGGER.info("Login email changed to '%s' — all sessions invalidated", new_login_email)
 
     return JSONResponse({"message": "Login email updated. You will be redirected to sign in again."})

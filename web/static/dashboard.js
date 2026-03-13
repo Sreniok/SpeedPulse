@@ -1,6 +1,7 @@
 let speedChart;
 let latencyChart;
 let thresholdChart;
+let slaBreakdownChart;
 let latestRows = [];
 let currentPayload = null;
 let currentPage = 1;
@@ -618,6 +619,7 @@ function applyTheme(theme, persist = true) {
   }
 
   if (currentPayload) {
+    renderSlaPanel(currentPayload);
     renderCharts(currentPayload);
   }
 }
@@ -702,6 +704,32 @@ function metricCard(title, valueText, noteText, toneClass = "tone-muted") {
   return card;
 }
 
+function reliabilityHighlightCard(
+  title,
+  valueText,
+  noteText,
+  toneClass = "tone-muted",
+) {
+  const card = document.createElement("article");
+  card.className = "reliability-card";
+
+  const titleEl = document.createElement("h3");
+  titleEl.textContent = title;
+
+  const valueEl = document.createElement("strong");
+  valueEl.className = `reliability-value ${toneClass}`;
+  valueEl.textContent = valueText;
+
+  const noteEl = document.createElement("p");
+  noteEl.className = `reliability-note ${toneClass}`;
+  noteEl.textContent = noteText;
+
+  card.appendChild(titleEl);
+  card.appendChild(valueEl);
+  card.appendChild(noteEl);
+  return card;
+}
+
 function renderHeroMetrics(data) {
   const root = byId("hero-metrics");
   root.textContent = "";
@@ -766,6 +794,333 @@ function renderHeroMetrics(data) {
       todayTrend.tone,
     ),
   );
+}
+
+function renderSlaPanel(data) {
+  const summary = byId("sla-summary");
+  const cardsRoot = byId("sla-cards");
+  const highlightsRoot = byId("sla-highlights");
+  const breakdownSummary = byId("sla-breakdown-summary");
+  if (!summary || !cardsRoot) return;
+
+  const sla = data.sla || {};
+  cardsRoot.textContent = "";
+  if (highlightsRoot) {
+    highlightsRoot.textContent = "";
+  }
+
+  const grade = sla.grade || "N/A";
+  const compliancePct = Number(sla.compliance_pct || 0);
+  const breachTests = Number(sla.breach_tests || 0);
+  const incidentCount = Number(sla.incident_count || 0);
+  const coveragePct = Number(sla.sample_coverage_pct || 0);
+  const totalTests = Number(data.total_tests || 0);
+
+  summary.textContent =
+    `${sla.window_label || data.range_label || "Selected range"} | ${totalTests} logged test${totalTests === 1 ? "" : "s"} | ` +
+    "Compliance is based on your current threshold settings.";
+
+  cardsRoot.appendChild(
+    metricCard(
+      "SLA grade",
+      grade,
+      `${safeFixed(compliancePct, 1)}% threshold compliance`,
+      grade === "A" || grade === "B"
+        ? "tone-good"
+        : grade === "N/A"
+          ? "tone-muted"
+          : "tone-bad",
+    ),
+  );
+  cardsRoot.appendChild(
+    metricCard(
+      "Breached tests",
+      String(breachTests),
+      `${incidentCount} grouped incident${incidentCount === 1 ? "" : "s"}`,
+      breachTests === 0 ? "tone-good" : "tone-bad",
+    ),
+  );
+  cardsRoot.appendChild(
+    metricCard(
+      "Sample coverage",
+      `${safeFixed(coveragePct, 1)}%`,
+      `${sla.expected_tests || 0} scheduled samples expected`,
+      coveragePct >= 100 ? "tone-good" : "tone-muted",
+    ),
+  );
+
+  renderSlaBreakdown(data, breakdownSummary);
+  renderReliabilityHighlights(data, highlightsRoot);
+}
+
+function compactDuration(totalMinutes) {
+  const minutes = Number(totalMinutes || 0);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "0m";
+  if (minutes >= 1440) {
+    const days = minutes / 1440;
+    return `${days >= 10 ? Math.round(days) : days.toFixed(1)}d`;
+  }
+  if (minutes >= 60) {
+    const hours = minutes / 60;
+    return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)}h`;
+  }
+  return `${Math.round(minutes)}m`;
+}
+
+function durationFromIso(value) {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.max(0, (Date.now() - parsed) / 60000);
+}
+
+function slaBreakdownChartOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: "y",
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: {
+          color: cssVar("--chart-label"),
+          precision: 0,
+        },
+        grid: { color: cssVar("--chart-grid") },
+      },
+      y: {
+        ticks: { color: cssVar("--chart-label") },
+        grid: { display: false },
+      },
+    },
+  };
+}
+
+function renderSlaBreakdown(data, summaryElement) {
+  const canvas = byId("slaBreakdownChart");
+  if (!canvas) return;
+
+  const breaches = data.violations || {};
+  const values = [
+    Number(breaches.download || 0),
+    Number(breaches.upload || 0),
+    Number(breaches.ping || 0),
+    Number(breaches.packet_loss || 0),
+  ];
+  const total = values.reduce((sum, value) => sum + value, 0);
+
+  if (summaryElement) {
+    summaryElement.textContent =
+      total > 0
+        ? `${total} total breach event${total === 1 ? "" : "s"} across the selected range.`
+        : "No threshold breaches recorded in this range.";
+  }
+
+  if (slaBreakdownChart) {
+    slaBreakdownChart.destroy();
+  }
+
+  slaBreakdownChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: ["Download", "Upload", "Ping", "Packet loss"],
+      datasets: [
+        {
+          data: values,
+          backgroundColor: [
+            "rgba(24, 182, 255, 0.36)",
+            "rgba(255, 178, 36, 0.36)",
+            "rgba(255, 123, 140, 0.36)",
+            "rgba(255, 212, 107, 0.32)",
+          ],
+          borderColor: [
+            cssVar("--chart-download"),
+            cssVar("--chart-upload"),
+            cssVar("--chart-ping"),
+            cssVar("--chart-loss"),
+          ],
+          borderWidth: 1.3,
+          borderRadius: 12,
+        },
+      ],
+    },
+    options: slaBreakdownChartOptions(),
+  });
+}
+
+function renderReliabilityHighlights(data, root) {
+  if (!root) return;
+
+  const incidents = data.incidents || [];
+  const serverCounts = new Map();
+  incidents.forEach((incident) => {
+    const server = incident.primary_server || "Unknown";
+    serverCounts.set(server, (serverCounts.get(server) || 0) + 1);
+  });
+
+  let worstServer = null;
+  for (const [server, count] of serverCounts.entries()) {
+    if (!worstServer || count > worstServer.count) {
+      worstServer = { server, count };
+    }
+  }
+
+  const longestIncident = incidents.reduce((longest, incident) => {
+    if (
+      !longest ||
+      Number(incident.duration_minutes || 0) >
+        Number(longest.duration_minutes || 0)
+    ) {
+      return incident;
+    }
+    return longest;
+  }, null);
+
+  const ongoing = incidents.find((incident) => incident.ongoing);
+  let cleanStreak = null;
+  if (ongoing) {
+    cleanStreak = {
+      value: "Ongoing",
+      note: ongoing.headline || "Active incident in progress",
+      tone: "tone-bad",
+    };
+  } else if (incidents.length > 0) {
+    const resolvedAt = incidents
+      .map((incident) => incident.resolved_at || incident.ended_at)
+      .filter(Boolean)
+      .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+    const minutes = durationFromIso(resolvedAt);
+    cleanStreak = {
+      value: compactDuration(minutes),
+      note: "Since the last incident cleared",
+      tone: minutes >= 1440 ? "tone-good" : "tone-muted",
+    };
+  } else {
+    cleanStreak = {
+      value: "Clean",
+      note: `No incidents in ${data.range_label || "this window"}`,
+      tone: "tone-good",
+    };
+  }
+
+  root.appendChild(
+    reliabilityHighlightCard(
+      "Worst server",
+      worstServer ? worstServer.server : "None",
+      worstServer
+        ? `${worstServer.count} incident group${worstServer.count === 1 ? "" : "s"}`
+        : "No affected servers in this range",
+      worstServer ? "tone-bad" : "tone-good",
+    ),
+  );
+  root.appendChild(
+    reliabilityHighlightCard(
+      "Longest incident",
+      longestIncident ? compactDuration(longestIncident.duration_minutes) : "0m",
+      longestIncident
+        ? longestIncident.headline || "Threshold breach"
+        : "No incident duration recorded",
+      longestIncident ? "tone-muted" : "tone-good",
+    ),
+  );
+  root.appendChild(
+    reliabilityHighlightCard(
+      "Clean streak",
+      cleanStreak.value,
+      cleanStreak.note,
+      cleanStreak.tone,
+    ),
+  );
+}
+
+function incidentSeverityLabel(severity) {
+  if (severity === "high") return "High";
+  if (severity === "medium") return "Medium";
+  return "Low";
+}
+
+function incidentSeverityClass(severity) {
+  if (severity === "high") return "incident-pill-high";
+  if (severity === "medium") return "incident-pill-medium";
+  return "incident-pill-low";
+}
+
+function formatIncidentWindow(incident) {
+  const started = formatTimestamp(incident.started_at);
+  if (incident.ongoing) {
+    return `${started} to now`;
+  }
+  if (incident.resolved_at) {
+    return `${started} to ${formatTimestamp(incident.resolved_at)}`;
+  }
+  return started;
+}
+
+function renderIncidentHistory(data) {
+  const root = byId("incident-list");
+  const summary = byId("incident-summary");
+  if (!root || !summary) return;
+
+  const incidents = data.incidents || [];
+  root.textContent = "";
+  summary.textContent =
+    incidents.length > 0
+      ? `Showing ${incidents.length} most recent incident group${incidents.length === 1 ? "" : "s"} for ${data.range_label || "the selected range"}.`
+      : `No grouped incidents were found for ${data.range_label || "the selected range"}.`;
+
+  if (incidents.length === 0) {
+    const empty = document.createElement("article");
+    empty.className = "incident-item incident-item-empty";
+    empty.textContent =
+      "No consecutive threshold-breach incidents were detected in this window.";
+    root.appendChild(empty);
+    return;
+  }
+
+  for (const incident of incidents) {
+    const card = document.createElement("article");
+    card.className = "incident-item";
+
+    const top = document.createElement("div");
+    top.className = "incident-top";
+
+    const titleWrap = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = incident.headline || "Threshold breach";
+    const meta = document.createElement("p");
+    meta.className = "incident-meta";
+    meta.textContent = `${formatIncidentWindow(incident)} | ${incident.primary_server || "Unknown server"}`;
+    titleWrap.appendChild(title);
+    titleWrap.appendChild(meta);
+
+    const pill = document.createElement("span");
+    pill.className = `incident-pill ${incidentSeverityClass(incident.severity)}`;
+    pill.textContent = incident.ongoing
+      ? `${incidentSeverityLabel(incident.severity)} · Ongoing`
+      : incidentSeverityLabel(incident.severity);
+
+    top.appendChild(titleWrap);
+    top.appendChild(pill);
+
+    const summaryRow = document.createElement("p");
+    summaryRow.className = "incident-copy";
+    summaryRow.textContent =
+      `${incident.summary || ""} | Duration ${safeFixed(Number(incident.duration_minutes || 0), 1)} min`;
+
+    const breaches = document.createElement("p");
+    breaches.className = "incident-breaches";
+    breaches.textContent = (incident.breach_types || [])
+      .map((value) => value.replace("_", " "))
+      .join(" · ");
+
+    card.appendChild(top);
+    card.appendChild(summaryRow);
+    card.appendChild(breaches);
+    root.appendChild(card);
+  }
 }
 
 function renderScheduleNote(data) {
@@ -1315,6 +1670,8 @@ async function loadMetrics() {
 
     renderScheduleNote(data);
     renderHeroMetrics(data);
+    renderSlaPanel(data);
+    renderIncidentHistory(data);
     renderCharts(data);
     renderTable();
 
