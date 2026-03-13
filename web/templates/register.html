@@ -3,26 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Speed Monitor Login</title>
+    <title>Speed Monitor — Create Account</title>
     <link rel="stylesheet" href="/static/app.css" />
   </head>
   <body class="login-body">
     <main class="login-shell">
       <section class="login-card">
-        <h1>Speed Monitor</h1>
-        <p>Sign in to access your dashboard.</p>
+        <h1>Create Account</h1>
+        <p>Set up the dashboard administrator account.</p>
 
         {% if error %}
         <div class="error-banner">{{ error }}</div>
         {% endif %}
 
-        <form method="post" action="/login" class="login-form">
+        <form method="post" action="/register" class="login-form">
           <label for="username">Username</label>
           <input
             id="username"
             name="username"
             type="text"
             autocomplete="username"
+            minlength="3"
+            pattern="[a-zA-Z0-9_\-]+"
+            placeholder="e.g. monitor-admin"
             required
           />
 
@@ -31,18 +34,24 @@
             id="password"
             name="password"
             type="password"
-            autocomplete="current-password"
+            autocomplete="new-password"
+            minlength="10"
+            placeholder="Minimum 10 characters"
             required
           />
 
-          <button type="submit">Sign In</button>
-        </form>
+          <label for="confirm_password">Confirm password</label>
+          <input
+            id="confirm_password"
+            name="confirm_password"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
 
-        {% if has_recovery_email %}
-        <div class="login-links">
-          <a href="/forgot-password">Forgot password?</a>
-        </div>
-        {% endif %}
+          <button type="submit">Create Account</button>
+        </form>
       </section>
     </main>
   </body>

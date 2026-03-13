@@ -1463,6 +1463,7 @@ async function runSpeedtestNow(serverId = "") {
 
 function bindEvents() {
   byId("theme-toggle").addEventListener("click", toggleTheme);
+  bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
   const defaultServerSelect = byId("server-select");
   if (defaultServerSelect) {
@@ -1507,6 +1508,37 @@ function bindEvents() {
     renderTable();
   });
   byId("export-results").addEventListener("click", exportResults);
+}
+
+function bindMobileNav() {
+  const toggle = byId("mobile-nav-toggle");
+  const sidebar = byId("sidebar");
+  const backdrop = byId("sidebar-backdrop");
+  if (!toggle || !sidebar || !backdrop) return;
+
+  function openSidebar() {
+    sidebar.classList.add("open");
+    backdrop.classList.remove("hidden");
+    toggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    backdrop.classList.add("hidden");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+
+  toggle.addEventListener("click", () => {
+    sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
+  });
+
+  backdrop.addEventListener("click", closeSidebar);
+
+  sidebar.querySelectorAll("a.nav-link").forEach((link) => {
+    link.addEventListener("click", () => {
+      if (window.innerWidth <= 1080) closeSidebar();
+    });
+  });
 }
 
 applyTheme(preferredTheme(), false);

@@ -228,16 +228,7 @@ function buildWeeklySchedule() {
   return `${day} ${time}`;
 }
 
-function renderSettingsHero(payload) {
-  const email = payload.email || {};
-  const notifications = payload.notifications || {};
-
-  byId("settings-alert-status").textContent = email.send_realtime_alerts
-    ? "Enabled"
-    : "Paused";
-  byId("settings-weekly-status").textContent =
-    notifications.weekly_report_enabled ? "Scheduled" : "Disabled";
-}
+function renderSettingsHero(payload) {}
 
 function syncScheduledServerSelect() {
   const select = byId("settings-schedule-server");
@@ -253,9 +244,13 @@ function populateSettingsForm(payload) {
   const currentContract = contract.current || {};
   settingsServerSelectionId = String(payload.server_selection_id || "");
 
-  byId("settings-account-name").value = account.name || "";
-  byId("settings-account-number").value = account.number || "";
-  populateProviderFields(account.provider || "");
+  // User account fields
+  byId("settings-username").value = payload.username || "";
+  byId("settings-user-email").value = payload.user_email || "";
+  const sidebarUsername = byId("settings-sidebar-username");
+  if (sidebarUsername) {
+    sidebarUsername.textContent = payload.username || "";
+  }
 
   byId("settings-contract-start").value = currentContract.start_date || "";
   byId("settings-contract-end").value = currentContract.end_date || "";
@@ -278,7 +273,6 @@ function populateSettingsForm(payload) {
   byId("settings-smtp-port").value = String(email.smtp_port || 465);
   byId("settings-smtp-username").value = email.smtp_username || "";
   byId("settings-email-from").value = email.from || "";
-  byId("settings-email-to").value = email.to || "";
   byId("settings-realtime-alerts").checked = Boolean(
     email.send_realtime_alerts,
   );
@@ -317,7 +311,6 @@ function collectSettingsPayload() {
     smtp_username: byId("settings-smtp-username").value.trim(),
     smtp_password: byId("settings-smtp-password").value,
     email_from: byId("settings-email-from").value.trim(),
-    email_to: byId("settings-email-to").value.trim(),
     send_realtime_alerts: byId("settings-realtime-alerts").checked,
     weekly_report_enabled: byId("settings-weekly-enabled").checked,
     weekly_report_time: buildWeeklySchedule(),
@@ -469,8 +462,88 @@ async function updateDashboardPassword() {
     byId("settings-new-password").value = "";
     byId("settings-confirm-password").value = "";
     showMessage(payload.message || "Password updated.", "success");
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 1500);
   } catch (error) {
     showMessage(error.message || "Failed to update password.", "error");
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+async function updateDashboardUsername() {
+  const saveButton = byId("settings-save-username");
+  saveButton.disabled = true;
+
+  try {
+    const response = await fetch("/api/settings/username", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        new_username: byId("settings-username").value.trim(),
+        current_password: byId("settings-username-password").value,
+      }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to update username",
+      );
+    }
+
+    byId("settings-username-password").value = "";
+    showMessage(payload.message || "Username updated.", "success");
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 1500);
+  } catch (error) {
+    showMessage(error.message || "Failed to update username.", "error");
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+async function saveUserEmail() {
+  const saveButton = byId("settings-save-user-email");
+  saveButton.disabled = true;
+
+  try {
+    const response = await fetch("/api/settings/user-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        email: byId("settings-user-email").value.trim(),
+      }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to save email",
+      );
+    }
+
+    showMessage(payload.message || "Email saved.", "success");
+  } catch (error) {
+    showMessage(error.message || "Failed to save email.", "error");
   } finally {
     saveButton.disabled = false;
   }
@@ -624,6 +697,7 @@ async function endCurrentContract() {
 
 function bindEvents() {
   byId("theme-toggle").addEventListener("click", toggleTheme);
+  bindMobileNav();
   settingsSaveButtons().forEach((button) => {
     button.addEventListener("click", () => {
       void saveNotificationSettings();
@@ -631,6 +705,12 @@ function bindEvents() {
   });
   byId("settings-password-save").addEventListener("click", () => {
     void updateDashboardPassword();
+  });
+  byId("settings-save-username").addEventListener("click", () => {
+    void updateDashboardUsername();
+  });
+  byId("settings-save-user-email").addEventListener("click", () => {
+    void saveUserEmail();
   });
   byId("settings-test-email").addEventListener("click", () => {
     void sendSettingsTestNotification("email", "settings-test-email");
@@ -662,6 +742,37 @@ function bindEvents() {
   });
   byId("settings-contract-end").addEventListener("change", () => {
     renderContractDaysRemaining(byId("settings-contract-end").value);
+  });
+}
+
+function bindMobileNav() {
+  const toggle = byId("mobile-nav-toggle");
+  const sidebar = byId("sidebar");
+  const backdrop = byId("sidebar-backdrop");
+  if (!toggle || !sidebar || !backdrop) return;
+
+  function openSidebar() {
+    sidebar.classList.add("open");
+    backdrop.classList.remove("hidden");
+    toggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    backdrop.classList.add("hidden");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+
+  toggle.addEventListener("click", () => {
+    sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
+  });
+
+  backdrop.addEventListener("click", closeSidebar);
+
+  sidebar.querySelectorAll("a.nav-link, a.nav-link-section").forEach((link) => {
+    link.addEventListener("click", () => {
+      if (window.innerWidth <= 1080) closeSidebar();
+    });
   });
 }
 

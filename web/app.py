@@ -53,6 +53,9 @@ AUTH_LOCK = threading.Lock()
 SESSION_VERSION = 1
 SESSION_VERSION_LOCK = threading.Lock()
 
+_RESET_TOKENS: dict[str, dict] = {}
+_RESET_TOKEN_LOCK = threading.Lock()
+
 MANUAL_SPEEDTEST_LOCK = threading.Lock()
 LAST_MANUAL_SPEEDTEST_AT = 0.0
 MANUAL_RUN_STATE_LOCK = threading.Lock()
@@ -328,6 +331,8 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     contract_history = contract_cfg.get("history", [])
 
     return {
+        "username": os.getenv("DASHBOARD_USERNAME", "").strip(),
+        "user_email": os.getenv("EMAIL_TO", email_cfg.get("to", "")).strip(),
         "account": {
             "name": str(account_cfg.get("name", "")),
             "number": str(account_cfg.get("number", "")),
@@ -443,10 +448,10 @@ def _validate_outbound_url(url: str) -> None:
         raise ValueError("URL must not target localhost")
     if hostname.startswith("169.254.") or hostname.startswith("fe80:"):
         raise ValueError("URL must not target link-local addresses")
-    if hostname.startswith("10.") or hostname.startswith("192.168."):
-        pass  # Private LAN is acceptable for self-hosted webhook receivers
+    if hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("172."):
+        LOGGER.info("Outbound URL targets private LAN address: %s", hostname)
     if hostname.endswith(".internal") or hostname.endswith(".local"):
-        pass  # mDNS / internal DNS is common in home lab setups
+        LOGGER.info("Outbound URL targets internal/mDNS hostname: %s", hostname)
 
 
 def _send_settings_test_webhook(config: dict) -> None:
@@ -643,6 +648,95 @@ def server_setting_payload(config: dict | None = None, force_refresh: bool = Fal
     }
 
 
+def _is_setup_mode() -> bool:
+    """True when no dashboard credentials have been configured yet."""
+    return (
+        not os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
+        and not os.getenv("DASHBOARD_PASSWORD", "").strip()
+    )
+
+
+def _ensure_crypto_keys() -> None:
+    """Auto-generate APP_SECRET_KEY and AUTH_SALT if missing (setup mode)."""
+    global AUTH_SALT
+
+    secret_key = os.getenv("APP_SECRET_KEY", "")
+    if not secret_key or len(secret_key) < 32:
+        generated = secrets.token_urlsafe(48)
+        os.environ["APP_SECRET_KEY"] = generated
+        try:
+            _update_env_file({"APP_SECRET_KEY": generated})
+        except OSError:
+            pass
+
+    if not AUTH_SALT:
+        generated = secrets.token_hex(16)
+        os.environ["AUTH_SALT"] = generated
+        AUTH_SALT = generated
+        try:
+            _update_env_file({"AUTH_SALT": generated})
+        except OSError:
+            pass
+
+
+def _cleanup_expired_tokens() -> None:
+    now = time.time()
+    expired = [t for t, e in _RESET_TOKENS.items() if now > e["expires"]]
+    for t in expired:
+        del _RESET_TOKENS[t]
+
+
+def _create_reset_token(username: str) -> str:
+    token = secrets.token_urlsafe(32)
+    with _RESET_TOKEN_LOCK:
+        _cleanup_expired_tokens()
+        if len(_RESET_TOKENS) >= 10:
+            raise RuntimeError("Too many pending reset requests")
+        _RESET_TOKENS[token] = {"username": username, "expires": time.time() + 900}
+    return token
+
+
+def _consume_reset_token(token: str) -> str | None:
+    with _RESET_TOKEN_LOCK:
+        _cleanup_expired_tokens()
+        entry = _RESET_TOKENS.pop(token, None)
+        if not entry:
+            return None
+        if time.time() > entry["expires"]:
+            return None
+        return entry["username"]
+
+
+def _send_reset_email(to_addr: str, token: str, base_url: str) -> None:
+    config = load_config()
+    mail = load_mail_settings(config)
+
+    reset_url = f"{base_url.rstrip('/')}/reset-password?token={quote(token)}"
+    body = (
+        "You requested a password reset for Speed Monitor.\n\n"
+        f"Click the link below to reset your password (valid for 15 minutes):\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request this, you can safely ignore this email."
+    )
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"] = mail.from_addr
+    msg["To"] = to_addr
+    msg["Subject"] = "Speed Monitor \u2014 Password Reset"
+
+    if mail.smtp_port == 465:
+        server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=30)
+    else:
+        server = smtplib.SMTP(mail.smtp_server, mail.smtp_port, timeout=30)
+        server.starttls()
+
+    try:
+        server.login(mail.smtp_username, mail.smtp_password)
+        server.send_message(msg)
+    finally:
+        server.quit()
+
+
 def hash_password_pbkdf2(password: str, salt_hex: str, iterations: int) -> str:
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), iterations)
     return digest.hex()
@@ -683,6 +777,17 @@ def _validate_password_hash_format(password_hash: str) -> bool:
 
 
 def validate_security_configuration() -> None:
+    password_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
+    password_plain = os.getenv("DASHBOARD_PASSWORD", "").strip()
+    username = os.getenv("DASHBOARD_USERNAME", "").strip()
+
+    # ── Setup mode: no credentials at all → allow registration ──
+    if not password_hash and not password_plain and not username:
+        LOGGER.info("No dashboard credentials — starting in setup mode (visit /register)")
+        _ensure_crypto_keys()
+        return
+
+    # ── Normal mode: full validation ────────────────────────────
     if not AUTH_SALT:
         raise RuntimeError("AUTH_SALT must be set (use a random hex string, e.g. python3 -c 'import secrets; print(secrets.token_hex(16))')")
 
@@ -690,23 +795,19 @@ def validate_security_configuration() -> None:
     if not secret_key or secret_key in {"change-me", "replace-with-long-random-secret"} or len(secret_key) < 32:
         raise RuntimeError("APP_SECRET_KEY must be set to a strong random value (minimum 32 characters)")
 
-    username = os.getenv("DASHBOARD_USERNAME", "").strip()
     if not username:
         raise RuntimeError("DASHBOARD_USERNAME must be set")
-
-    password_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
-    password_plain = os.getenv("DASHBOARD_PASSWORD", "").strip()
 
     if password_hash:
         if not _validate_password_hash_format(password_hash):
             raise RuntimeError("DASHBOARD_PASSWORD_HASH format is invalid")
-    else:
-        # Backward compatibility path, but still enforce non-default value.
-        if not password_plain:
-            raise RuntimeError("Set DASHBOARD_PASSWORD_HASH (recommended) or DASHBOARD_PASSWORD")
+    elif password_plain:
+        LOGGER.warning(
+            "Plain DASHBOARD_PASSWORD is deprecated and will be removed in a future release. "
+            "Use 'python3 generate_password_hash.py' to create DASHBOARD_PASSWORD_HASH instead."
+        )
         if password_plain in {"change-me", "admin", "password"}:
             raise RuntimeError("DASHBOARD_PASSWORD must not use default/insecure value")
-        LOGGER.warning("Plain DASHBOARD_PASSWORD detected — auto-hashing and persisting as DASHBOARD_PASSWORD_HASH.")
         new_hash = build_password_hash(password_plain)
         env_updates = {"DASHBOARD_PASSWORD_HASH": new_hash, "DASHBOARD_PASSWORD": ""}
         try:
@@ -714,6 +815,11 @@ def validate_security_configuration() -> None:
         except OSError:
             LOGGER.warning("Could not persist DASHBOARD_PASSWORD_HASH to .env (read-only filesystem?)")
         _apply_runtime_env(env_updates)
+    else:
+        raise RuntimeError(
+            "DASHBOARD_PASSWORD_HASH is required. "
+            "Generate one with: python3 generate_password_hash.py"
+        )
 
 
 def get_serializer() -> URLSafeSerializer:
@@ -817,6 +923,7 @@ def require_csrf(request: Request, session: dict) -> None:
     sent_token = request.headers.get("X-CSRF-Token", "")
     expected_token = str(session.get("csrf", ""))
     if not sent_token or not hmac.compare_digest(sent_token, expected_token):
+        LOGGER.warning("CSRF validation failed for %s %s", request.method, request.url.path)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
 
 
@@ -967,8 +1074,8 @@ def health() -> dict:
     return {"status": "ok", "time": datetime.now().isoformat()}
 
 
-def _set_flash(response: RedirectResponse, message: str) -> RedirectResponse:
-    """Set a short-lived signed flash cookie for displaying login errors."""
+def _set_flash(response: RedirectResponse, message: str, path: str = "/login") -> RedirectResponse:
+    """Set a short-lived signed flash cookie for displaying errors."""
     signed = get_serializer().dumps({"msg": message, "t": int(time.time())})
     response.set_cookie(
         key=FLASH_COOKIE,
@@ -976,7 +1083,7 @@ def _set_flash(response: RedirectResponse, message: str) -> RedirectResponse:
         httponly=True,
         samesite="strict",
         max_age=60,
-        path="/login",
+        path=path,
     )
     return response
 
@@ -998,8 +1105,15 @@ def _consume_flash(request: Request) -> str | None:
 
 @APP.get("/login", response_class=HTMLResponse)
 def login_page(request: Request) -> HTMLResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
+    recovery_email = os.getenv("RECOVERY_EMAIL", "").strip()
     error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse("login.html", {"request": request, "error": error})
+    response = TEMPLATES.TemplateResponse(
+        "login.html",
+        {"request": request, "error": error, "has_recovery_email": bool(recovery_email)},
+    )
     response.delete_cookie(FLASH_COOKIE, path="/login")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -1009,6 +1123,9 @@ def login_page(request: Request) -> HTMLResponse:
 
 @APP.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)) -> RedirectResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
     client_ip = _extract_client_ip(request)
     blocked_for = _is_login_blocked(client_ip)
     if blocked_for > 0:
@@ -1052,6 +1169,206 @@ def logout() -> RedirectResponse:
     response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
     response.delete_cookie(SESSION_COOKIE)
     return response
+
+
+# ── Registration (setup mode only) ──────────────────────────────
+
+
+@APP.get("/register", response_class=HTMLResponse)
+def register_page(request: Request) -> HTMLResponse:
+    if not _is_setup_mode():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
+    error = _consume_flash(request)
+    response = TEMPLATES.TemplateResponse("register.html", {"request": request, "error": error})
+    response.delete_cookie(FLASH_COOKIE, path="/register")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@APP.post("/register")
+def register(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+) -> RedirectResponse:
+    if not _is_setup_mode():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
+    username = username.strip()
+    if not username or len(username) < 3:
+        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+        return _set_flash(response, "Username must be at least 3 characters", path="/register")
+
+    if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+        return _set_flash(response, "Username may only contain letters, digits, hyphens, and underscores", path="/register")
+
+    if len(password) < 10:
+        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+        return _set_flash(response, "Password must be at least 10 characters", path="/register")
+
+    if password != confirm_password:
+        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+        return _set_flash(response, "Passwords do not match", path="/register")
+
+    password_hash = build_password_hash(password)
+    env_updates = {
+        "DASHBOARD_USERNAME": username,
+        "DASHBOARD_PASSWORD_HASH": password_hash,
+        "DASHBOARD_PASSWORD": "",
+    }
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        LOGGER.error("Failed to write credentials to .env: %s", exc)
+        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+        return _set_flash(response, "Failed to save credentials", path="/register")
+
+    _apply_runtime_env(env_updates)
+    LOGGER.info("Account created for user '%s' via setup wizard", username)
+
+    # Auto-login the new user
+    ttl_seconds = _env_int("SESSION_TTL_SECONDS", 60 * 60 * 12)
+    exp_ts = int(time.time()) + ttl_seconds
+    csrf_token = secrets.token_urlsafe(24)
+    with SESSION_VERSION_LOCK:
+        sv = SESSION_VERSION
+    token = get_serializer().dumps({"username": username, "exp": exp_ts, "csrf": csrf_token, "sv": sv})
+
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="strict",
+        secure=os.getenv("SESSION_COOKIE_SECURE", "true").lower() != "false",
+        max_age=ttl_seconds,
+    )
+    return response
+
+
+# ── Forgot / Reset password ─────────────────────────────────────
+
+
+@APP.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(request: Request) -> HTMLResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
+    error = _consume_flash(request)
+    response = TEMPLATES.TemplateResponse("forgot_password.html", {"request": request, "error": error, "sent": False})
+    response.delete_cookie(FLASH_COOKIE, path="/forgot-password")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@APP.post("/forgot-password")
+def forgot_password(request: Request, username: str = Form(...)) -> HTMLResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
+    client_ip = _extract_client_ip(request)
+    blocked_for = _is_login_blocked(client_ip)
+    if blocked_for > 0:
+        return TEMPLATES.TemplateResponse(
+            "forgot_password.html",
+            {"request": request, "error": f"Too many attempts. Retry in {blocked_for}s", "sent": False},
+        )
+
+    # Always show success to prevent username enumeration
+    success_response = TEMPLATES.TemplateResponse(
+        "forgot_password.html",
+        {"request": request, "error": None, "sent": True},
+    )
+
+    recovery_email = os.getenv("RECOVERY_EMAIL", "").strip()
+    expected_user = os.getenv("DASHBOARD_USERNAME", "")
+
+    if not recovery_email or not hmac.compare_digest(username.strip(), expected_user):
+        _register_failed_login(client_ip)
+        LOGGER.info("Forgot-password request — no action (user mismatch or no recovery email)")
+        return success_response
+
+    try:
+        token = _create_reset_token(username.strip())
+        base_url = str(request.base_url)
+        _send_reset_email(recovery_email, token, base_url)
+        LOGGER.info("Password reset email sent for user '%s'", username.strip())
+    except Exception as exc:
+        LOGGER.error("Failed to send password reset email: %s", exc)
+
+    return success_response
+
+
+@APP.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(request: Request) -> HTMLResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
+    token = request.query_params.get("token", "")
+    error = _consume_flash(request)
+    response = TEMPLATES.TemplateResponse(
+        "reset_password.html",
+        {"request": request, "token": token, "error": error, "success": False},
+    )
+    response.delete_cookie(FLASH_COOKIE, path="/reset-password")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@APP.post("/reset-password")
+def reset_password(
+    request: Request,
+    token: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+) -> HTMLResponse:
+    if _is_setup_mode():
+        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
+
+    if len(new_password) < 10:
+        response = RedirectResponse(url=f"/reset-password?token={quote(token)}", status_code=status.HTTP_302_FOUND)
+        response.set_cookie(key=FLASH_COOKIE, value=get_serializer().dumps({"msg": "Password must be at least 10 characters", "t": int(time.time())}), httponly=True, samesite="strict", max_age=60, path="/reset-password")
+        return response
+
+    if new_password != confirm_password:
+        response = RedirectResponse(url=f"/reset-password?token={quote(token)}", status_code=status.HTTP_302_FOUND)
+        response.set_cookie(key=FLASH_COOKIE, value=get_serializer().dumps({"msg": "Passwords do not match", "t": int(time.time())}), httponly=True, samesite="strict", max_age=60, path="/reset-password")
+        return response
+
+    username = _consume_reset_token(token)
+    if not username:
+        return TEMPLATES.TemplateResponse(
+            "reset_password.html",
+            {"request": request, "token": "", "error": "Reset link is invalid or has expired. Please request a new one.", "success": False},
+        )
+
+    new_hash = build_password_hash(new_password)
+    env_updates = {"DASHBOARD_PASSWORD_HASH": new_hash, "DASHBOARD_PASSWORD": ""}
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        LOGGER.error("Failed to persist password reset: %s", exc)
+        return TEMPLATES.TemplateResponse(
+            "reset_password.html",
+            {"request": request, "token": "", "error": "Failed to save new password.", "success": False},
+        )
+
+    _apply_runtime_env(env_updates)
+
+    global SESSION_VERSION
+    with SESSION_VERSION_LOCK:
+        SESSION_VERSION += 1
+    LOGGER.info("Password reset completed for user '%s' — all sessions invalidated", username)
+
+    return TEMPLATES.TemplateResponse(
+        "reset_password.html",
+        {"request": request, "token": "", "error": None, "success": True},
+    )
 
 
 @APP.get("/", response_class=HTMLResponse)
@@ -1167,7 +1484,6 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     smtp_username = _clean_env_value(payload.get("smtp_username", ""))
     smtp_password = str(payload.get("smtp_password", "") or "")
     email_from = _clean_env_value(payload.get("email_from", ""))
-    email_to = _clean_env_value(payload.get("email_to", ""))
     weekly_report_time = _clean_env_value(payload.get("weekly_report_time", "Monday 08:00"))
     test_times = _normalize_test_times(payload.get("test_times", ["08:00", "16:00", "22:00"]))
     selected_server_id = _clean_env_value(payload.get("server_id", ""))
@@ -1183,8 +1499,8 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     if smtp_port < 1 or smtp_port > 65535:
         raise HTTPException(status_code=400, detail="SMTP port must be in range 1-65535")
 
-    if not smtp_server or not smtp_username or not email_from or not email_to:
-        raise HTTPException(status_code=400, detail="SMTP server, username, from, and to are required")
+    if not smtp_server or not smtp_username or not email_from:
+        raise HTTPException(status_code=400, detail="SMTP server, username, and from address are required")
 
     if not _validate_weekly_schedule(weekly_report_time):
         raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
@@ -1203,7 +1519,6 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     email_cfg["smtp_server"] = smtp_server
     email_cfg["smtp_port"] = smtp_port
     email_cfg["from"] = email_from
-    email_cfg["to"] = email_to
     email_cfg["send_realtime_alerts"] = bool(payload.get("send_realtime_alerts", True))
 
     scheduling_cfg["test_times"] = test_times
@@ -1245,7 +1560,6 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         "SMTP_PORT": str(smtp_port),
         "SMTP_USERNAME": smtp_username,
         "EMAIL_FROM": email_from,
-        "EMAIL_TO": email_to,
     }
     if smtp_password.strip():
         env_updates["SMTP_PASSWORD"] = smtp_password
@@ -1347,6 +1661,74 @@ async def update_dashboard_password(request: Request) -> JSONResponse:
     LOGGER.info("Session version bumped — all existing sessions invalidated after password change")
 
     return JSONResponse({"message": "Dashboard password updated. You will be redirected to login."})
+
+
+@APP.post("/api/settings/username")
+async def update_dashboard_username(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    current_password = str(payload.get("current_password", "") or "")
+    new_username = _clean_env_value(payload.get("new_username", ""))
+
+    if not current_password:
+        raise HTTPException(status_code=400, detail="Current password is required to change username")
+
+    if not new_username or len(new_username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+
+    if not re.match(r'^[a-zA-Z0-9_-]+$', new_username):
+        raise HTTPException(status_code=400, detail="Username may only contain letters, digits, hyphens, and underscores")
+
+    if not verify_login_credentials(str(session.get("username", "")), current_password):
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+
+    env_updates = {"DASHBOARD_USERNAME": new_username}
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update .env: {exc}") from exc
+
+    _apply_runtime_env(env_updates)
+
+    global SESSION_VERSION
+    with SESSION_VERSION_LOCK:
+        SESSION_VERSION += 1
+    LOGGER.info("Username changed to '%s' — all sessions invalidated", new_username)
+
+    return JSONResponse({"message": "Username updated. You will be redirected to login."})
+
+
+@APP.post("/api/settings/user-email")
+async def update_user_email(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    email = _clean_env_value(payload.get("email", ""))
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Email address is required")
+
+    env_updates = {
+        "EMAIL_TO": email,
+        "RECOVERY_EMAIL": email,
+    }
+
+    config = load_config()
+    config.setdefault("email", {})["to"] = email
+    save_config(config)
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update .env: {exc}") from exc
+
+    _apply_runtime_env(env_updates)
+
+    return JSONResponse({"message": "Email address saved. Used for notifications and password recovery."})
 
 
 def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:

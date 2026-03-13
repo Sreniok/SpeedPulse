@@ -11,7 +11,19 @@
   </head>
   <body class="dash-body" data-theme="dark">
     <div class="app-shell">
-      <aside class="sidebar">
+      <button
+        id="mobile-nav-toggle"
+        class="mobile-nav-toggle"
+        type="button"
+        aria-label="Toggle navigation"
+        aria-expanded="false"
+      >
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+      <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+      <aside id="sidebar" class="sidebar">
         <div class="brand-lockup">
           <p class="eyebrow">LAN only</p>
           <div class="brand">Speed Monitor</div>
@@ -21,7 +33,15 @@
           <p class="eyebrow">Account</p>
           <strong>{{ account_name }}</strong>
           <p>{{ account_provider or "Provider not set" }}</p>
+          {% if account_number and account_number != 'N/A' and
+          account_number|length > 4 %}
+          <p>
+            Account No: {{ '•' * (account_number|length - 4) }}{{
+            account_number[-4:] }}
+          </p>
+          {% elif account_number %}
           <p>Account No: {{ account_number }}</p>
+          {% endif %}
         </section>
 
         <nav class="nav-block">
