@@ -434,6 +434,13 @@ def main():
     # Send email
     success = send_email(config, subject, body, str(log_file))
 
+    if success:
+        try:
+            from state_store import log_notification
+            log_notification("email", "weekly_report", f"Week {week_num} report sent")
+        except Exception:
+            pass
+
     sys.exit(0 if success else 1)
 
 

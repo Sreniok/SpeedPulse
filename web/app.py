@@ -364,7 +364,7 @@ def _atomic_write_text(path: Path, content: str) -> None:
         # Some read-only-container setups allow writing the bind-mounted file
         # itself but not creating sibling temp files. Fall back to a locked
         # in-place rewrite in that case.
-        with path.open("a+", encoding="utf-8") as handle:
+        with path.open("r+", encoding="utf-8") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             handle.seek(0)
             handle.write(content)
@@ -1279,6 +1279,15 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
 
     recent_entries = _filter_entries_for_mode(entries, now, days, mode)
 
+    # Previous period for comparison
+    if mode == "today":
+        yesterday = now - timedelta(days=1)
+        prev_entries = [entry for entry in entries if entry["timestamp"].date() == yesterday.date()]
+    else:
+        prev_cutoff_start = now - timedelta(days=days * 2)
+        prev_cutoff_end = now - timedelta(days=days)
+        prev_entries = [entry for entry in entries if prev_cutoff_start <= entry["timestamp"] < prev_cutoff_end]
+
     def avg(values: list[float]) -> float:
         return round(sum(values) / len(values), 2) if values else 0.0
 
@@ -1349,6 +1358,12 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
             "jitter_ms": avg(jitter_values),
             "packet_loss_percent": avg(packet_loss_values),
         },
+        "previous_averages": {
+            "download_mbps": avg([e["download_mbps"] for e in prev_entries]),
+            "upload_mbps": avg([e["upload_mbps"] for e in prev_entries]),
+            "ping_ms": avg([e["ping_ms"] for e in prev_entries]),
+            "total_tests": len(prev_entries),
+        },
         "max": {
             "download_mbps": round(max(download_values), 2) if download_values else 0.0,
             "upload_mbps": round(max(upload_values), 2) if upload_values else 0.0,
@@ -1394,6 +1409,14 @@ async def add_security_headers(request: Request, call_next):
         "form-action 'self'"
     )
     return response
+
+
+@APP.get("/api/notifications/log")
+async def api_notification_log(request: Request):
+    require_session(request)
+    from state_store import get_notification_log
+    entries = get_notification_log(limit=50)
+    return entries
 
 
 @APP.get("/health")

@@ -34,6 +34,7 @@ last_contract_reminder.txt
 chart_base64.txt
 
 # Project-generated data
+IMPROVEMENTS.md
 Log/*.txt
 Images/*.png
 !Images/.gitkeep

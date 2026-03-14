@@ -19,6 +19,8 @@
   --chart-download-fill: rgba(24, 182, 255, 0.12);
   --chart-upload: #ffb224;
   --chart-upload-fill: rgba(255, 178, 36, 0.1);
+  --chart-dl-avg: #a78bfa;
+  --chart-ul-avg: #34d399;
   --chart-ping: #ff7b8c;
   --chart-ping-fill: rgba(255, 123, 140, 0.1);
   --chart-loss: #ffd46b;
@@ -48,6 +50,8 @@
   --chart-download-fill: rgba(2, 132, 199, 0.12);
   --chart-upload: #d97706;
   --chart-upload-fill: rgba(217, 119, 6, 0.12);
+  --chart-dl-avg: #7c3aed;
+  --chart-ul-avg: #059669;
   --chart-ping: #e11d48;
   --chart-ping-fill: rgba(225, 29, 72, 0.1);
   --chart-loss: #ca8a04;
@@ -63,12 +67,14 @@
 
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
+  overflow: hidden;
+  height: 100%;
 }
 
 body {
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
+  height: 100%;
   color: var(--text);
   background:
     radial-gradient(
@@ -101,16 +107,17 @@ select {
   font: inherit;
 }
 
-.dash-body,
 .login-body {
   min-height: 100vh;
+  overflow: auto;
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 280px 1fr;
   width: 100%;
+  overflow: hidden;
 }
 
 .app-shell > * {
@@ -127,6 +134,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
 }
 
 .brand-lockup,
@@ -204,8 +212,7 @@ select {
   );
 }
 
-.sidebar-card strong,
-.sidebar-footer p {
+.sidebar-card strong {
   display: block;
   margin: 0;
 }
@@ -281,11 +288,11 @@ select {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.sidebar-footer {
-  margin-top: auto;
-  display: grid;
-  gap: 0.4rem;
+.brand-user {
+  margin: 0.3rem 0 0;
   color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 .main-shell {
@@ -293,6 +300,8 @@ select {
   padding: 1.25rem;
   display: grid;
   gap: 1rem;
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .main-shell > * {
@@ -461,6 +470,28 @@ button,
   background: var(--surface-strong);
   color: var(--text);
   border-color: var(--border);
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  flex-shrink: 0;
+}
+.btn-icon:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 
 .btn-muted:hover,
@@ -898,6 +929,15 @@ button:disabled {
   font-weight: 700;
 }
 
+.sparkline {
+  display: block;
+  width: 100%;
+  max-width: 120px;
+  height: 28px;
+  margin: 0.15rem 0;
+  opacity: 0.7;
+}
+
 .metric-card-empty {
   display: grid;
   place-items: center;
@@ -1061,6 +1101,55 @@ button:disabled {
   border-color: rgba(24, 182, 255, 0.26);
   background: rgba(24, 182, 255, 0.1);
   color: #6fd6ff;
+}
+
+/* ── Notification log ──────────────────────────────── */
+.notification-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.notification-item {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+.notification-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+.notification-body {
+  flex: 1;
+  min-width: 0;
+}
+.notification-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.notification-channel {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.notification-summary {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.notification-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.7;
 }
 
 .tone-good {
@@ -1344,6 +1433,65 @@ button:disabled {
   height: 320px !important;
 }
 
+/* ── Heatmap ─────────────────────────────────────────── */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 48px repeat(24, 1fr);
+  gap: 2px;
+  overflow-x: auto;
+}
+.heatmap-corner {
+  min-height: 22px;
+}
+.heatmap-hour {
+  font-size: 0.65rem;
+  text-align: center;
+  color: var(--muted);
+  line-height: 22px;
+}
+.heatmap-day {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+  justify-content: flex-end;
+}
+.heatmap-cell {
+  aspect-ratio: 1;
+  min-width: 14px;
+  border-radius: 4px;
+  transition: transform 0.1s;
+  cursor: default;
+}
+.heatmap-cell:hover {
+  transform: scale(1.25);
+  z-index: 1;
+}
+.heatmap-empty {
+  background: var(--surface-soft);
+}
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.heatmap-legend-bar {
+  width: 100px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    hsl(0, 70%, 25%),
+    hsl(60, 70%, 40%),
+    hsl(120, 70%, 55%)
+  );
+}
+
 .results-panel {
   min-width: 0;
   padding-bottom: 0.85rem;
@@ -1589,6 +1737,8 @@ label {
     top: 0;
     left: 0;
     bottom: 0;
+    align-self: stretch;
+    height: auto;
     z-index: 100;
     width: min(320px, 88vw);
     max-width: 88vw;

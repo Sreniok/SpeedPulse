@@ -13,6 +13,7 @@ let runModalAutoCloseId = null;
 let runStatusPollId = null;
 let runStatusRequestInFlight = false;
 let lastHandledRunCompletion = "";
+let autoRefreshId = null;
 let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
@@ -683,7 +684,7 @@ function scanSummary(todayCount, scheduledCount) {
   };
 }
 
-function metricCard(title, valueText, noteText, toneClass = "tone-muted") {
+function metricCard(title, valueText, noteText, toneClass = "tone-muted", sparkData = null, sparkColor = null) {
   const card = document.createElement("article");
   card.className = "metric-card";
 
@@ -700,8 +701,45 @@ function metricCard(title, valueText, noteText, toneClass = "tone-muted") {
 
   card.appendChild(titleEl);
   card.appendChild(valueEl);
+
+  if (sparkData && sparkData.length > 1) {
+    const canvas = document.createElement("canvas");
+    canvas.className = "sparkline";
+    canvas.width = 120;
+    canvas.height = 28;
+    card.appendChild(canvas);
+    requestAnimationFrame(() => drawSparkline(canvas, sparkData, sparkColor || "var(--accent)"));
+  }
+
   card.appendChild(noteEl);
   return card;
+}
+
+function drawSparkline(canvas, data, color) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || data.length < 2) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const step = w / (data.length - 1);
+
+  const resolvedColor = color.startsWith("var(")
+    ? cssVar(color.slice(4, -1))
+    : color;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.beginPath();
+  data.forEach((val, i) => {
+    const x = i * step;
+    const y = h - ((val - min) / range) * (h - 4) - 2;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = resolvedColor;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 }
 
 function reliabilityHighlightCard(
@@ -746,44 +784,57 @@ function renderHeroMetrics(data) {
     return;
   }
 
-  const downloadTrend = trendSummary(
-    latest.download_mbps,
-    previous?.download_mbps,
-    true,
-  );
-  const uploadTrend = trendSummary(
-    latest.upload_mbps,
-    previous?.upload_mbps,
-    true,
-  );
-  const pingTrend = trendSummary(latest.ping_ms, previous?.ping_ms, false);
+  const prevAvg = data.previous_averages || {};
+  const curAvg = data.averages || {};
+
+  const downloadTrend = prevAvg.total_tests > 0
+    ? trendSummary(curAvg.download_mbps, prevAvg.download_mbps, true)
+    : trendSummary(latest.download_mbps, previous?.download_mbps, true);
+  const uploadTrend = prevAvg.total_tests > 0
+    ? trendSummary(curAvg.upload_mbps, prevAvg.upload_mbps, true)
+    : trendSummary(latest.upload_mbps, previous?.upload_mbps, true);
+  const pingTrend = prevAvg.total_tests > 0
+    ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false)
+    : trendSummary(latest.ping_ms, previous?.ping_ms, false);
+  const periodLabel = prevAvg.total_tests > 0 ? " vs prev period" : "";
   const todayTrend = scanSummary(
     data.today_tests || 0,
     data.scheduled_tests_per_day || 0,
   );
 
+  const ts = data.timeseries || [];
+  const sparkDl = ts.map((p) => p.download_mbps).slice(-30);
+  const sparkUl = ts.map((p) => p.upload_mbps).slice(-30);
+  const sparkPing = ts.map((p) => p.ping_ms).slice(-30);
+
   root.appendChild(
     metricCard(
       "Latest download",
       `${safeFixed(latest.download_mbps)} Mbps`,
-      downloadTrend.label,
+      downloadTrend.label + periodLabel,
       downloadTrend.tone,
+      sparkDl,
+      "var(--chart-download)",
     ),
   );
   root.appendChild(
     metricCard(
       "Latest upload",
       `${safeFixed(latest.upload_mbps)} Mbps`,
-      uploadTrend.label,
+      uploadTrend.label + periodLabel,
       uploadTrend.tone,
+      sparkUl,
+      "var(--chart-upload)",
     ),
   );
   root.appendChild(
     metricCard(
       "Latest ping",
       `${safeFixed(latest.ping_ms)} ms`,
-      pingTrend.label,
+      pingTrend.label + periodLabel,
       pingTrend.tone,
+      sparkPing,
+      "var(--chart-ping)",
     ),
   );
   root.appendChild(
@@ -1019,7 +1070,9 @@ function renderReliabilityHighlights(data, root) {
   root.appendChild(
     reliabilityHighlightCard(
       "Longest incident",
-      longestIncident ? compactDuration(longestIncident.duration_minutes) : "0m",
+      longestIncident
+        ? compactDuration(longestIncident.duration_minutes)
+        : "0m",
       longestIncident
         ? longestIncident.headline || "Threshold breach"
         : "No incident duration recorded",
@@ -1107,8 +1160,7 @@ function renderIncidentHistory(data) {
 
     const summaryRow = document.createElement("p");
     summaryRow.className = "incident-copy";
-    summaryRow.textContent =
-      `${incident.summary || ""} | Duration ${safeFixed(Number(incident.duration_minutes || 0), 1)} min`;
+    summaryRow.textContent = `${incident.summary || ""} | Duration ${safeFixed(Number(incident.duration_minutes || 0), 1)} min`;
 
     const breaches = document.createElement("p");
     breaches.className = "incident-breaches";
@@ -1330,6 +1382,37 @@ function renderCharts(data) {
   if (latencyChart) latencyChart.destroy();
   if (thresholdChart) thresholdChart.destroy();
 
+  const thresholds = data.thresholds || {};
+  const dlThreshold = Number(thresholds.download_mbps || 0);
+  const ulThreshold = Number(thresholds.upload_mbps || 0);
+  const pingThreshold = Number(thresholds.ping_ms || 0);
+
+  const thresholdDatasets = [];
+  if (dlThreshold > 0) {
+    thresholdDatasets.push({
+      label: `Min download (${dlThreshold} Mbps)`,
+      data: labels.map(() => dlThreshold),
+      borderColor: "rgba(255,107,107,0.6)",
+      borderDash: [4, 4],
+      borderWidth: 1.5,
+      fill: false,
+      pointRadius: 0,
+      pointHitRadius: 0,
+    });
+  }
+  if (ulThreshold > 0) {
+    thresholdDatasets.push({
+      label: `Min upload (${ulThreshold} Mbps)`,
+      data: labels.map(() => ulThreshold),
+      borderColor: "rgba(255,170,80,0.5)",
+      borderDash: [4, 4],
+      borderWidth: 1.5,
+      fill: false,
+      pointRadius: 0,
+      pointHitRadius: 0,
+    });
+  }
+
   speedChart = new Chart(byId("speedChart"), {
     type: "line",
     data: {
@@ -1356,7 +1439,7 @@ function renderCharts(data) {
         {
           label: "Download (7-test avg)",
           data: downloadTrend,
-          borderColor: cssVar("--chart-download"),
+          borderColor: cssVar("--chart-dl-avg"),
           borderDash: [8, 5],
           fill: false,
           tension: 0.25,
@@ -1365,12 +1448,13 @@ function renderCharts(data) {
         {
           label: "Upload (7-test avg)",
           data: uploadTrend,
-          borderColor: cssVar("--chart-upload"),
+          borderColor: cssVar("--chart-ul-avg"),
           borderDash: [8, 5],
           fill: false,
           tension: 0.25,
           pointRadius: 0,
         },
+        ...thresholdDatasets,
       ],
     },
     options: chartOptions(),
@@ -1413,6 +1497,18 @@ function renderCharts(data) {
           borderRadius: 10,
           maxBarThickness: 22,
         },
+        ...(pingThreshold > 0 ? [{
+          label: `Max ping (${pingThreshold} ms)`,
+          data: labels.map(() => pingThreshold),
+          borderColor: "rgba(255,107,107,0.5)",
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          type: "line",
+          yAxisID: "y",
+        }] : []),
       ],
     },
     options: latencyChartOptions(),
@@ -1457,6 +1553,87 @@ function renderCharts(data) {
   });
 
   renderThresholdSummary(data);
+  renderHeatmap(data);
+}
+
+function renderHeatmap(data) {
+  const grid = byId("heatmap-grid");
+  if (!grid) return;
+  grid.textContent = "";
+
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const buckets = {};
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      buckets[`${d}-${h}`] = [];
+    }
+  }
+
+  for (const item of data.timeseries || []) {
+    const ts = new Date(item.timestamp);
+    const day = (ts.getDay() + 6) % 7;
+    const hour = ts.getHours();
+    if (typeof item.download_mbps === "number") {
+      buckets[`${day}-${hour}`].push(item.download_mbps);
+    }
+  }
+
+  let allAvg = [];
+  const avgGrid = {};
+  for (const [key, vals] of Object.entries(buckets)) {
+    if (vals.length > 0) {
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      avgGrid[key] = avg;
+      allAvg.push(avg);
+    }
+  }
+
+  if (allAvg.length === 0) {
+    grid.innerHTML = '<p class="empty-state" style="grid-column:1/-1">Not enough data for the heatmap in this range.</p>';
+    return;
+  }
+
+  const minVal = Math.min(...allAvg);
+  const maxVal = Math.max(...allAvg);
+  const range = maxVal - minVal || 1;
+
+  // corner blank
+  const corner = document.createElement("div");
+  corner.className = "heatmap-corner";
+  grid.appendChild(corner);
+
+  // hour headers
+  for (let h = 0; h < 24; h++) {
+    const hdr = document.createElement("div");
+    hdr.className = "heatmap-hour";
+    hdr.textContent = String(h).padStart(2, "0");
+    grid.appendChild(hdr);
+  }
+
+  // rows
+  for (let d = 0; d < 7; d++) {
+    const label = document.createElement("div");
+    label.className = "heatmap-day";
+    label.textContent = days[d];
+    grid.appendChild(label);
+
+    for (let h = 0; h < 24; h++) {
+      const cell = document.createElement("div");
+      cell.className = "heatmap-cell";
+      const key = `${d}-${h}`;
+      if (avgGrid[key] !== undefined) {
+        const pct = (avgGrid[key] - minVal) / range;
+        const hue = pct * 120;
+        const light = 25 + pct * 30;
+        cell.style.background = `hsl(${hue}, 70%, ${light}%)`;
+        cell.title = `${days[d]} ${String(h).padStart(2, "0")}:00 — ${avgGrid[key].toFixed(1)} Mbps`;
+      } else {
+        cell.classList.add("heatmap-empty");
+        cell.title = `${days[d]} ${String(h).padStart(2, "0")}:00 — No data`;
+      }
+      grid.appendChild(cell);
+    }
+  }
 }
 
 function compareValues(left, right, key) {
@@ -1689,6 +1866,41 @@ async function loadMetrics() {
   }
 }
 
+function toggleAutoRefresh() {
+  const btn = byId("auto-refresh-toggle");
+  if (autoRefreshId) {
+    clearInterval(autoRefreshId);
+    autoRefreshId = null;
+    if (btn) {
+      btn.textContent = "Auto-refresh: Off";
+      btn.setAttribute("aria-pressed", "false");
+    }
+  } else {
+    autoRefreshId = setInterval(loadMetrics, 60000);
+    if (btn) {
+      btn.textContent = "Auto-refresh: On";
+      btn.setAttribute("aria-pressed", "true");
+    }
+  }
+}
+
+function saveChartAsPng(chartId) {
+  const chartMap = {
+    speedChart,
+    latencyChart,
+    thresholdChart,
+    slaBreakdownChart,
+  };
+  const chart = chartMap[chartId];
+  if (!chart) return;
+  const link = document.createElement("a");
+  link.href = chart.toBase64Image();
+  link.download = `${chartId}-${new Date().toISOString().slice(0, 10)}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function escapeCsv(value) {
   const text = String(value ?? "");
   if (text.includes(",") || text.includes('"') || text.includes("\n")) {
@@ -1820,6 +2032,7 @@ async function runSpeedtestNow(serverId = "") {
 
 function bindEvents() {
   byId("theme-toggle").addEventListener("click", toggleTheme);
+  byId("auto-refresh-toggle").addEventListener("click", toggleAutoRefresh);
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
   const defaultServerSelect = byId("server-select");
@@ -1865,6 +2078,31 @@ function bindEvents() {
     renderTable();
   });
   byId("export-results").addEventListener("click", exportResults);
+  document.querySelectorAll(".chart-save").forEach((btn) => {
+    btn.addEventListener("click", () => saveChartAsPng(btn.dataset.chart));
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const tag = (event.target?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || event.target?.isContentEditable) return;
+
+    if (event.key === "Escape") {
+      if (modalIsOpen("run-modal")) { closeRunModal(); return; }
+      if (modalIsOpen("server-modal")) { closeServerModal(); return; }
+    }
+    if (event.key === "r" || event.key === "R") {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        if (serverOptions.length === 0 && !serverSettingsLoading) void loadServerSettings();
+        openServerModal();
+      }
+    }
+    const rangeKeys = { "1": "today", "2": "7", "3": "30", "4": "90", "5": "365" };
+    if (rangeKeys[event.key] && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      byId("range").value = rangeKeys[event.key];
+      void loadMetrics();
+    }
+  });
 }
 
 function bindMobileNav() {
@@ -1908,6 +2146,80 @@ function bindMobileNav() {
   });
 }
 
+function notificationChannelIcon(channel) {
+  if (channel === "email") return "📧";
+  if (channel === "webhook") return "🔗";
+  if (channel === "ntfy") return "🔔";
+  return "📨";
+}
+
+function notificationEventLabel(eventType) {
+  if (eventType === "alert") return "Speed Alert";
+  if (eventType === "weekly_report") return "Weekly Report";
+  if (eventType === "health_check") return "Health Check";
+  return eventType;
+}
+
+async function loadNotificationLog() {
+  const root = byId("notification-log");
+  if (!root) return;
+
+  try {
+    const response = await fetch("/api/notifications/log");
+    if (!response.ok) {
+      root.innerHTML = '<p class="empty-state">Unable to load notification history.</p>';
+      return;
+    }
+    const entries = await response.json();
+    root.textContent = "";
+
+    if (!entries.length) {
+      root.innerHTML = '<p class="empty-state">No notifications have been sent yet.</p>';
+      return;
+    }
+
+    for (const entry of entries) {
+      const item = document.createElement("div");
+      item.className = "notification-item";
+
+      const icon = document.createElement("span");
+      icon.className = "notification-icon";
+      icon.textContent = notificationChannelIcon(entry.channel);
+
+      const body = document.createElement("div");
+      body.className = "notification-body";
+
+      const top = document.createElement("div");
+      top.className = "notification-top";
+      const label = document.createElement("strong");
+      label.textContent = notificationEventLabel(entry.event_type);
+      const badge = document.createElement("span");
+      badge.className = "notification-channel";
+      badge.textContent = entry.channel;
+      top.appendChild(label);
+      top.appendChild(badge);
+
+      const summary = document.createElement("p");
+      summary.className = "notification-summary";
+      summary.textContent = entry.summary || "";
+
+      const time = document.createElement("time");
+      time.className = "notification-time";
+      time.textContent = formatTimestamp(new Date(entry.timestamp * 1000).toISOString());
+
+      body.appendChild(top);
+      if (entry.summary) body.appendChild(summary);
+      body.appendChild(time);
+
+      item.appendChild(icon);
+      item.appendChild(body);
+      root.appendChild(item);
+    }
+  } catch {
+    root.innerHTML = '<p class="empty-state">Unable to load notification history.</p>';
+  }
+}
+
 applyTheme(preferredTheme(), false);
 bindSorting();
 bindEvents();
@@ -1915,3 +2227,4 @@ void loadServerSettings();
 void syncRunStatus(false);
 loadMetrics();
 renderSidebarContract();
+loadNotificationLog();

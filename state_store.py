@@ -80,6 +80,17 @@ def initialize_state_store(default_manual_state: dict) -> None:
             """,
             (payload_json,),
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notification_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              timestamp REAL NOT NULL,
+              channel TEXT NOT NULL,
+              event_type TEXT NOT NULL,
+              summary TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
 
 
 def _metadata_int(key: str, default: int) -> int:
@@ -263,3 +274,33 @@ def save_manual_runtime_state(payload: dict, last_manual_speedtest_at: float) ->
             """,
             (json.dumps(payload), float(last_manual_speedtest_at)),
         )
+
+
+def log_notification(channel: str, event_type: str, summary: str) -> None:
+    import time
+    with _DB_LOCK, _connect() as connection:
+        connection.execute(
+            "INSERT INTO notification_log(timestamp, channel, event_type, summary) VALUES (?, ?, ?, ?)",
+            (time.time(), channel, event_type, summary),
+        )
+        # Keep only the last 200 entries
+        connection.execute(
+            "DELETE FROM notification_log WHERE id NOT IN (SELECT id FROM notification_log ORDER BY id DESC LIMIT 200)"
+        )
+
+
+def get_notification_log(limit: int = 50) -> list[dict]:
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT timestamp, channel, event_type, summary FROM notification_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "timestamp": row["timestamp"],
+            "channel": row["channel"],
+            "event_type": row["event_type"],
+            "summary": row["summary"],
+        }
+        for row in rows
+    ]

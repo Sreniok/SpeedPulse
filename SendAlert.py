@@ -334,6 +334,15 @@ def main():
         if ntfy_success:
             sent_channels.append("ntfy")
 
+        # Log to notification history
+        try:
+            from state_store import log_notification
+            summary = f"Violations: {', '.join(violations)} | DL {download} UL {upload} Ping {ping}"
+            for ch in sent_channels:
+                log_notification(ch, "alert", summary)
+        except Exception:
+            pass
+
         log.info("Alert notification sent via: %s", ", ".join(sent_channels))
         sys.exit(0)
     else:

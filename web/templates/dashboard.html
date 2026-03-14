@@ -27,6 +27,7 @@
         <div class="brand-lockup">
           <p class="eyebrow">LAN only</p>
           <div class="brand">Speed Monitor</div>
+          <p class="brand-user">{{ login_email }}</p>
         </div>
 
         <section class="sidebar-card sidebar-card-account">
@@ -82,10 +83,6 @@
             class="sidebar-contract-remaining"
           ></p>
         </section>
-
-        <div class="sidebar-footer">
-          <span class="user-pill">{{ login_email }}</span>
-        </div>
       </aside>
 
       <main class="main-shell">
@@ -116,6 +113,15 @@
               aria-pressed="false"
             >
               Light mode
+            </button>
+            <button
+              id="auto-refresh-toggle"
+              class="btn-muted"
+              type="button"
+              aria-pressed="false"
+              title="Auto-refresh every 60 seconds"
+            >
+              Auto-refresh: Off
             </button>
             <button id="run-test" class="btn-primary" type="button">
               Manual speed test
@@ -248,9 +254,32 @@
 
         <section class="charts-grid" id="charts">
           <section class="panel panel-large">
-            <div class="panel-head">
-              <p class="eyebrow">Speed</p>
-              <h2>Download / Upload</h2>
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Speed</p>
+                <h2>Download / Upload</h2>
+              </div>
+              <button
+                class="btn-icon chart-save"
+                type="button"
+                data-chart="speedChart"
+                aria-label="Save chart as PNG"
+                title="Save as PNG"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M8 2v8m0 0L5 7m3 3 3-3" />
+                  <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" />
+                </svg>
+              </button>
             </div>
             <canvas
               id="speedChart"
@@ -260,9 +289,32 @@
           </section>
 
           <section class="panel panel-large">
-            <div class="panel-head">
-              <p class="eyebrow">Latency</p>
-              <h2>Ping / Jitter / Packet loss</h2>
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Latency</p>
+                <h2>Ping / Jitter / Packet loss</h2>
+              </div>
+              <button
+                class="btn-icon chart-save"
+                type="button"
+                data-chart="latencyChart"
+                aria-label="Save chart as PNG"
+                title="Save as PNG"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M8 2v8m0 0L5 7m3 3 3-3" />
+                  <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" />
+                </svg>
+              </button>
             </div>
             <canvas
               id="latencyChart"
@@ -272,12 +324,35 @@
           </section>
 
           <section class="panel panel-large panel-wide">
-            <div class="panel-head">
-              <p class="eyebrow">Reliability</p>
-              <h2>Threshold breaches</h2>
-              <p id="breach-summary" class="panel-subtext">
-                Comparing results against configured thresholds.
-              </p>
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Reliability</p>
+                <h2>Threshold breaches</h2>
+                <p id="breach-summary" class="panel-subtext">
+                  Comparing results against configured thresholds.
+                </p>
+              </div>
+              <button
+                class="btn-icon chart-save"
+                type="button"
+                data-chart="thresholdChart"
+                aria-label="Save chart as PNG"
+                title="Save as PNG"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M8 2v8m0 0L5 7m3 3 3-3" />
+                  <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" />
+                </svg>
+              </button>
             </div>
             <canvas
               id="thresholdChart"
@@ -285,6 +360,23 @@
               role="img"
             ></canvas>
           </section>
+        </section>
+
+        <section class="panel panel-large panel-wide" id="heatmap-section">
+          <div class="panel-head">
+            <p class="eyebrow">Patterns</p>
+            <h2>Speed by time of day</h2>
+            <p class="panel-subtext">
+              Average download speed (Mbps) by hour and day of week. Darker =
+              faster.
+            </p>
+          </div>
+          <div id="heatmap-grid" class="heatmap-grid"></div>
+          <div class="heatmap-legend">
+            <span class="heatmap-legend-low">Slow</span>
+            <span class="heatmap-legend-bar"></span>
+            <span class="heatmap-legend-high">Fast</span>
+          </div>
         </section>
 
         <section class="insights-grid" id="reliability">
@@ -329,6 +421,17 @@
             </div>
             <div id="incident-list" class="incident-list"></div>
           </section>
+        </section>
+
+        <section class="panel panel-large panel-wide" id="notification-history">
+          <div class="panel-head">
+            <p class="eyebrow">Activity</p>
+            <h2>Notification history</h2>
+            <p class="panel-subtext">
+              Recent alerts, weekly reports, and health checks that were sent.
+            </p>
+          </div>
+          <div id="notification-log" class="notification-log"></div>
         </section>
 
         <section class="panel results-panel" id="latest-results">

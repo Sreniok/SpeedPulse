@@ -26,6 +26,7 @@
         <div class="brand-lockup">
           <p class="eyebrow">LAN only</p>
           <div class="brand">Speed Monitor</div>
+          <p class="brand-user">{{ login_email }}</p>
         </div>
 
         <section class="sidebar-card sidebar-card-account">
@@ -62,12 +63,6 @@
           <a class="nav-link-section" href="#section-email">Email (SMTP)</a>
           <a class="nav-link-section" href="#section-push">Push alerts</a>
         </nav>
-
-        <div class="sidebar-footer">
-          <span class="user-pill" id="settings-sidebar-login-email"
-            >{{ login_email }}</span
-          >
-        </div>
       </aside>
 
       <main class="main-shell settings-shell">
@@ -117,8 +112,8 @@
                   <div>
                     <h3>Login email</h3>
                     <p class="panel-subtext">
-                      Used to sign in and receive password reset links.
-                      Changing it will log you out.
+                      Used to sign in and receive password reset links. Changing
+                      it will log you out.
                     </p>
                   </div>
                 </div>

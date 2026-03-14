@@ -463,6 +463,12 @@ def send_health_alert(config, health_data):
             server.send_message(msg)
 
         print("✅ Health check alert sent successfully")
+        try:
+            from state_store import log_notification
+            issues = sum(1 for k in ("disk","logs","speedtest","errors","config","credentials") if not health_data.get(k, {}).get("healthy", True))
+            log_notification("email", "health_check", f"{issues} issue(s) found" if issues else "All checks passed")
+        except Exception:
+            pass
         return True
 
     except Exception as e:
