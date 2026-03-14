@@ -417,21 +417,40 @@ def _update_env_file(updates: dict[str, str]) -> None:
         if env_path.exists():
             lines = env_path.read_text(encoding="utf-8").splitlines()
 
-        positions: dict[str, int] = {}
+        # Track the FIRST position for each key; mark later duplicates for removal.
+        first_position: dict[str, int] = {}
+        duplicate_indices: set[int] = set()
         for index, raw_line in enumerate(lines):
             stripped = raw_line.strip()
             if not stripped or stripped.startswith("#") or "=" not in raw_line:
                 continue
             key = raw_line.split("=", 1)[0].strip()
-            if key:
-                positions[key] = index
+            if not key:
+                continue
+            if key in first_position:
+                duplicate_indices.add(index)
+            else:
+                first_position[key] = index
+
+        # Remove duplicate lines (keep only the first occurrence of each key).
+        if duplicate_indices:
+            lines = [line for idx, line in enumerate(lines) if idx not in duplicate_indices]
+            # Rebuild positions after removing duplicates.
+            first_position.clear()
+            for index, raw_line in enumerate(lines):
+                stripped = raw_line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in raw_line:
+                    continue
+                key = raw_line.split("=", 1)[0].strip()
+                if key and key not in first_position:
+                    first_position[key] = index
 
         for key, value in updates.items():
             sanitized = _clean_env_value(value)
             escaped = sanitized.replace("\\", "\\\\").replace('"', '\\"')
             line = f'{key}="{escaped}"'
-            if key in positions:
-                lines[positions[key]] = line
+            if key in first_position:
+                lines[first_position[key]] = line
             else:
                 lines.append(line)
 
