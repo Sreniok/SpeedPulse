@@ -60,6 +60,27 @@ SESSION_COOKIE = "speedtest_session"
 FLASH_COOKIE = "speedtest_flash"
 AUTH_SALT = os.getenv("AUTH_SALT", "")
 
+
+def _is_secure_request(request: Request) -> bool:
+    """Resolve the Secure flag for session cookies.
+
+    * ``true``  → always Secure (HTTPS deployments).
+    * ``false`` → never Secure (plain HTTP / dev).
+    * ``auto`` or unset → detect from the request scheme /
+      ``X-Forwarded-Proto`` header.
+    """
+    setting = os.getenv("SESSION_COOKIE_SECURE", "auto").strip().lower()
+    if setting == "true":
+        return True
+    if setting == "false":
+        return False
+    # auto-detect
+    if request.url.scheme == "https":
+        return True
+    if (request.headers.get("x-forwarded-proto") or "").lower() == "https":
+        return True
+    return False
+
 SESSION_VERSION = 1
 SESSION_VERSION_LOCK = threading.Lock()
 
@@ -1526,7 +1547,7 @@ def login(
         value=token,
         httponly=True,
         samesite="strict",
-        secure=os.getenv("SESSION_COOKIE_SECURE", "true").lower() != "false",
+        secure=_is_secure_request(request),
         max_age=ttl_seconds,
     )
     return response
@@ -1619,7 +1640,7 @@ def register(
         value=token,
         httponly=True,
         samesite="strict",
-        secure=os.getenv("SESSION_COOKIE_SECURE", "true").lower() != "false",
+        secure=_is_secure_request(request),
         max_age=ttl_seconds,
     )
     return response
