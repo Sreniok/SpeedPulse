@@ -59,4 +59,10 @@ for f in cron.log errors.log last_alert.txt chart_base64.txt; do
   [ -f "$DIR/$f" ] || touch "$DIR/$f"
 done
 
+# ── Ensure appuser (UID 1000) owns runtime files ────────
+chown -R 1000:1000 "$DIR/Log" "$DIR/Images" "$DIR/Archive" 2>/dev/null || true
+for f in config.json cron.log errors.log last_alert.txt chart_base64.txt .env; do
+  [ -f "$DIR/$f" ] && chown 1000:1000 "$DIR/$f" 2>/dev/null || true
+done
+
 echo "Setup complete"

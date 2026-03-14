@@ -93,6 +93,9 @@ services:
           echo ""
         fi
 
+        # Ensure appuser (UID 1000) owns all data files
+        chown -R 1000:1000 /data
+
   dashboard:
     image: ghcr.io/sreniok/speed-monitor:latest
     container_name: speedtest-dashboard
