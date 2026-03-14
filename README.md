@@ -44,8 +44,8 @@ This project can run fully in Docker with:
 1. Clone and start:
 
    ```bash
-   git clone https://github.com/Sreniok/broadband-speed-monitor.git
-   cd broadband-speed-monitor
+   git clone https://github.com/Sreniok/speed-monitor.git
+   cd speed-monitor
    docker compose up -d --build
    ```
 

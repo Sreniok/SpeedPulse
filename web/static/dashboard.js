@@ -684,7 +684,14 @@ function scanSummary(todayCount, scheduledCount) {
   };
 }
 
-function metricCard(title, valueText, noteText, toneClass = "tone-muted", sparkData = null, sparkColor = null) {
+function metricCard(
+  title,
+  valueText,
+  noteText,
+  toneClass = "tone-muted",
+  sparkData = null,
+  sparkColor = null,
+) {
   const card = document.createElement("article");
   card.className = "metric-card";
 
@@ -708,7 +715,9 @@ function metricCard(title, valueText, noteText, toneClass = "tone-muted", sparkD
     canvas.width = 120;
     canvas.height = 28;
     card.appendChild(canvas);
-    requestAnimationFrame(() => drawSparkline(canvas, sparkData, sparkColor || "var(--accent)"));
+    requestAnimationFrame(() =>
+      drawSparkline(canvas, sparkData, sparkColor || "var(--accent)"),
+    );
   }
 
   card.appendChild(noteEl);
@@ -787,15 +796,18 @@ function renderHeroMetrics(data) {
   const prevAvg = data.previous_averages || {};
   const curAvg = data.averages || {};
 
-  const downloadTrend = prevAvg.total_tests > 0
-    ? trendSummary(curAvg.download_mbps, prevAvg.download_mbps, true)
-    : trendSummary(latest.download_mbps, previous?.download_mbps, true);
-  const uploadTrend = prevAvg.total_tests > 0
-    ? trendSummary(curAvg.upload_mbps, prevAvg.upload_mbps, true)
-    : trendSummary(latest.upload_mbps, previous?.upload_mbps, true);
-  const pingTrend = prevAvg.total_tests > 0
-    ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false)
-    : trendSummary(latest.ping_ms, previous?.ping_ms, false);
+  const downloadTrend =
+    prevAvg.total_tests > 0
+      ? trendSummary(curAvg.download_mbps, prevAvg.download_mbps, true)
+      : trendSummary(latest.download_mbps, previous?.download_mbps, true);
+  const uploadTrend =
+    prevAvg.total_tests > 0
+      ? trendSummary(curAvg.upload_mbps, prevAvg.upload_mbps, true)
+      : trendSummary(latest.upload_mbps, previous?.upload_mbps, true);
+  const pingTrend =
+    prevAvg.total_tests > 0
+      ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false)
+      : trendSummary(latest.ping_ms, previous?.ping_ms, false);
   const periodLabel = prevAvg.total_tests > 0 ? " vs prev period" : "";
   const todayTrend = scanSummary(
     data.today_tests || 0,
@@ -1497,18 +1509,22 @@ function renderCharts(data) {
           borderRadius: 10,
           maxBarThickness: 22,
         },
-        ...(pingThreshold > 0 ? [{
-          label: `Max ping (${pingThreshold} ms)`,
-          data: labels.map(() => pingThreshold),
-          borderColor: "rgba(255,107,107,0.5)",
-          borderDash: [4, 4],
-          borderWidth: 1.5,
-          fill: false,
-          pointRadius: 0,
-          pointHitRadius: 0,
-          type: "line",
-          yAxisID: "y",
-        }] : []),
+        ...(pingThreshold > 0
+          ? [
+              {
+                label: `Max ping (${pingThreshold} ms)`,
+                data: labels.map(() => pingThreshold),
+                borderColor: "rgba(255,107,107,0.5)",
+                borderDash: [4, 4],
+                borderWidth: 1.5,
+                fill: false,
+                pointRadius: 0,
+                pointHitRadius: 0,
+                type: "line",
+                yAxisID: "y",
+              },
+            ]
+          : []),
       ],
     },
     options: latencyChartOptions(),
@@ -1589,7 +1605,8 @@ function renderHeatmap(data) {
   }
 
   if (allAvg.length === 0) {
-    grid.innerHTML = '<p class="empty-state" style="grid-column:1/-1">Not enough data for the heatmap in this range.</p>';
+    grid.innerHTML =
+      '<p class="empty-state" style="grid-column:1/-1">Not enough data for the heatmap in this range.</p>';
     return;
   }
 
@@ -2084,21 +2101,39 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     const tag = (event.target?.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea" || tag === "select" || event.target?.isContentEditable) return;
+    if (
+      tag === "input" ||
+      tag === "textarea" ||
+      tag === "select" ||
+      event.target?.isContentEditable
+    )
+      return;
 
     if (event.key === "Escape") {
-      if (modalIsOpen("run-modal")) { closeRunModal(); return; }
-      if (modalIsOpen("server-modal")) { closeServerModal(); return; }
+      if (modalIsOpen("run-modal")) {
+        closeRunModal();
+        return;
+      }
+      if (modalIsOpen("server-modal")) {
+        closeServerModal();
+        return;
+      }
     }
     if (event.key === "r" || event.key === "R") {
       if (!event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
-        if (serverOptions.length === 0 && !serverSettingsLoading) void loadServerSettings();
+        if (serverOptions.length === 0 && !serverSettingsLoading)
+          void loadServerSettings();
         openServerModal();
       }
     }
-    const rangeKeys = { "1": "today", "2": "7", "3": "30", "4": "90", "5": "365" };
-    if (rangeKeys[event.key] && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    const rangeKeys = { 1: "today", 2: "7", 3: "30", 4: "90", 5: "365" };
+    if (
+      rangeKeys[event.key] &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey
+    ) {
       byId("range").value = rangeKeys[event.key];
       void loadMetrics();
     }
@@ -2167,14 +2202,16 @@ async function loadNotificationLog() {
   try {
     const response = await fetch("/api/notifications/log");
     if (!response.ok) {
-      root.innerHTML = '<p class="empty-state">Unable to load notification history.</p>';
+      root.innerHTML =
+        '<p class="empty-state">Unable to load notification history.</p>';
       return;
     }
     const entries = await response.json();
     root.textContent = "";
 
     if (!entries.length) {
-      root.innerHTML = '<p class="empty-state">No notifications have been sent yet.</p>';
+      root.innerHTML =
+        '<p class="empty-state">No notifications have been sent yet.</p>';
       return;
     }
 
@@ -2205,7 +2242,9 @@ async function loadNotificationLog() {
 
       const time = document.createElement("time");
       time.className = "notification-time";
-      time.textContent = formatTimestamp(new Date(entry.timestamp * 1000).toISOString());
+      time.textContent = formatTimestamp(
+        new Date(entry.timestamp * 1000).toISOString(),
+      );
 
       body.appendChild(top);
       if (entry.summary) body.appendChild(summary);
@@ -2216,7 +2255,8 @@ async function loadNotificationLog() {
       root.appendChild(item);
     }
   } catch {
-    root.innerHTML = '<p class="empty-state">Unable to load notification history.</p>';
+    root.innerHTML =
+      '<p class="empty-state">Unable to load notification history.</p>';
   }
 }
 
