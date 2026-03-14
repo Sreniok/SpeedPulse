@@ -10,12 +10,24 @@
     <main class="login-shell">
       <section class="login-card">
         <h1>Speed Monitor</h1>
+        {% if setup_mode %}
+        <p>Create the first dashboard account to get started.</p>
+        {% else %}
         <p>Sign in to access your dashboard.</p>
-
-        {% if error %}
+        {% endif %} {% if error %}
         <div class="error-banner">{{ error }}</div>
-        {% endif %}
+        {% endif %} {% if setup_mode %}
+        <div class="message info login-setup-banner">
+          No administrator account exists yet. Create the first account before
+          signing in.
+        </div>
 
+        <div class="login-actions">
+          <a href="/register" class="btn-primary login-primary-link"
+            >Create Account</a
+          >
+        </div>
+        {% else %}
         <form method="post" action="/login" class="login-form">
           <label for="email">Email</label>
           <input
@@ -43,7 +55,7 @@
         <div class="login-links">
           <a href="/forgot-password">Forgot password?</a>
         </div>
-        {% endif %}
+        {% endif %} {% endif %}
       </section>
     </main>
   </body>

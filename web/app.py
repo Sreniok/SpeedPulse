@@ -1455,15 +1455,18 @@ def _consume_flash(request: Request) -> str | None:
 
 @APP.get("/login", response_class=HTMLResponse)
 def login_page(request: Request) -> HTMLResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
+    setup_mode = _is_setup_mode()
     recovery_email = _resolve_recovery_email()
     error = _consume_flash(request)
     response = TEMPLATES.TemplateResponse(
         request,
         "login.html",
-        {"request": request, "error": error, "has_recovery_email": bool(recovery_email)},
+        {
+            "request": request,
+            "error": error,
+            "setup_mode": setup_mode,
+            "has_recovery_email": bool(recovery_email) and not setup_mode,
+        },
     )
     response.delete_cookie(FLASH_COOKIE, path="/login")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

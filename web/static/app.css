@@ -595,6 +595,20 @@ button:disabled {
   margin-top: 0.85rem;
 }
 
+.login-actions {
+  display: grid;
+  margin-top: 0.85rem;
+}
+
+.login-primary-link {
+  width: 100%;
+}
+
+.login-setup-banner {
+  margin-top: 0.9rem;
+  margin-bottom: 0;
+}
+
 .login-links a {
   color: var(--accent);
   text-decoration: none;

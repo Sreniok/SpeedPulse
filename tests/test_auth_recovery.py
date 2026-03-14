@@ -42,6 +42,21 @@ def test_login_shows_forgot_password_link_when_email_to_exists(
     assert "Forgot password?" in response.text
 
 
+def test_login_shows_create_account_cta_in_setup_mode(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("DASHBOARD_PASSWORD_HASH", raising=False)
+    monkeypatch.delenv("DASHBOARD_PASSWORD", raising=False)
+
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    assert "Create Account" in response.text
+    assert "No administrator account exists yet" in response.text
+    assert 'action="/login"' not in response.text
+
+
 def test_forgot_password_uses_email_to_as_recovery_fallback(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
