@@ -1,0 +1,184 @@
+services:
+  init:
+    image: busybox:latest
+    container_name: speedtest-init
+    restart: "no"
+    volumes:
+      - ./data:/data
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        # ── First-run bootstrap ──────────────────────────────
+        mkdir -p /data/Log /data/Images /data/Archive
+
+        for f in cron.log errors.log last_alert.txt chart_base64.txt; do
+          [ -f /data/$$f ] || touch /data/$$f
+        done
+
+        # Create default config.json on first run
+        if [ ! -f /data/config.json ]; then
+          cat > /data/config.json << 'CFGEOF'
+        {
+          "account": { "name": "", "provider": "", "number": "" },
+          "paths": {
+            "speedtest_exe": "speedtest",
+            "log_directory": "Log",
+            "images_directory": "Images",
+            "chart_base64": "chart_base64.txt",
+            "email_credentials": "email_cred.xml",
+            "error_log": "errors.log"
+          },
+          "thresholds": { "download_mbps": 500, "upload_mbps": 50, "ping_ms": 20, "packet_loss_percent": 1.0 },
+          "chart": { "y_max": 1000, "width": 20, "height": 6, "dpi": 150 },
+          "speedtest": { "server_id": "", "max_retries": 3, "retry_delay_seconds": 30, "timeout_seconds": 120 },
+          "email": { "from": "", "to": "", "smtp_server": "", "smtp_port": 465, "send_realtime_alerts": true, "alert_cooldown_minutes": 60 },
+          "data_retention": { "keep_weeks": 52, "archive_older_than_weeks": 26 },
+          "scheduling": { "test_times": ["08:00", "16:00", "22:00"], "weekly_report_time": "Monday 08:00" },
+          "notifications": { "weekly_report_enabled": true, "webhook_enabled": false, "webhook_url": "", "ntfy_enabled": false, "ntfy_server": "https://ntfy.sh", "ntfy_topic": "" },
+          "contract": { "current": { "start_date": "", "end_date": "", "download_mbps": 0, "upload_mbps": 0, "reminder_enabled": false, "reminder_days": 31 }, "history": [] }
+        }
+        CFGEOF
+          echo "Created default config.json — configure via the dashboard Settings page."
+        fi
+
+        # Generate .env with random secrets on first run
+        if [ ! -f /data/.env ]; then
+          SECRET=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
+          SALT=$$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
+          PASSWORD=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)
+
+          cat > /data/.env << ENVEOF
+        TZ=UTC
+        APP_TIMEZONE=UTC
+
+        # Dashboard auth
+        DASHBOARD_PORT=8000
+        DASHBOARD_LOGIN_EMAIL=admin@example.com
+        DASHBOARD_PASSWORD=$$PASSWORD
+        APP_SECRET_KEY=$$SECRET
+        AUTH_SALT=$$SALT
+        SESSION_TTL_SECONDS=43200
+        SESSION_COOKIE_SECURE=true
+        LOGIN_MAX_ATTEMPTS=5
+        LOGIN_WINDOW_SECONDS=900
+        LOGIN_BLOCK_SECONDS=900
+
+        # SMTP settings (required for email reports)
+        SMTP_SERVER=smtp.example.com
+        SMTP_PORT=465
+        SMTP_USERNAME=stats@example.com
+        SMTP_PASSWORD=replace-with-smtp-password
+        EMAIL_FROM=stats@example.com
+        EMAIL_TO=alerts@example.com
+
+        # Optional
+        SPEEDTEST_EXE=speedtest
+        SPEEDTEST_SERVER_ID=
+        HEALTH_CHECK_TIME=07:00
+        LOG_ROTATION_TIME=02:00
+        RUN_STARTUP_SPEEDTEST=false
+        MANUAL_SPEEDTEST_COOLDOWN_SECONDS=300
+        ENVEOF
+
+          printf 'Dashboard username: admin@example.com\nDashboard password: %s\n' "$$PASSWORD" > /data/.initial_credentials
+          chmod 600 /data/.initial_credentials
+
+          echo ""
+          echo "=========================================="
+          echo "  FIRST RUN — Credentials Generated"
+          echo "=========================================="
+          echo "  See: data/.initial_credentials"
+          echo "  Edit: data/.env for SMTP settings"
+          echo "=========================================="
+          echo ""
+        fi
+
+  dashboard:
+    image: ghcr.io/sreniok/speed-monitor:latest
+    container_name: speedtest-dashboard
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    env_file:
+      - path: ./data/.env
+        required: false
+    environment:
+      - TZ=${TZ:-UTC}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+    ports:
+      - "${DASHBOARD_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./data/config.json:/app/config.json
+      - ./data/.env:/app/.env
+      - ./data/Log:/app/Log
+      - ./data/Images:/app/Images
+      - ./data/Archive:/app/Archive
+      - ./data/cron.log:/app/cron.log
+      - ./data/errors.log:/app/errors.log
+      - ./data/last_alert.txt:/app/last_alert.txt
+      - ./data/chart_base64.txt:/app/chart_base64.txt
+
+  scheduler:
+    image: ghcr.io/sreniok/speed-monitor:latest
+    container_name: speedtest-scheduler
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    env_file:
+      - path: ./data/.env
+        required: false
+    environment:
+      - TZ=${TZ:-UTC}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - HEALTH_CHECK_TIME=${HEALTH_CHECK_TIME:-07:00}
+      - LOG_ROTATION_TIME=${LOG_ROTATION_TIME:-02:00}
+      - RUN_STARTUP_SPEEDTEST=${RUN_STARTUP_SPEEDTEST:-false}
+    command: ["python", "scheduler_service.py"]
+    volumes:
+      - ./data/config.json:/app/config.json
+      - ./data/.env:/app/.env
+      - ./data/Log:/app/Log
+      - ./data/Images:/app/Images
+      - ./data/Archive:/app/Archive
+      - ./data/cron.log:/app/cron.log
+      - ./data/errors.log:/app/errors.log
+      - ./data/last_alert.txt:/app/last_alert.txt
+      - ./data/chart_base64.txt:/app/chart_base64.txt

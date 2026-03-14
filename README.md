@@ -39,24 +39,38 @@ This project can run fully in Docker with:
 - FastAPI dashboard with login
 - SMTP/auth secrets in `.env`
 
-### Quick Start
+### Quick Start (pre-built image)
 
-1. Clone and start:
+No need to clone the full repo. Create a folder and download only the compose file:
 
-   ```bash
-   git clone https://github.com/Sreniok/speed-monitor.git
-   cd speed-monitor
-   docker compose up -d --build
-   ```
+```bash
+mkdir speed-monitor && cd speed-monitor
+curl -fsSL https://raw.githubusercontent.com/Sreniok/speed-monitor/main/compose.deploy.yml -o docker-compose.yml
+docker compose up -d
+```
 
-   On the first run an **init** container automatically creates `.env`
-   (with generated secrets and a random dashboard password), `config.json`,
-   and all required directories.
+Your deployment directory stays clean — just like other self-hosted apps:
+
+```
+speed-monitor/
+├── docker-compose.yml
+└── data/              ← created automatically
+    ├── .env
+    ├── .initial_credentials
+    ├── config.json
+    ├── Log/
+    ├── Images/
+    └── Archive/
+```
+
+On the first run an **init** container automatically creates `data/.env`
+(with generated secrets and a random dashboard password), `config.json`,
+and all required directories.
 
 2. Get your generated password:
 
    ```bash
-   docker compose logs init
+   cat data/.initial_credentials
    ```
 
 3. Open the dashboard and log in:
@@ -65,12 +79,22 @@ This project can run fully in Docker with:
    http://localhost:8000
    ```
 
-4. _(Optional)_ Edit `.env` to configure SMTP for email reports/alerts,
+4. _(Optional)_ Edit `data/.env` to configure SMTP for email reports/alerts,
    then restart:
    ```bash
-   nano .env
+   nano data/.env
    docker compose restart
    ```
+
+### Build from Source (development)
+
+If you prefer to build the image locally:
+
+```bash
+git clone https://github.com/Sreniok/speed-monitor.git
+cd speed-monitor
+docker compose up -d --build
+```
 
 > **Tip:** Account details, thresholds, schedules, and contract info can all be
 > configured from the **Settings** page — no need to hand-edit `config.json`.
