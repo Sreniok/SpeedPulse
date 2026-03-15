@@ -1,87 +1,12 @@
+# First-run prep (once, before the first 'docker compose up'):
+#   mkdir -p data/Log data/Images data/Archive
+#   touch data/{.env,config.json,cron.log,errors.log,last_alert.txt,chart_base64.txt}
+
 services:
-  init:
-    image: busybox:latest
-    container_name: speedtest-init
-    restart: "no"
-    volumes:
-      - ./data:/data
-    entrypoint: ["sh", "-c"]
-    command:
-      - |
-        # ── First-run bootstrap ──────────────────────────────
-        mkdir -p /data/Log /data/Images /data/Archive
-
-        for f in cron.log errors.log last_alert.txt chart_base64.txt; do
-          [ -f /data/$$f ] || touch /data/$$f
-        done
-
-        # Create default config.json on first run
-        if [ ! -f /data/config.json ]; then
-          cat > /data/config.json << 'CFGEOF'
-        {
-          "account": { "name": "", "provider": "", "number": "" },
-          "paths": {
-            "speedtest_exe": "speedtest",
-            "log_directory": "Log",
-            "images_directory": "Images",
-            "chart_base64": "chart_base64.txt",
-            "email_credentials": "email_cred.xml",
-            "error_log": "errors.log"
-          },
-          "thresholds": { "download_mbps": 500, "upload_mbps": 50, "ping_ms": 20, "packet_loss_percent": 1.0 },
-          "chart": { "y_max": 1000, "width": 20, "height": 6, "dpi": 150 },
-          "speedtest": { "server_id": "", "max_retries": 3, "retry_delay_seconds": 30, "timeout_seconds": 120 },
-          "email": { "from": "", "to": "", "smtp_server": "", "smtp_port": 465, "send_realtime_alerts": true, "alert_cooldown_minutes": 60 },
-          "data_retention": { "keep_weeks": 52, "archive_older_than_weeks": 26 },
-          "scheduling": { "test_times": ["08:00", "16:00", "22:00"], "weekly_report_time": "Monday 08:00" },
-          "notifications": { "weekly_report_enabled": true, "webhook_enabled": false, "webhook_url": "", "ntfy_enabled": false, "ntfy_server": "https://ntfy.sh", "ntfy_topic": "" },
-          "contract": { "current": { "start_date": "", "end_date": "", "download_mbps": 0, "upload_mbps": 0, "reminder_enabled": false, "reminder_days": 31 }, "history": [] }
-        }
-        CFGEOF
-          echo "Created default config.json — configure via the dashboard Settings page."
-        fi
-
-        # Generate .env with random secrets on first run
-        if [ ! -f /data/.env ]; then
-          SECRET=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
-          SALT=$$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
-
-          cat > /data/.env << ENVEOF
-        TZ=UTC
-        APP_TIMEZONE=UTC
-
-        # Dashboard auth — visit the web UI to create your account on first login.
-        DASHBOARD_PORT=8000
-        DASHBOARD_LOGIN_EMAIL=""
-        DASHBOARD_PASSWORD_HASH=""
-        DASHBOARD_PASSWORD=""
-        APP_SECRET_KEY=$$SECRET
-        AUTH_SALT=$$SALT
-        SESSION_COOKIE_SECURE=auto
-
-        # SMTP password (other SMTP settings live in config.json)
-        SMTP_PASSWORD=
-        ENVEOF
-
-          echo ""
-          echo "=========================================="
-          echo "  FIRST RUN — Open the dashboard to"
-          echo "  create your administrator account."
-          echo "  SMTP settings are in config.json."
-          echo "=========================================="
-          echo ""
-        fi
-
-        # Ensure appuser (UID 1000) owns all data files
-        chown -R 1000:1000 /data
-
   dashboard:
     image: ghcr.io/sreniok/speed-monitor:latest
     container_name: speedtest-dashboard
     restart: unless-stopped
-    depends_on:
-      init:
-        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -129,9 +54,6 @@ services:
     image: ghcr.io/sreniok/speed-monitor:latest
     container_name: speedtest-scheduler
     restart: unless-stopped
-    depends_on:
-      init:
-        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:

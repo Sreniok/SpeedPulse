@@ -19,7 +19,6 @@ chart_base64.txt
 *.md
 LICENSE
 *.example
-*.example.json
 deploy.sh
 deploy.bat
 setup.sh

@@ -29,7 +29,6 @@ RUN groupadd --gid 1000 appgroup \
 
 EXPOSE 8000
 
-USER appuser
-
+# Entrypoint runs as root for first-run init (chown), then drops to appuser.
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "web.app:APP", "--host", "0.0.0.0", "--port", "8000"]
