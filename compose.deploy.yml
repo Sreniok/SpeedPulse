@@ -21,6 +21,7 @@ services:
     image: ghcr.io/sreniok/speedpulse:latest
     container_name: speedpulse-dashboard
     restart: unless-stopped
+    user: "1000:1000"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -71,6 +72,7 @@ services:
     image: ghcr.io/sreniok/speedpulse:latest
     container_name: speedpulse-scheduler
     restart: unless-stopped
+    user: "1000:1000"
     depends_on:
       init:
         condition: service_completed_successfully

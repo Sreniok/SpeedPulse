@@ -16,6 +16,12 @@ for name in config.json .env cron.log errors.log last_alert.txt chart_base64.txt
   fi
 done
 
+# When already running as non-root (e.g. compose user: 1000:1000),
+# skip root-only bootstrap and exec the main process directly.
+if [ "$(id -u)" != "0" ]; then
+  exec "$@"
+fi
+
 # Create config.json from the bundled example on first run / empty file
 if [ ! -s /app/config.json ]; then
   if [ -f /app/config.example.json ]; then
