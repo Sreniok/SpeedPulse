@@ -236,7 +236,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-APP = FastAPI(title="SpeedPulse Dashboard", version="1.2.0", lifespan=lifespan)
+APP = FastAPI(title="SpeedPulse Dashboard", version="1.0.1", lifespan=lifespan)
 APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
@@ -686,7 +686,7 @@ def _send_settings_test_webhook(config: dict) -> None:
         webhook_url,
         data=payload,
         method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.2"},
+        headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.0"},
     )
     with urllib.request.urlopen(request, timeout=12) as response:
         if int(response.status) >= 300:
@@ -714,7 +714,7 @@ def _send_settings_test_ntfy(config: dict) -> None:
             "Title": "SpeedPulse Test",
             "Priority": "3",
             "Tags": "satellite,white_check_mark",
-            "User-Agent": "speedpulse/1.2",
+            "User-Agent": "speedpulse/1.0",
         },
     )
     with urllib.request.urlopen(request, timeout=12) as response:
