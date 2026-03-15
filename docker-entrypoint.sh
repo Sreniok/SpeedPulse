@@ -8,8 +8,9 @@ set -e
 for name in config.json .env cron.log errors.log last_alert.txt chart_base64.txt; do
   if [ -d "/app/$name" ]; then
     echo "ERROR: /app/$name is a directory (expected a file)."
-    echo "       Run on the host first:"
-    echo "         mkdir -p data && touch data/$name"
+    echo "       If using compose.deploy.yml, ensure the init service ran first."
+    echo "       Otherwise, create the file on the host before starting:"
+    echo "         touch $name"
     echo "       Then restart the container."
     exit 1
   fi

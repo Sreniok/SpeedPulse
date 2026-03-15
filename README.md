@@ -56,23 +56,23 @@ Your deployment directory stays clean — just like other self-hosted apps:
 ```
 speedpulse/
 ├── docker-compose.yml
+├── .env               ← created automatically (secrets & settings)
+├── .initial_credentials
 └── data/              ← created automatically
-    ├── .env
-    ├── .initial_credentials
     ├── config.json
     ├── Log/
     ├── Images/
     └── Archive/
 ```
 
-On the first run an **init** container automatically creates `data/.env`
-(with generated secrets and a random dashboard password), `config.json`,
+On the first run an **init** container automatically creates `.env`
+(with generated secrets and a random dashboard password), `data/config.json`,
 and all required directories.
 
 2. Get your generated password:
 
    ```bash
-   cat data/.initial_credentials
+   cat .initial_credentials
    ```
 
 3. Open the dashboard and log in:
@@ -81,10 +81,10 @@ and all required directories.
    http://localhost:8000
    ```
 
-4. _(Optional)_ Edit `data/.env` to configure SMTP for email reports/alerts,
+4. _(Optional)_ Edit `.env` to configure SMTP for email reports/alerts,
    then restart:
    ```bash
-   nano data/.env
+   nano .env
    docker compose restart
    ```
 

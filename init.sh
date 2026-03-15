@@ -4,37 +4,43 @@
 # if they don't already exist.  Idempotent — safe to rerun.
 #
 # Usage (inside Docker init container):
-#   /bin/sh /app/init.sh /data
+#   /bin/sh /app/init.sh /workspace
 #
-# The script copies template files from /app/ (baked into the image)
-# into $DIR (the host-mounted data directory).
+# Layout on the host:
+#   /workspace/.env                  ← secrets (next to docker-compose.yml)
+#   /workspace/.initial_credentials  ← first-run password
+#   /workspace/data/config.json      ← app config
+#   /workspace/data/Log/             ← speed test logs
+#   /workspace/data/Images/          ← chart images
+#   /workspace/data/Archive/         ← archived logs
 set -e
 
-DIR="${1:-/workspace}"
+ROOT="${1:-/workspace}"
+DATA="$ROOT/data"
 # Source templates live in the image at /app/
 APP_DIR="/app"
 
-mkdir -p "$DIR"
+mkdir -p "$DATA"
 
 # ── .env ─────────────────────────────────────────────────
-if [ ! -f "$DIR/.env" ]; then
-  cp "$APP_DIR/.env.example" "$DIR/.env"
+if [ ! -f "$ROOT/.env" ]; then
+  cp "$APP_DIR/.env.example" "$ROOT/.env"
 
   # Generate cryptographically random values
   SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
   SALT=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
   PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)
 
-  sed -i "s|replace-with-32-plus-char-random-secret|$SECRET|" "$DIR/.env"
-  sed -i "s|replace-with-random-hex-string|$SALT|" "$DIR/.env"
+  sed -i "s|replace-with-32-plus-char-random-secret|$SECRET|" "$ROOT/.env"
+  sed -i "s|replace-with-random-hex-string|$SALT|" "$ROOT/.env"
 
   # Replace the placeholder hash with a plain password
   # (the dashboard will auto-hash it on first startup)
-  sed -i "s|^DASHBOARD_PASSWORD_HASH=.*|# DASHBOARD_PASSWORD_HASH=  (auto-generated on first start)|" "$DIR/.env"
-  echo "DASHBOARD_PASSWORD=$PASSWORD" >> "$DIR/.env"
+  sed -i "s|^DASHBOARD_PASSWORD_HASH=.*|# DASHBOARD_PASSWORD_HASH=  (auto-generated on first start)|" "$ROOT/.env"
+  echo "DASHBOARD_PASSWORD=$PASSWORD" >> "$ROOT/.env"
 
   # Write password to a temporary file with restricted permissions
-  CRED_FILE="$DIR/.initial_credentials"
+  CRED_FILE="$ROOT/.initial_credentials"
   printf 'Dashboard username: monitor-admin\nDashboard password: %s\n' "$PASSWORD" > "$CRED_FILE"
   chmod 600 "$CRED_FILE"
 
@@ -56,23 +62,24 @@ if [ ! -f "$DIR/.env" ]; then
 fi
 
 # ── config.json ──────────────────────────────────────────
-if [ ! -f "$DIR/config.json" ]; then
-  cp "$APP_DIR/config.example.json" "$DIR/config.json"
+if [ ! -f "$DATA/config.json" ]; then
+  cp "$APP_DIR/config.example.json" "$DATA/config.json"
   echo "Created config.json (configure via dashboard Settings)"
 fi
 
 # ── Directories ──────────────────────────────────────────
-mkdir -p "$DIR/Log" "$DIR/Images" "$DIR/Archive"
+mkdir -p "$DATA/Log" "$DATA/Images" "$DATA/Archive"
 
 # ── Runtime files (bind-mount targets) ───────────────────
 for f in cron.log errors.log last_alert.txt chart_base64.txt; do
-  [ -f "$DIR/$f" ] || touch "$DIR/$f"
+  [ -f "$DATA/$f" ] || touch "$DATA/$f"
 done
 
 # ── Ensure appuser (UID 1000) owns runtime files ────────
-chown -R 1000:1000 "$DIR/Log" "$DIR/Images" "$DIR/Archive" 2>/dev/null || true
-for f in config.json cron.log errors.log last_alert.txt chart_base64.txt .env; do
-  [ -f "$DIR/$f" ] && chown 1000:1000 "$DIR/$f" 2>/dev/null || true
+chown -R 1000:1000 "$DATA/Log" "$DATA/Images" "$DATA/Archive" 2>/dev/null || true
+for f in config.json cron.log errors.log last_alert.txt chart_base64.txt; do
+  [ -f "$DATA/$f" ] && chown 1000:1000 "$DATA/$f" 2>/dev/null || true
 done
+[ -f "$ROOT/.env" ] && chown 1000:1000 "$ROOT/.env" 2>/dev/null || true
 
 echo "Setup complete"
