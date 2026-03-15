@@ -57,6 +57,57 @@ def test_login_shows_create_account_cta_in_setup_mode(
     assert 'action="/login"' not in response.text
 
 
+def test_register_saves_hash_and_login_works(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """Full setup-mode flow: register → credentials saved → login succeeds."""
+    import web.app as webapp
+
+    # Start in setup mode — no credentials at all
+    monkeypatch.delenv("DASHBOARD_PASSWORD_HASH", raising=False)
+    monkeypatch.delenv("DASHBOARD_PASSWORD", raising=False)
+    monkeypatch.delenv("DASHBOARD_LOGIN_EMAIL", raising=False)
+    monkeypatch.delenv("DASHBOARD_USERNAME", raising=False)
+    monkeypatch.setattr(webapp, "AUTH_SALT", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")
+
+    # Point .env writes at a temp file so we can inspect them
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        'DASHBOARD_LOGIN_EMAIL=""\nDASHBOARD_PASSWORD_HASH=""\nDASHBOARD_PASSWORD=""\n'
+    )
+    monkeypatch.setattr(webapp, "SCRIPT_DIR", tmp_path)
+    monkeypatch.setattr(webapp, "ENV_PATH", env_file)
+
+    with TestClient(webapp.APP, raise_server_exceptions=False) as tc:
+        # 1) Register
+        reg = tc.post(
+            "/register",
+            data={
+                "email": "new@example.com",
+                "password": "strongpass123",
+                "confirm_password": "strongpass123",
+            },
+            follow_redirects=False,
+        )
+        assert reg.status_code == 302, f"Expected redirect, got {reg.status_code}"
+
+        # 2) Verify hash was written to .env
+        env_content = env_file.read_text()
+        assert "DASHBOARD_PASSWORD_HASH=" in env_content
+        assert "pbkdf2_sha256:390000:" in env_content
+        assert 'DASHBOARD_LOGIN_EMAIL="new@example.com"' in env_content
+
+        # 3) Login with the same credentials must succeed
+        login = tc.post(
+            "/login",
+            data={"email": "new@example.com", "password": "strongpass123"},
+            follow_redirects=False,
+        )
+        assert login.status_code == 302
+        assert login.headers.get("location") in ("/", "http://testserver/")
+
+
 def test_forgot_password_uses_email_to_as_recovery_fallback(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

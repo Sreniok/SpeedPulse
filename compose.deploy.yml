@@ -45,50 +45,29 @@ services:
         if [ ! -f /data/.env ]; then
           SECRET=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
           SALT=$$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
-          PASSWORD=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)
 
           cat > /data/.env << ENVEOF
         TZ=UTC
         APP_TIMEZONE=UTC
 
-        # Dashboard auth
+        # Dashboard auth — visit the web UI to create your account on first login.
         DASHBOARD_PORT=8000
-        DASHBOARD_LOGIN_EMAIL=admin@example.com
-        DASHBOARD_PASSWORD=$$PASSWORD
+        DASHBOARD_LOGIN_EMAIL=""
+        DASHBOARD_PASSWORD_HASH=""
+        DASHBOARD_PASSWORD=""
         APP_SECRET_KEY=$$SECRET
         AUTH_SALT=$$SALT
-        SESSION_TTL_SECONDS=43200
-        SESSION_COOKIE_SECURE=true
-        LOGIN_MAX_ATTEMPTS=5
-        LOGIN_WINDOW_SECONDS=900
-        LOGIN_BLOCK_SECONDS=900
+        SESSION_COOKIE_SECURE=auto
 
-        # SMTP settings (required for email reports)
-        SMTP_SERVER=smtp.example.com
-        SMTP_PORT=465
-        SMTP_USERNAME=stats@example.com
-        SMTP_PASSWORD=replace-with-smtp-password
-        EMAIL_FROM=stats@example.com
-        EMAIL_TO=alerts@example.com
-
-        # Optional
-        SPEEDTEST_EXE=speedtest
-        SPEEDTEST_SERVER_ID=
-        HEALTH_CHECK_TIME=07:00
-        LOG_ROTATION_TIME=02:00
-        RUN_STARTUP_SPEEDTEST=false
-        MANUAL_SPEEDTEST_COOLDOWN_SECONDS=300
+        # SMTP password (other SMTP settings live in config.json)
+        SMTP_PASSWORD=
         ENVEOF
-
-          printf 'Dashboard username: admin@example.com\nDashboard password: %s\n' "$$PASSWORD" > /data/.initial_credentials
-          chmod 600 /data/.initial_credentials
 
           echo ""
           echo "=========================================="
-          echo "  FIRST RUN — Credentials Generated"
-          echo "=========================================="
-          echo "  See: data/.initial_credentials"
-          echo "  Edit: data/.env for SMTP settings"
+          echo "  FIRST RUN — Open the dashboard to"
+          echo "  create your administrator account."
+          echo "  SMTP settings are in config.json."
           echo "=========================================="
           echo ""
         fi
