@@ -44,7 +44,7 @@ NC = '\033[0m'
 def print_header() -> None:
     """Print script header."""
     print(f"\n{BLUE}{'=' * 60}{NC}")
-    print(f"{BLUE}  Annual Speed Test Summary Report Generator{NC}")
+    print(f"{BLUE}  SpeedPulse — Annual Summary Report Generator{NC}")
     print(f"{BLUE}{'=' * 60}{NC}\n")
 
 
@@ -234,7 +234,7 @@ def generate_annual_chart(df: pd.DataFrame, config: dict, stats: dict) -> Path:
     ax3: Axes
     ax4: Axes
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle(f'Annual Speed Test Summary - {datetime.now().year}',
+    fig.suptitle(f'SpeedPulse — Annual Summary - {datetime.now().year}',
                  fontsize=16, fontweight='bold')
 
     # 1. Download/Upload over time

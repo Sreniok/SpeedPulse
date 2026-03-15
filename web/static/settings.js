@@ -1,4 +1,4 @@
-const themeStorageKey = "speed-monitor-theme";
+const themeStorageKey = "speedpulse-theme";
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
@@ -540,7 +540,9 @@ async function saveNotificationEmail() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(
-        payload.detail || payload.message || "Failed to save notification email",
+        payload.detail ||
+          payload.message ||
+          "Failed to save notification email",
       );
     }
 

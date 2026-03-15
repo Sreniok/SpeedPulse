@@ -2,7 +2,7 @@
 # Quick Start Script for Ubuntu
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║     Internet Speed Monitor - Ubuntu Quick Start               ║"
+echo "║     SpeedPulse - Ubuntu Quick Start               ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 

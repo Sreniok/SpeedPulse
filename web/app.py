@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FastAPI dashboard with session-based login for speed test monitoring."""
+"""SpeedPulse – FastAPI dashboard with session-based login."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ CONFIG_PATH = SCRIPT_DIR / "config.json"
 ENV_PATH = SCRIPT_DIR / ".env"
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
-LOGGER = logging.getLogger("speed-monitor.web")
+LOGGER = logging.getLogger("speedpulse.web")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 SESSION_COOKIE = "speedtest_session"
@@ -236,7 +236,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-APP = FastAPI(title="Speed Monitor Dashboard", version="1.1.0", lifespan=lifespan)
+APP = FastAPI(title="SpeedPulse Dashboard", version="1.2.0", lifespan=lifespan)
 APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
@@ -622,13 +622,13 @@ def _send_settings_test_email(config: dict) -> None:
     mail = load_mail_settings(config)
 
     msg = MIMEText(
-        "This is a test email from Speed Monitor settings.\n\nIf you received this, SMTP setup is working.",
+        "This is a test email from SpeedPulse settings.\n\nIf you received this, SMTP setup is working.",
         "plain",
         "utf-8",
     )
     msg["From"] = mail.from_addr
     msg["To"] = mail.to_addr
-    msg["Subject"] = "Speed Monitor Test Notification"
+    msg["Subject"] = "SpeedPulse Test Notification"
 
     if mail.smtp_port == 465:
         server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=30)
@@ -677,7 +677,7 @@ def _send_settings_test_webhook(config: dict) -> None:
 
     payload = json.dumps(
         {
-            "title": "Speed Monitor test notification",
+            "title": "SpeedPulse test notification",
             "message": "Webhook channel test from dashboard settings.",
             "timestamp": _iso_now(),
         }
@@ -686,7 +686,7 @@ def _send_settings_test_webhook(config: dict) -> None:
         webhook_url,
         data=payload,
         method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": "speed-monitor/1.1"},
+        headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.2"},
     )
     with urllib.request.urlopen(request, timeout=12) as response:
         if int(response.status) >= 300:
@@ -705,16 +705,16 @@ def _send_settings_test_ntfy(config: dict) -> None:
     base_url = str(notifications_cfg.get("ntfy_server", "https://ntfy.sh")).strip() or "https://ntfy.sh"
     target_url = f"{base_url.rstrip('/')}/{quote(topic, safe='')}"
     _validate_outbound_url(target_url)
-    payload = f"Speed Monitor test notification ({_iso_now()})".encode("utf-8")
+    payload = f"SpeedPulse test notification ({_iso_now()})".encode("utf-8")
     request = urllib.request.Request(
         target_url,
         data=payload,
         method="POST",
         headers={
-            "Title": "Speed Monitor Test",
+            "Title": "SpeedPulse Test",
             "Priority": "3",
             "Tags": "satellite,white_check_mark",
-            "User-Agent": "speed-monitor/1.1",
+            "User-Agent": "speedpulse/1.2",
         },
     )
     with urllib.request.urlopen(request, timeout=12) as response:
@@ -937,7 +937,7 @@ def _send_reset_email(to_addr: str, token: str, base_url: str) -> None:
 
     reset_url = f"{base_url.rstrip('/')}/reset-password?token={quote(token)}"
     body = (
-        "You requested a password reset for Speed Monitor.\n\n"
+        "You requested a password reset for SpeedPulse.\n\n"
         f"Click the link below to reset your password (valid for 15 minutes):\n\n"
         f"{reset_url}\n\n"
         "If you did not request this, you can safely ignore this email."
@@ -946,7 +946,7 @@ def _send_reset_email(to_addr: str, token: str, base_url: str) -> None:
     msg = MIMEText(body, "plain", "utf-8")
     msg["From"] = mail.from_addr
     msg["To"] = to_addr
-    msg["Subject"] = "Speed Monitor \u2014 Password Reset"
+    msg["Subject"] = "SpeedPulse \u2014 Password Reset"
 
     if mail.smtp_port == 465:
         server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=30)

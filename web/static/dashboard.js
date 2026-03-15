@@ -19,7 +19,7 @@ let serverSettingsLoading = false;
 let serverSettingsSaving = false;
 let serverOptions = [];
 
-const themeStorageKey = "speed-monitor-theme";
+const themeStorageKey = "speedpulse-theme";
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";

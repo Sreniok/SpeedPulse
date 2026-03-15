@@ -1,14 +1,14 @@
 #!/bin/bash
 # =====================================================================================
-# Internet Speed Monitor - Ubuntu Setup Script
+# SpeedPulse - Ubuntu Setup Script
 # =====================================================================================
-# This script will install all dependencies and configure the speed monitoring system
+# This script will install all dependencies and configure the SpeedPulse system
 # =====================================================================================
 
 set -e  # Exit on error
 
 echo ""
-echo "=== Internet Speed Monitor - Ubuntu Setup ==="
+echo "=== SpeedPulse - Ubuntu Setup ==="
 echo ""
 
 # Colors for output

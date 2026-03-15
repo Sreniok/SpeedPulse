@@ -4,8 +4,8 @@
 
 services:
   dashboard:
-    image: ghcr.io/sreniok/speed-monitor:latest
-    container_name: speedtest-dashboard
+    image: ghcr.io/sreniok/speedpulse:latest
+    container_name: speedpulse-dashboard
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -51,8 +51,8 @@ services:
       - ./data/chart_base64.txt:/app/chart_base64.txt
 
   scheduler:
-    image: ghcr.io/sreniok/speed-monitor:latest
-    container_name: speedtest-scheduler
+    image: ghcr.io/sreniok/speedpulse:latest
+    container_name: speedpulse-scheduler
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

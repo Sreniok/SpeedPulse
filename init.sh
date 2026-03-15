@@ -1,5 +1,5 @@
 #!/bin/sh
-# init.sh — First-run setup for broadband-speed-monitor.
+# init.sh — First-run setup for SpeedPulse.
 # Creates .env, config.json, directories, and runtime files
 # if they don't already exist.  Idempotent — safe to rerun.
 set -e

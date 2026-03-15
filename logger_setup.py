@@ -1,4 +1,4 @@
-"""Shared logging configuration for all Speedtest scripts.
+"""Shared logging configuration for all SpeedPulse scripts.
 
 Usage::
 

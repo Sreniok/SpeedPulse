@@ -1,10 +1,12 @@
-# 🚀 Internet Speed Monitor
+# 🚀 SpeedPulse
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org)
 
 An automated, comprehensive internet speed monitoring system that tracks download/upload speeds, ping, jitter, and packet loss. Features real-time alerting, weekly reports with historical comparison, ISP performance grading, and a web dashboard.
+
+**Project:** SpeedPulse
 
 **Platform:** Linux / Docker | **License:** MIT
 
@@ -44,15 +46,15 @@ This project can run fully in Docker with:
 No need to clone the full repo. Create a folder and download only the compose file:
 
 ```bash
-mkdir speed-monitor && cd speed-monitor
-curl -fsSL https://raw.githubusercontent.com/Sreniok/speed-monitor/main/compose.deploy.yml -o docker-compose.yml
+mkdir speedpulse && cd speedpulse
+curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
 docker compose up -d
 ```
 
 Your deployment directory stays clean — just like other self-hosted apps:
 
 ```
-speed-monitor/
+speedpulse/
 ├── docker-compose.yml
 └── data/              ← created automatically
     ├── .env
@@ -91,8 +93,8 @@ and all required directories.
 If you prefer to build the image locally:
 
 ```bash
-git clone https://github.com/Sreniok/speed-monitor.git
-cd speed-monitor
+git clone https://github.com/Sreniok/speedpulse.git
+cd speedpulse
 docker compose up -d --build
 ```
 
@@ -125,7 +127,7 @@ docker compose up -d --build
 
 2. **Run the setup script**:
    ```bash
-   cd internet-speed-monitor
+   cd speedpulse
    chmod +x setup.sh
    ./setup.sh
    ```
@@ -630,7 +632,7 @@ Alerts are automatically sent when:
 **Example Alert:**
 
 ```
-⚠️ Internet Speed Alert - Threshold Violations Detected
+⚠️ SpeedPulse Alert - Threshold Violations Detected
 
 Detected at: 2025-11-08 14:30:00
 

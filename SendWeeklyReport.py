@@ -309,7 +309,7 @@ def generate_html_report(config, week_num, previous_week_num, downloads, uploads
   </div>
   
   <div class="footer">
-    <p>🤖 Automated Speed Monitoring System</p>
+    <p>🤖 SpeedPulse</p>
     <p><strong>Threshold:</strong> {config['thresholds']['download_mbps']} Mbps Download / {config['thresholds']['upload_mbps']} Mbps Upload</p>
     <p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")} • Week {week_num} of {datetime.now().year}</p>
   </div>

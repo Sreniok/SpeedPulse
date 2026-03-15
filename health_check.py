@@ -418,7 +418,7 @@ def generate_health_report_html(config, health_data):
   </div>
   
   <div class="footer">
-    <p>Speed Monitor System - Automated Health Check</p>
+    <p>SpeedPulse - Automated Health Check</p>
     <p>Account: {config['account']['name']} ({config['account']['number']})</p>
   </div>
 </div>

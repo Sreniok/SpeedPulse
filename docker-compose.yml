@@ -1,7 +1,7 @@
 services:
   dashboard:
     build: .
-    container_name: speedtest-dashboard
+    container_name: speedpulse-dashboard
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -48,7 +48,7 @@ services:
 
   scheduler:
     build: .
-    container_name: speedtest-scheduler
+    container_name: speedpulse-scheduler
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

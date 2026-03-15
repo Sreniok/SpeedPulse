@@ -109,7 +109,7 @@ def generate_html_alert(config, violations, download, upload, ping, packet_loss)
 <body>
 <div class="container">
   <div class="alert-icon">⚠️</div>
-  <div class="header">Internet Speed Alert</div>
+  <div class="header">SpeedPulse Alert</div>
   <div class="timestamp">Detected at: {timestamp}</div>
   
   <div class="violations">
@@ -140,7 +140,7 @@ def generate_html_alert(config, violations, download, upload, ping, packet_loss)
   
   <div class="footer">
     <p><strong>Account:</strong> {config['account']['name']} ({config['account']['number']})</p>
-    <p>This is an automated alert from your Internet Speed Monitoring System.</p>
+    <p>This is an automated alert from SpeedPulse.</p>
     <p>Next alert will be sent after {cooldown_minutes} minutes cooldown period.</p>
   </div>
 </div>
@@ -203,7 +203,7 @@ def send_webhook_alert(config, violations, download, upload, ping, packet_loss):
         return False
 
     payload = {
-        "title": "Internet Speed Alert",
+        "title": "SpeedPulse Alert",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "violations": violations,
         "metrics": {
@@ -220,7 +220,7 @@ def send_webhook_alert(config, violations, download, upload, ping, packet_loss):
             webhook_url,
             data=json.dumps(payload).encode("utf-8"),
             method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": "speed-monitor/1.1"},
+            headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.2"},
         )
         with urllib.request.urlopen(request, timeout=12) as response:
             if int(response.status) >= 300:
@@ -252,7 +252,7 @@ def send_ntfy_alert(config, violations, download, upload, ping, packet_loss):
         log.error("Invalid ntfy URL: %s", e)
         return False
     message = (
-        "Internet speed alert\n"
+        "SpeedPulse alert\n"
         f"Download: {download} Mbps\n"
         f"Upload: {upload} Mbps\n"
         f"Ping: {ping} ms\n"
@@ -269,7 +269,7 @@ def send_ntfy_alert(config, violations, download, upload, ping, packet_loss):
                 "Title": "Speed Alert",
                 "Priority": "4",
                 "Tags": "warning,satellite",
-                "User-Agent": "speed-monitor/1.1",
+                "User-Agent": "speedpulse/1.2",
             },
         )
         with urllib.request.urlopen(request, timeout=12) as response:
@@ -313,7 +313,7 @@ def main():
         sys.exit(0)
 
     # Generate alert email
-    subject = "⚠️ Internet Speed Alert - Threshold Violations Detected"
+    subject = "⚠️ SpeedPulse Alert - Threshold Violations Detected"
     body = generate_html_alert(config, violations, download, upload, ping, packet_loss)
 
     email_success = send_alert_email(config, subject, body)
