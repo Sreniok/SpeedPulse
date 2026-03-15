@@ -1,12 +1,29 @@
-# First-run prep (once, before the first 'docker compose up'):
-#   mkdir -p data/Log data/Images data/Archive
-#   touch data/{.env,config.json,cron.log,errors.log,last_alert.txt,chart_base64.txt}
+# SpeedPulse — production deployment (pre-built image)
+#
+# Quick start:
+#   mkdir speedpulse && cd speedpulse
+#   curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
+#   docker compose up -d
+#
+# The "init" service runs once to create data/, config.json, .env, etc.
+# before the dashboard and scheduler start.
 
 services:
+  init:
+    image: ghcr.io/sreniok/speedpulse:latest
+    container_name: speedpulse-init
+    restart: "no"
+    entrypoint: ["/bin/sh", "/app/init.sh", "/data"]
+    volumes:
+      - ./data:/data
+
   dashboard:
     image: ghcr.io/sreniok/speedpulse:latest
     container_name: speedpulse-dashboard
     restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -54,6 +71,9 @@ services:
     image: ghcr.io/sreniok/speedpulse:latest
     container_name: speedpulse-scheduler
     restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:

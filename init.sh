@@ -2,13 +2,23 @@
 # init.sh — First-run setup for SpeedPulse.
 # Creates .env, config.json, directories, and runtime files
 # if they don't already exist.  Idempotent — safe to rerun.
+#
+# Usage (inside Docker init container):
+#   /bin/sh /app/init.sh /data
+#
+# The script copies template files from /app/ (baked into the image)
+# into $DIR (the host-mounted data directory).
 set -e
 
 DIR="${1:-/workspace}"
+# Source templates live in the image at /app/
+APP_DIR="/app"
+
+mkdir -p "$DIR"
 
 # ── .env ─────────────────────────────────────────────────
 if [ ! -f "$DIR/.env" ]; then
-  cp "$DIR/.env.example" "$DIR/.env"
+  cp "$APP_DIR/.env.example" "$DIR/.env"
 
   # Generate cryptographically random values
   SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
@@ -47,7 +57,7 @@ fi
 
 # ── config.json ──────────────────────────────────────────
 if [ ! -f "$DIR/config.json" ]; then
-  cp "$DIR/config.example.json" "$DIR/config.json"
+  cp "$APP_DIR/config.example.json" "$DIR/config.json"
   echo "Created config.json (configure via dashboard Settings)"
 fi
 
