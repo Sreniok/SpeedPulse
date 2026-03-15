@@ -18,7 +18,6 @@ chart_base64.txt
 @eaDir/
 *.md
 LICENSE
-*.example
 deploy.sh
 deploy.bat
 setup.sh
