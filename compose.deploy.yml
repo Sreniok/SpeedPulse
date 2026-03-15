@@ -14,6 +14,8 @@ services:
     container_name: speedpulse-init
     restart: "no"
     entrypoint: ["/bin/sh", "/app/init.sh", "/workspace"]
+    security_opt:
+      - apparmor=${DOCKER_APPARMOR_PROFILE:-docker-default}
     volumes:
       - .:/workspace
 
@@ -27,6 +29,7 @@ services:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
+      - apparmor=${DOCKER_APPARMOR_PROFILE:-docker-default}
     cap_drop:
       - ALL
     read_only: true
@@ -67,6 +70,7 @@ services:
       - ./data/errors.log:/app/errors.log
       - ./data/last_alert.txt:/app/last_alert.txt
       - ./data/chart_base64.txt:/app/chart_base64.txt
+      - /mnt/speedpulse-backups:/app/Backups
 
   scheduler:
     image: ghcr.io/sreniok/speedpulse:latest
@@ -78,6 +82,7 @@ services:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
+      - apparmor=${DOCKER_APPARMOR_PROFILE:-docker-default}
     cap_drop:
       - ALL
     read_only: true
@@ -108,3 +113,4 @@ services:
       - ./data/errors.log:/app/errors.log
       - ./data/last_alert.txt:/app/last_alert.txt
       - ./data/chart_base64.txt:/app/chart_base64.txt
+      - /mnt/speedpulse-backups:/app/Backups

@@ -47,6 +47,7 @@ AUTH_SALT=$SALT
 SESSION_COOKIE_SECURE=auto
 
 SMTP_PASSWORD=
+BACKUP_PASSWORD=
 EOF
   echo ""
   echo "=========================================="
@@ -57,13 +58,13 @@ EOF
 fi
 
 # Ensure runtime directories and files exist
-mkdir -p /app/Log /app/Images /app/Archive
+mkdir -p /app/Log /app/Images /app/Archive /app/Backups
 for f in cron.log errors.log last_alert.txt chart_base64.txt; do
   [ -f /app/"$f" ] || touch /app/"$f"
 done
 
 # Fix ownership so the non-root appuser (UID 1000) can write
-chown -R 1000:1000 /app/Log /app/Images /app/Archive 2>/dev/null || true
+chown -R 1000:1000 /app/Log /app/Images /app/Archive /app/Backups 2>/dev/null || true
 for f in config.json cron.log errors.log last_alert.txt chart_base64.txt .env; do
   [ -f /app/"$f" ] && chown 1000:1000 /app/"$f" 2>/dev/null || true
 done

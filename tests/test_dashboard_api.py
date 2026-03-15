@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from backup_manager import validate_backup
+
 LOG_FIXTURE = """\
 Date: 13-03-2026
 Time: 08:00
@@ -78,6 +80,14 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
                     "webhook_enabled": False,
                     "ntfy_enabled": False,
                 },
+                "backup": {
+                    "backup_directory": str(tmp_path / "Backups"),
+                    "max_backups": 10,
+                    "scheduled_backup_enabled": False,
+                    "scheduled_backup_time": "03:00",
+                    "scheduled_backup_frequency": "daily",
+                    "scheduled_backup_include_logs": True,
+                },
                 "scheduling": {
                     "test_times": ["08:00", "16:00", "22:00"],
                     "weekly_report_time": "Friday 18:00",
@@ -106,8 +116,10 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("EMAIL_TO", "alerts@example.com")
 
     import web.app as webapp
+    import backup_manager
 
     monkeypatch.setattr(webapp, "AUTH_SALT", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")
+    monkeypatch.setattr(backup_manager, "SCRIPT_DIR", tmp_path)
 
     with TestClient(webapp.APP, raise_server_exceptions=False) as client:
         csrf_token = "csrf-token-for-tests"
@@ -215,3 +227,120 @@ def test_manual_speedtest_start_and_status_endpoint(api_client, monkeypatch: pyt
     status_payload = status_response.json()
     assert status_payload["status"] == "running"
     assert status_payload["selected_server_id"] == "41075"
+
+
+def test_manual_backup_create_saves_to_backup_directory(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "testpass123", "include_logs": True, "download": False},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "saved" in payload["message"].lower()
+    filename = payload["filename"]
+    assert filename.endswith(".speedpulse-backup")
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    backup_dir = Path(config["backup"]["backup_directory"])
+    backup_path = backup_dir / filename
+    assert backup_path.is_file()
+    assert backup_path.stat().st_size == payload["size_bytes"]
+
+
+def test_manual_backup_saved_file_can_be_downloaded(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    create_response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "testpass123", "include_logs": False, "download": False},
+    )
+
+    assert create_response.status_code == 200
+    filename = create_response.json()["filename"]
+
+    download_response = client.get(f"/api/backup/download/{filename}")
+
+    assert download_response.status_code == 200
+    assert download_response.headers["content-type"] == "application/octet-stream"
+    assert f'filename="{filename}"' in download_response.headers["content-disposition"]
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    backup_path = Path(config["backup"]["backup_directory"]) / filename
+    assert download_response.content == backup_path.read_bytes()
+
+
+def test_manual_backup_can_save_and_download_in_one_request(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "testpass123", "include_logs": True, "download": True},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    disposition = response.headers["content-disposition"]
+    match = disposition.split('filename="', 1)[1].rstrip('"')
+    backup_path = Path(json.loads(config_path.read_text(encoding="utf-8"))["backup"]["backup_directory"]) / match
+    assert backup_path.is_file()
+    assert response.content == backup_path.read_bytes()
+
+
+def test_manual_backup_uses_saved_scheduler_password_when_blank(
+    api_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _, config_path, _, csrf_token = api_client
+    monkeypatch.setenv("BACKUP_PASSWORD", "schedulerpass123")
+
+    response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "", "include_logs": True, "download": False},
+    )
+
+    assert response.status_code == 200
+    filename = response.json()["filename"]
+    backup_path = Path(json.loads(config_path.read_text(encoding="utf-8"))["backup"]["backup_directory"]) / filename
+    manifest = validate_backup(backup_path.read_bytes(), "schedulerpass123")
+    assert "config.json" in manifest["files"]
+
+
+def test_manual_backup_allows_one_off_password_override(
+    api_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _, config_path, _, csrf_token = api_client
+    monkeypatch.setenv("BACKUP_PASSWORD", "schedulerpass123")
+
+    response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "overridepass123", "include_logs": False, "download": False},
+    )
+
+    assert response.status_code == 200
+    filename = response.json()["filename"]
+    backup_path = Path(json.loads(config_path.read_text(encoding="utf-8"))["backup"]["backup_directory"]) / filename
+    manifest = validate_backup(backup_path.read_bytes(), "overridepass123")
+    assert manifest["include_logs"] is False
+
+    with pytest.raises(ValueError, match="Wrong backup password"):
+        validate_backup(backup_path.read_bytes(), "schedulerpass123")
+
+
+def test_manual_backup_requires_password_when_no_saved_password(api_client):
+    client, _, _, _, csrf_token = api_client
+
+    response = client.post(
+        "/api/backup/create",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"password": "", "include_logs": True, "download": False},
+    )
+
+    assert response.status_code == 400
+    assert "save one first" in response.json()["detail"]

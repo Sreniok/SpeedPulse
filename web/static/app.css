@@ -2161,3 +2161,38 @@ label {
 .tone-danger {
   color: var(--bad, #e74c3c);
 }
+
+/* ── Backup table ────────────────────────────────── */
+
+.backup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.backup-table th,
+.backup-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #333);
+}
+
+.backup-table th {
+  opacity: 0.7;
+  font-weight: 600;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.backup-filename {
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 0.85em;
+}
+
+.backup-actions-cell {
+  white-space: nowrap;
+  display: flex;
+  gap: 0.5rem;
+}

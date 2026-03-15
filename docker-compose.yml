@@ -6,6 +6,7 @@ services:
     user: "1000:1000"
     security_opt:
       - no-new-privileges:true
+      - apparmor=${DOCKER_APPARMOR_PROFILE:-docker-default}
     cap_drop:
       - ALL
     read_only: true
@@ -46,6 +47,7 @@ services:
       - ./errors.log:/app/errors.log
       - ./last_alert.txt:/app/last_alert.txt
       - ./chart_base64.txt:/app/chart_base64.txt
+      - /mnt/speedpulse-backups:/app/Backups
 
   scheduler:
     build: .
@@ -54,6 +56,7 @@ services:
     user: "1000:1000"
     security_opt:
       - no-new-privileges:true
+      - apparmor=${DOCKER_APPARMOR_PROFILE:-docker-default}
     cap_drop:
       - ALL
     read_only: true
@@ -84,3 +87,4 @@ services:
       - ./errors.log:/app/errors.log
       - ./last_alert.txt:/app/last_alert.txt
       - ./chart_base64.txt:/app/chart_base64.txt
+      - /mnt/speedpulse-backups:/app/Backups

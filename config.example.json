@@ -54,6 +54,14 @@
     "ntfy_server": "https://ntfy.sh",
     "ntfy_topic": ""
   },
+  "backup": {
+    "backup_directory": "Backups",
+    "max_backups": 10,
+    "scheduled_backup_enabled": false,
+    "scheduled_backup_time": "03:00",
+    "scheduled_backup_frequency": "daily",
+    "scheduled_backup_include_logs": true
+  },
   "contract": {
     "current": {
       "start_date": "",

@@ -27,12 +27,21 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 
+from backup_manager import (
+    create_backup,
+    delete_backup,
+    get_backup_path,
+    list_backups,
+    restore_backup,
+    save_backup_to_path,
+    validate_backup,
+)
 from log_parser import load_all_log_entries
 from mail_settings import load_mail_settings
 from version import USER_AGENT, __version__
@@ -514,6 +523,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     email_cfg = loaded.get("email", {})
     notifications_cfg = loaded.get("notifications", {})
     scheduling_cfg = loaded.get("scheduling", {})
+    backup_cfg = loaded.get("backup", {})
 
     smtp_port_raw = os.getenv("SMTP_PORT", str(email_cfg.get("smtp_port", 465)))
     try:
@@ -570,6 +580,13 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
                 "reminder_days": int(current_contract.get("reminder_days", 31)),
             },
             "history": contract_history,
+        },
+        "backup": {
+            "scheduled_backup_enabled": bool(backup_cfg.get("scheduled_backup_enabled", False)),
+            "scheduled_backup_time": str(backup_cfg.get("scheduled_backup_time", "03:00")),
+            "scheduled_backup_frequency": str(backup_cfg.get("scheduled_backup_frequency", "daily")),
+            "scheduled_backup_include_logs": bool(backup_cfg.get("scheduled_backup_include_logs", True)),
+            "backup_password_set": bool(os.getenv("BACKUP_PASSWORD", "").strip()),
         },
     }
 
@@ -1982,6 +1999,27 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         except (TypeError, ValueError):
             current["reminder_days"] = 31
 
+    backup_payload = payload.get("backup", {})
+    if backup_payload:
+        backup_cfg = config.setdefault("backup", {})
+        backup_cfg["scheduled_backup_enabled"] = bool(backup_payload.get("scheduled_backup_enabled", False))
+        raw_time = _clean_env_value(backup_payload.get("scheduled_backup_time", "03:00"))
+        if not re.fullmatch(r"\d{2}:\d{2}", raw_time):
+            raise HTTPException(status_code=400, detail="Backup time must use HH:MM format")
+        backup_cfg["scheduled_backup_time"] = raw_time
+        freq = _clean_env_value(backup_payload.get("scheduled_backup_frequency", "daily"))
+        if freq not in {"daily", "weekly", "monthly"}:
+            raise HTTPException(status_code=400, detail="Backup frequency must be daily, weekly, or monthly")
+        backup_cfg["scheduled_backup_frequency"] = freq
+        backup_cfg["scheduled_backup_include_logs"] = bool(backup_payload.get("scheduled_backup_include_logs", True))
+
+    backup_password = str(payload.get("backup_password", "") or "")
+    if backup_password.strip() and len(backup_password.strip()) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Backup password must be at least 6 characters.",
+        )
+
     save_config(config)
 
     env_updates = {
@@ -1992,6 +2030,8 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     }
     if smtp_password.strip():
         env_updates["SMTP_PASSWORD"] = smtp_password
+    if backup_password.strip():
+        env_updates["BACKUP_PASSWORD"] = backup_password
 
     try:
         _update_env_file(env_updates)
@@ -2356,3 +2396,151 @@ async def run_speedtest_now(request: Request) -> JSONResponse:
     payload = _manual_run_snapshot()
     payload["message"] = "Manual speed test started."
     return JSONResponse(payload, status_code=202)
+
+
+# ── Backup & Restore ────────────────────────────────────────────
+
+_MAX_BACKUP_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
+@APP.post("/api/backup/create")
+async def api_backup_create(request: Request):
+    session = require_session(request)
+    require_csrf(request, session)
+
+    body = await request.json()
+    entered_password = str(body.get("password", "")).strip()
+    stored_password = os.getenv("BACKUP_PASSWORD", "").strip()
+    password = entered_password or stored_password
+    include_logs = bool(body.get("include_logs", True))
+    download = bool(body.get("download", False))
+
+    if entered_password and len(entered_password) < 6:
+        raise HTTPException(status_code=400, detail="Backup password must be at least 6 characters.")
+    if not password or len(password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a backup password, or save one first in Scheduled backups.",
+        )
+
+    config = load_config()
+    encrypted, filename = create_backup(password, include_logs=include_logs)
+    try:
+        dest = save_backup_to_path(encrypted, filename, config)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Backup created but could not be saved to disk: {exc}",
+        ) from exc
+
+    if not download:
+        return JSONResponse({
+            "message": "Backup saved to the configured backup directory.",
+            "filename": dest.name,
+            "size_bytes": len(encrypted),
+        })
+
+    return Response(
+        content=encrypted,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@APP.get("/api/backup/list")
+async def api_backup_list(request: Request):
+    require_session(request)
+    config = load_config()
+    return JSONResponse({"backups": list_backups(config)})
+
+
+@APP.get("/api/backup/download/{filename}")
+async def api_backup_download(request: Request, filename: str):
+    require_session(request)
+    config = load_config()
+    path = get_backup_path(filename, config)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    data = path.read_bytes()
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@APP.post("/api/backup/preview")
+async def api_backup_preview(request: Request):
+    session = require_session(request)
+    require_csrf(request, session)
+
+    form = await request.form()
+    password = str(form.get("password", "")).strip()
+    upload = form.get("file")
+
+    if not password:
+        raise HTTPException(status_code=400, detail="Backup password is required.")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(status_code=400, detail="No backup file uploaded.")
+
+    data = await upload.read()
+    if len(data) > _MAX_BACKUP_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Backup file is too large (max 100 MB).")
+
+    try:
+        manifest = validate_backup(data, password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return JSONResponse({"manifest": manifest})
+
+
+@APP.post("/api/backup/restore")
+async def api_backup_restore(request: Request):
+    session = require_session(request)
+    require_csrf(request, session)
+
+    form = await request.form()
+    password = str(form.get("password", "")).strip()
+    current_password = str(form.get("current_password", "")).strip()
+    upload = form.get("file")
+
+    if not password:
+        raise HTTPException(status_code=400, detail="Backup password is required.")
+    if not current_password:
+        raise HTTPException(status_code=400, detail="Current dashboard password is required to confirm restore.")
+
+    # Verify the user's current dashboard password
+    stored_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
+    if not stored_hash or not verify_password(current_password, stored_hash):
+        raise HTTPException(status_code=403, detail="Current dashboard password is incorrect.")
+
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(status_code=400, detail="No backup file uploaded.")
+
+    data = await upload.read()
+    if len(data) > _MAX_BACKUP_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Backup file is too large (max 100 MB).")
+
+    try:
+        summary = restore_backup(data, password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    LOGGER.info("Backup restored: %s", summary.get("restored", []))
+    return JSONResponse({
+        "message": "Backup restored successfully. Restart the application to apply all changes.",
+        "restored": summary.get("restored", []),
+        "warnings": summary.get("warnings", []),
+    })
+
+
+@APP.delete("/api/backup/{filename}")
+async def api_backup_delete(request: Request, filename: str):
+    session = require_session(request)
+    require_csrf(request, session)
+
+    config = load_config()
+    if not delete_backup(filename, config):
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    return JSONResponse({"message": "Backup deleted."})

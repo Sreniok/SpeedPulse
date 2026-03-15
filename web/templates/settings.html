@@ -62,6 +62,7 @@
           <a class="nav-link-section" href="#section-schedule">Schedule</a>
           <a class="nav-link-section" href="#section-email">Email (SMTP)</a>
           <a class="nav-link-section" href="#section-push">Push alerts</a>
+          <a class="nav-link-section" href="#section-backup">Backup</a>
         </nav>
       </aside>
 
@@ -620,6 +621,253 @@
               >
                 Save push
               </button>
+            </div>
+          </article>
+
+          <!-- ── Backup & Restore ────────────────────────── -->
+          <article id="section-backup" class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Backup</p>
+              <h2>Backup &amp; restore</h2>
+              <p class="panel-subtext">
+                Create encrypted backups of your settings, speed logs, and
+                database. Restore from a previous backup to recover your data.
+                Backups are saved to the configured backup directory (mount a
+                NAS share for off-site storage).
+              </p>
+            </div>
+
+            <div class="user-account-sections">
+              <!-- Create backup -->
+              <div class="user-account-row">
+                <div class="user-account-row-head">
+                  <div>
+                    <h3>Create backup</h3>
+                    <p class="panel-subtext">
+                      Includes configuration, SMTP credentials, notification
+                      history, and optionally speed test logs. Manual backups
+                      are always written to the configured backup directory
+                      first, then can be downloaded separately if needed.
+                    </p>
+                  </div>
+                </div>
+                <div class="settings-fields settings-fields-single">
+                  <div class="settings-field-group">
+                    <label for="settings-backup-password"
+                      >Backup password (min 6 characters)</label
+                    >
+                    <input
+                      id="settings-backup-password"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="Password to encrypt the backup"
+                      minlength="6"
+                    />
+                    <p
+                      id="settings-backup-password-hint"
+                      class="panel-subtext"
+                    >
+                      Enter a password for this backup, or save one under
+                      Scheduled backups to reuse it by default.
+                    </p>
+                  </div>
+                  <div class="settings-field-group settings-field-group-inline">
+                    <label class="toggle-label">
+                      <input
+                        id="settings-backup-include-logs"
+                        type="checkbox"
+                        checked
+                      />
+                      Include speed test logs
+                    </label>
+                  </div>
+                </div>
+                <div class="settings-actions">
+                  <button
+                    id="settings-backup-create-save"
+                    class="btn-primary"
+                    type="button"
+                  >
+                    Save backup to NAS
+                  </button>
+                  <button
+                    id="settings-backup-create-download"
+                    class="btn-muted"
+                    type="button"
+                  >
+                    Save &amp; download now
+                  </button>
+                </div>
+              </div>
+
+              <!-- Scheduled backups -->
+              <div class="user-account-row">
+                <div class="user-account-row-head">
+                  <div>
+                    <h3>Scheduled backups</h3>
+                    <p class="panel-subtext">
+                      Automatically create encrypted backups on a recurring
+                      schedule. Requires a backup password stored server-side.
+                    </p>
+                  </div>
+                </div>
+                <div class="settings-fields">
+                  <div class="settings-field-group settings-field-group-inline">
+                    <label class="toggle-label">
+                      <input
+                        id="settings-scheduled-backup-enabled"
+                        type="checkbox"
+                      />
+                      Enable scheduled backups
+                    </label>
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-scheduled-backup-frequency"
+                      >Frequency</label
+                    >
+                    <select id="settings-scheduled-backup-frequency">
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly (Sunday)</option>
+                      <option value="monthly">Monthly (1st)</option>
+                    </select>
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-scheduled-backup-time"
+                      >Backup time (HH:MM)</label
+                    >
+                    <input
+                      id="settings-scheduled-backup-time"
+                      type="time"
+                      value="03:00"
+                    />
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-scheduled-backup-password"
+                      >Backup password</label
+                    >
+                    <input
+                      id="settings-scheduled-backup-password"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="Leave blank to keep current"
+                    />
+                  </div>
+                  <div class="settings-field-group settings-field-group-inline">
+                    <label class="toggle-label">
+                      <input
+                        id="settings-scheduled-backup-include-logs"
+                        type="checkbox"
+                        checked
+                      />
+                      Include speed test logs
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Existing backups -->
+              <div class="user-account-row">
+                <div class="user-account-row-head">
+                  <div>
+                    <h3>Saved backups</h3>
+                    <p class="panel-subtext">
+                      Backups stored in the configured backup directory.
+                    </p>
+                  </div>
+                  <button
+                    id="settings-backup-refresh"
+                    class="btn-muted btn-small"
+                    type="button"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div id="backup-list-container">
+                  <p class="panel-subtext" id="backup-list-empty">
+                    No backups found.
+                  </p>
+                  <table id="backup-list-table" class="backup-table hidden">
+                    <thead>
+                      <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Created</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="backup-list-body"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Restore backup -->
+              <div class="user-account-row">
+                <div class="user-account-row-head">
+                  <div>
+                    <h3>Restore from backup</h3>
+                    <p class="panel-subtext">
+                      Upload a backup file to restore settings, logs, and
+                      database. This will overwrite current data.
+                    </p>
+                  </div>
+                </div>
+                <div class="settings-fields settings-fields-single">
+                  <div class="settings-field-group">
+                    <label for="settings-restore-file">Backup file</label>
+                    <input
+                      id="settings-restore-file"
+                      type="file"
+                      accept=".speedpulse-backup"
+                    />
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-restore-password"
+                      >Backup password</label
+                    >
+                    <input
+                      id="settings-restore-password"
+                      type="password"
+                      autocomplete="off"
+                      placeholder="Password used when creating the backup"
+                    />
+                  </div>
+                </div>
+                <div class="settings-actions">
+                  <button
+                    id="settings-restore-preview"
+                    class="btn-muted"
+                    type="button"
+                  >
+                    Preview backup
+                  </button>
+                </div>
+                <div
+                  id="restore-preview-result"
+                  class="hidden panel-subtext"
+                ></div>
+                <div class="settings-fields settings-fields-single">
+                  <div class="settings-field-group">
+                    <label for="settings-restore-confirm-password"
+                      >Current dashboard password (to confirm)</label
+                    >
+                    <input
+                      id="settings-restore-confirm-password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="Your current dashboard password"
+                    />
+                  </div>
+                </div>
+                <div class="settings-actions">
+                  <button
+                    id="settings-restore-apply"
+                    class="btn-ghost"
+                    type="button"
+                  >
+                    Restore backup
+                  </button>
+                </div>
+              </div>
             </div>
           </article>
         </section>

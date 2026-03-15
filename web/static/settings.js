@@ -14,6 +14,7 @@ const broadbandProviders = new Set([
   "Hyperoptic",
 ]);
 let settingsServerSelectionId = "";
+let savedBackupPasswordAvailable = false;
 
 function byId(id) {
   return document.getElementById(id);
@@ -302,6 +303,39 @@ function populateSettingsForm(payload) {
   renderAccountSummary(account);
   toggleNotificationFieldState();
   syncScheduledServerSelect();
+
+  // Backup schedule
+  const backup = payload.backup || {};
+  savedBackupPasswordAvailable = Boolean(backup.backup_password_set);
+  byId("settings-scheduled-backup-enabled").checked = Boolean(
+    backup.scheduled_backup_enabled,
+  );
+  byId("settings-scheduled-backup-frequency").value =
+    backup.scheduled_backup_frequency || "daily";
+  byId("settings-scheduled-backup-time").value =
+    backup.scheduled_backup_time || "03:00";
+  byId("settings-scheduled-backup-include-logs").checked =
+    backup.scheduled_backup_include_logs !== false;
+  const bpField = byId("settings-scheduled-backup-password");
+  if (bpField) {
+    bpField.value = "";
+    bpField.placeholder = backup.backup_password_set
+      ? "Leave blank to keep current"
+      : "Set a password for scheduled backups";
+  }
+  const manualBackupField = byId("settings-backup-password");
+  if (manualBackupField) {
+    manualBackupField.value = "";
+    manualBackupField.placeholder = backup.backup_password_set
+      ? "Leave blank to use the scheduled backup password"
+      : "Password to encrypt the backup";
+  }
+  const manualBackupHint = byId("settings-backup-password-hint");
+  if (manualBackupHint) {
+    manualBackupHint.textContent = backup.backup_password_set
+      ? "Leave this blank to reuse the saved scheduled backup password, or enter a different one for this backup only."
+      : "Enter a password for this backup, or save one under Scheduled backups to reuse it by default.";
+  }
 }
 
 function collectSettingsPayload() {
@@ -335,6 +369,18 @@ function collectSettingsPayload() {
           Number(byId("settings-contract-reminder-days").value) || 31,
       },
     },
+    backup: {
+      scheduled_backup_enabled: byId("settings-scheduled-backup-enabled")
+        .checked,
+      scheduled_backup_frequency: byId("settings-scheduled-backup-frequency")
+        .value,
+      scheduled_backup_time:
+        byId("settings-scheduled-backup-time").value || "03:00",
+      scheduled_backup_include_logs: byId(
+        "settings-scheduled-backup-include-logs",
+      ).checked,
+    },
+    backup_password: byId("settings-scheduled-backup-password").value,
   };
 }
 
@@ -748,6 +794,327 @@ function bindEvents() {
   byId("settings-contract-end").addEventListener("change", () => {
     renderContractDaysRemaining(byId("settings-contract-end").value);
   });
+  byId("settings-backup-create-save").addEventListener("click", () => {
+    void createBackup({ download: false });
+  });
+  byId("settings-backup-create-download").addEventListener("click", () => {
+    void createBackup({ download: true });
+  });
+  byId("settings-backup-refresh").addEventListener("click", () => {
+    void loadBackupList();
+  });
+  byId("settings-restore-preview").addEventListener("click", () => {
+    void previewBackup();
+  });
+  byId("settings-restore-apply").addEventListener("click", () => {
+    void restoreBackup();
+  });
+}
+
+// ── Backup & Restore ────────────────────────────────────────────
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+async function loadBackupList() {
+  const body = byId("backup-list-body");
+  const table = byId("backup-list-table");
+  const empty = byId("backup-list-empty");
+  if (!body) return;
+
+  try {
+    const response = await fetch("/api/backup/list");
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!response.ok) throw new Error("Failed to load backups");
+    const data = await response.json();
+    const backups = data.backups || [];
+
+    body.textContent = "";
+
+    if (backups.length === 0) {
+      table.classList.add("hidden");
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    table.classList.remove("hidden");
+    empty.classList.add("hidden");
+
+    for (const backup of backups) {
+      const row = document.createElement("tr");
+      const created = new Date(backup.created_at);
+      const dateStr =
+        created.toLocaleDateString() +
+        " " +
+        created.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      row.innerHTML =
+        `<td class="backup-filename">${backup.filename}</td>` +
+        `<td>${formatBytes(backup.size_bytes)}</td>` +
+        `<td>${dateStr}</td>` +
+        `<td class="backup-actions-cell"></td>`;
+
+      const cell = row.querySelector(".backup-actions-cell");
+
+      const dlBtn = document.createElement("button");
+      dlBtn.type = "button";
+      dlBtn.className = "btn-muted btn-small";
+      dlBtn.textContent = "Download";
+      dlBtn.addEventListener("click", () => {
+        window.location.href = `/api/backup/download/${encodeURIComponent(backup.filename)}`;
+      });
+      cell.appendChild(dlBtn);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn-ghost btn-small";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", () => {
+        void deleteBackupFile(backup.filename);
+      });
+      cell.appendChild(delBtn);
+
+      body.appendChild(row);
+    }
+  } catch (error) {
+    if (empty) {
+      empty.textContent = "Unable to load backup list.";
+      empty.classList.remove("hidden");
+    }
+    if (table) table.classList.add("hidden");
+  }
+}
+
+function triggerBackupDownload(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+async function createBackup({ download = false } = {}) {
+  const saveBtn = byId("settings-backup-create-save");
+  const downloadBtn = byId("settings-backup-create-download");
+  if (saveBtn) saveBtn.disabled = true;
+  if (downloadBtn) downloadBtn.disabled = true;
+
+  try {
+    const password = byId("settings-backup-password").value;
+    const includeLogs = byId("settings-backup-include-logs").checked;
+
+    if (password && password.length < 6) {
+      throw new Error("Backup password must be at least 6 characters.");
+    }
+    if (!password && !savedBackupPasswordAvailable) {
+      throw new Error(
+        "Enter a backup password, or save one first in Scheduled backups.",
+      );
+    }
+
+    const response = await fetch("/api/backup/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({ password, include_logs: includeLogs, download }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to create backup.");
+    }
+
+    if (download) {
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename=\"?([^\"]+)\"?/);
+      const filename = match ? match[1] : "speedpulse-backup.speedpulse-backup";
+      triggerBackupDownload(blob, filename);
+      showMessage("Backup saved and downloaded.", "success");
+    } else {
+      const payload = await response.json();
+      showMessage(
+        payload.message || "Backup saved to the configured backup directory.",
+        "success",
+      );
+    }
+
+    byId("settings-backup-password").value = "";
+    void loadBackupList();
+  } catch (error) {
+    showMessage(error.message || "Failed to create backup.", "error");
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+    if (downloadBtn) downloadBtn.disabled = false;
+  }
+}
+
+async function deleteBackupFile(filename) {
+  if (!confirm(`Delete backup "${filename}"? This cannot be undone.`)) return;
+
+  try {
+    const response = await fetch(
+      `/api/backup/${encodeURIComponent(filename)}`,
+      {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken },
+      },
+    );
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || "Failed to delete backup.");
+    }
+
+    showMessage(data.message || "Backup deleted.", "success");
+    void loadBackupList();
+  } catch (error) {
+    showMessage(error.message || "Failed to delete backup.", "error");
+  }
+}
+
+async function previewBackup() {
+  const btn = byId("settings-restore-preview");
+  if (btn) btn.disabled = true;
+
+  const resultEl = byId("restore-preview-result");
+
+  try {
+    const fileInput = byId("settings-restore-file");
+    const password = byId("settings-restore-password").value.trim();
+
+    if (!fileInput.files || !fileInput.files.length) {
+      throw new Error("Select a backup file first.");
+    }
+    if (!password) {
+      throw new Error("Enter the backup password.");
+    }
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    formData.append("password", password);
+
+    const response = await fetch("/api/backup/preview", {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: formData,
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || "Failed to preview backup.");
+    }
+
+    const m = data.manifest || {};
+    const files = (m.files || []).filter((f) => f !== "manifest.json");
+    const logsIncluded = m.include_logs ? "Yes" : "No";
+    resultEl.innerHTML =
+      `<strong>Backup preview</strong><br>` +
+      `Version: ${m.version || "unknown"}<br>` +
+      `Created: ${m.created_at || "unknown"}<br>` +
+      `Logs included: ${logsIncluded}<br>` +
+      `Files: ${files.length} items`;
+    resultEl.classList.remove("hidden");
+    showMessage(
+      "Backup is valid. Review the preview and confirm restore below.",
+      "success",
+    );
+  } catch (error) {
+    resultEl.textContent = "";
+    resultEl.classList.add("hidden");
+    showMessage(error.message || "Failed to preview backup.", "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function restoreBackup() {
+  if (
+    !confirm("This will overwrite all current settings and data. Are you sure?")
+  )
+    return;
+
+  const btn = byId("settings-restore-apply");
+  if (btn) btn.disabled = true;
+
+  try {
+    const fileInput = byId("settings-restore-file");
+    const password = byId("settings-restore-password").value.trim();
+    const currentPassword = byId("settings-restore-confirm-password").value;
+
+    if (!fileInput.files || !fileInput.files.length) {
+      throw new Error("Select a backup file first.");
+    }
+    if (!password) {
+      throw new Error("Enter the backup password.");
+    }
+    if (!currentPassword) {
+      throw new Error("Enter your current dashboard password to confirm.");
+    }
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    formData.append("password", password);
+    formData.append("current_password", currentPassword);
+
+    const response = await fetch("/api/backup/restore", {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: formData,
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || "Failed to restore backup.");
+    }
+
+    const restored = (data.restored || []).join(", ") || "nothing";
+    const warnings = data.warnings || [];
+    let msg = data.message || "Backup restored successfully.";
+    msg += ` Restored: ${restored}.`;
+    if (warnings.length) {
+      msg += ` Warnings: ${warnings.join("; ")}`;
+    }
+
+    byId("settings-restore-password").value = "";
+    byId("settings-restore-confirm-password").value = "";
+    byId("restore-preview-result").classList.add("hidden");
+
+    showMessage(msg, "success");
+  } catch (error) {
+    showMessage(error.message || "Failed to restore backup.", "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function bindMobileNav() {
@@ -795,3 +1162,4 @@ applyTheme(preferredTheme(), false);
 bindEvents();
 void loadNotificationSettings();
 void loadScheduledServerOptions();
+void loadBackupList();

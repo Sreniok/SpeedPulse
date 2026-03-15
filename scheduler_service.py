@@ -14,6 +14,8 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
+from backup_manager import run_scheduled_backup
+
 SCRIPT_DIR = Path(__file__).parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 CRON_LOG = SCRIPT_DIR / "cron.log"
@@ -142,6 +144,38 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
         misfire_grace_time=3600,
     )
     log(f"Scheduled monthly log rotation at {rotation_hour:02d}:{rotation_minute:02d} on day 1")
+
+    # Scheduled automatic backups.
+    backup_cfg = config.get("backup", {})
+    if backup_cfg.get("scheduled_backup_enabled", False):
+        backup_time = backup_cfg.get("scheduled_backup_time", "03:00")
+        backup_frequency = backup_cfg.get("scheduled_backup_frequency", "daily")
+        backup_hour, backup_minute = parse_hhmm(backup_time, "03:00")
+
+        def _run_backup_job() -> None:
+            result = run_scheduled_backup()
+            log(f"backup | {result}")
+
+        trigger_kwargs: dict = {"hour": backup_hour, "minute": backup_minute}
+        if backup_frequency == "weekly":
+            trigger_kwargs["day_of_week"] = "sun"
+        elif backup_frequency == "monthly":
+            trigger_kwargs["day"] = 1
+
+        scheduler.add_job(
+            _run_backup_job,
+            trigger=CronTrigger(**trigger_kwargs),
+            id="scheduled_backup",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+        log(f"Scheduled {backup_frequency} backup at {backup_hour:02d}:{backup_minute:02d}")
+    else:
+        if scheduler.get_job("scheduled_backup"):
+            scheduler.remove_job("scheduled_backup")
+            log("Scheduled backup disabled — removed job")
 
     # One-shot contract expiry reminder scheduled for (end_date - reminder_days).
     contract_cfg = config.get("contract", {}).get("current", {})

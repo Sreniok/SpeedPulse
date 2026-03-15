@@ -68,7 +68,7 @@ if [ ! -f "$DATA/config.json" ]; then
 fi
 
 # ── Directories ──────────────────────────────────────────
-mkdir -p "$DATA/Log" "$DATA/Images" "$DATA/Archive"
+mkdir -p "$DATA/Log" "$DATA/Images" "$DATA/Archive" "$DATA/Backups"
 
 # ── Runtime files (bind-mount targets) ───────────────────
 for f in cron.log errors.log last_alert.txt chart_base64.txt; do
@@ -76,7 +76,7 @@ for f in cron.log errors.log last_alert.txt chart_base64.txt; do
 done
 
 # ── Ensure appuser (UID 1000) owns runtime files ────────
-chown -R 1000:1000 "$DATA/Log" "$DATA/Images" "$DATA/Archive" 2>/dev/null || true
+chown -R 1000:1000 "$DATA/Log" "$DATA/Images" "$DATA/Archive" "$DATA/Backups" 2>/dev/null || true
 for f in config.json cron.log errors.log last_alert.txt chart_base64.txt; do
   [ -f "$DATA/$f" ] && chown 1000:1000 "$DATA/$f" 2>/dev/null || true
 done
