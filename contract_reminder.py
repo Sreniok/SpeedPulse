@@ -18,6 +18,8 @@ from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+
+from version import USER_AGENT
 from urllib.parse import quote, urlparse
 
 from logger_setup import get_logger
@@ -146,7 +148,7 @@ def _send_webhook(config: dict, days_left: int, contract: dict) -> bool:
             url,
             data=json.dumps(payload).encode("utf-8"),
             method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
         )
         with urllib.request.urlopen(req, timeout=12) as resp:
             if int(resp.status) >= 300:
@@ -190,7 +192,7 @@ def _send_ntfy(config: dict, days_left: int, contract: dict) -> bool:
                 "Title": "Contract Expiry Reminder",
                 "Priority": "4",
                 "Tags": "calendar,warning",
-                "User-Agent": "speedpulse/1.0",
+                "User-Agent": USER_AGENT,
             },
         )
         with urllib.request.urlopen(req, timeout=12) as resp:

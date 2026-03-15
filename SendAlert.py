@@ -17,6 +17,7 @@ from urllib.parse import quote, urlparse
 
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
+from version import USER_AGENT
 
 log = get_logger("SendAlert")
 
@@ -220,7 +221,7 @@ def send_webhook_alert(config, violations, download, upload, ping, packet_loss):
             webhook_url,
             data=json.dumps(payload).encode("utf-8"),
             method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
         )
         with urllib.request.urlopen(request, timeout=12) as response:
             if int(response.status) >= 300:
@@ -269,7 +270,7 @@ def send_ntfy_alert(config, violations, download, upload, ping, packet_loss):
                 "Title": "Speed Alert",
                 "Priority": "4",
                 "Tags": "warning,satellite",
-                "User-Agent": "speedpulse/1.0",
+                "User-Agent": USER_AGENT,
             },
         )
         with urllib.request.urlopen(request, timeout=12) as response:

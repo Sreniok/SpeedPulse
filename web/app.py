@@ -35,6 +35,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from log_parser import load_all_log_entries
 from mail_settings import load_mail_settings
+from version import USER_AGENT, __version__
 from state_store import (
     blocked_seconds as state_blocked_seconds,
     bump_session_version,
@@ -236,7 +237,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-APP = FastAPI(title="SpeedPulse Dashboard", version="1.0.1", lifespan=lifespan)
+APP = FastAPI(title="SpeedPulse Dashboard", version=__version__, lifespan=lifespan)
 APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
@@ -686,7 +687,7 @@ def _send_settings_test_webhook(config: dict) -> None:
         webhook_url,
         data=payload,
         method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": "speedpulse/1.0"},
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
     with urllib.request.urlopen(request, timeout=12) as response:
         if int(response.status) >= 300:
@@ -714,7 +715,7 @@ def _send_settings_test_ntfy(config: dict) -> None:
             "Title": "SpeedPulse Test",
             "Priority": "3",
             "Tags": "satellite,white_check_mark",
-            "User-Agent": "speedpulse/1.0",
+            "User-Agent": USER_AGENT,
         },
     )
     with urllib.request.urlopen(request, timeout=12) as response:
