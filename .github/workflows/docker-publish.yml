@@ -3,6 +3,7 @@ name: Build & publish Docker image
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths-ignore:
       - "*.md"
       - LICENSE
@@ -39,6 +40,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
             type=sha,prefix=
 
       - name: Build and push
