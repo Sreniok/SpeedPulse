@@ -2237,6 +2237,112 @@ async def update_dashboard_password(request: Request) -> JSONResponse:
     return JSONResponse({"message": "Dashboard password updated. You will be redirected to login."})
 
 
+@APP.post("/api/settings/user-account")
+async def update_user_account_settings(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    login_email = _normalize_email(payload.get("login_email", ""))
+    notification_email = _normalize_email(payload.get("notification_email", ""))
+    current_password = str(payload.get("current_password", "") or "")
+    new_password = str(payload.get("new_password", "") or "")
+    confirm_password = str(payload.get("confirm_password", "") or "")
+
+    if not _is_valid_email(login_email):
+        raise HTTPException(status_code=400, detail="Enter a valid login email address")
+    if not _is_valid_email(notification_email):
+        raise HTTPException(status_code=400, detail="Enter a valid notification email address")
+
+    current_login_email = _resolve_login_email()
+    config = load_config()
+    current_notification_email = _normalize_email(config.get("email", {}).get("to", ""))
+
+    env_updates: dict[str, str] = {}
+    changed_items: list[str] = []
+
+    if login_email != current_login_email:
+        env_updates.update(
+            {
+                "DASHBOARD_LOGIN_EMAIL": login_email,
+                "DASHBOARD_USERNAME": "",
+                "RECOVERY_EMAIL": login_email,
+            }
+        )
+        changed_items.append("login email")
+
+    password_change_requested = bool(current_password or new_password or confirm_password)
+    if password_change_requested:
+        if not current_password or not new_password or not confirm_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Current password, new password, and confirmation are required to change password",
+            )
+        if not verify_login_credentials(str(session.get("login_email", "")), current_password):
+            raise HTTPException(status_code=403, detail="Current password is incorrect")
+        if new_password != confirm_password:
+            raise HTTPException(status_code=400, detail="New password and confirmation do not match")
+        if len(new_password) < 10:
+            raise HTTPException(status_code=400, detail="New password must be at least 10 characters")
+
+        env_updates.update(
+            {
+                "DASHBOARD_PASSWORD_HASH": build_password_hash(new_password),
+                "DASHBOARD_PASSWORD": "",
+            }
+        )
+        changed_items.append("password")
+
+    notification_changed = notification_email != current_notification_email
+    if notification_changed:
+        config.setdefault("email", {})["to"] = notification_email
+        env_updates["EMAIL_TO"] = notification_email
+        changed_items.append("notification email")
+
+    if not changed_items:
+        return JSONResponse(
+            {
+                "message": "No account changes detected.",
+                "login_email": current_login_email,
+                "notification_email": current_notification_email,
+                "reauth_required": False,
+            }
+        )
+
+    try:
+        _update_env_file(env_updates)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update .env: {exc}") from exc
+
+    _apply_runtime_env(env_updates)
+
+    if notification_changed:
+        save_config(config)
+
+    reauth_required = ("login email" in changed_items) or ("password" in changed_items)
+    if reauth_required:
+        global SESSION_VERSION
+        with SESSION_VERSION_LOCK:
+            SESSION_VERSION = bump_session_version()
+        LOGGER.info("User account credentials changed — all sessions invalidated")
+
+    if len(changed_items) == 1:
+        message = f"Updated {changed_items[0]}."
+    else:
+        message = f"Updated {', '.join(changed_items[:-1])} and {changed_items[-1]}."
+    if reauth_required:
+        message += " You will be redirected to sign in again."
+
+    return JSONResponse(
+        {
+            "message": message,
+            "login_email": login_email,
+            "notification_email": notification_email,
+            "reauth_required": reauth_required,
+        }
+    )
+
+
 @APP.post("/api/settings/login-email")
 @APP.post("/api/settings/username")
 async def update_dashboard_login_email(request: Request) -> JSONResponse:
@@ -2244,19 +2350,12 @@ async def update_dashboard_login_email(request: Request) -> JSONResponse:
     require_csrf(request, session)
 
     payload = await request.json()
-    current_password = str(payload.get("current_password", "") or "")
     new_login_email = _normalize_email(
         payload.get("new_login_email", "") or payload.get("new_username", ""),
     )
 
-    if not current_password:
-        raise HTTPException(status_code=400, detail="Current password is required to change login email")
-
     if not _is_valid_email(new_login_email):
         raise HTTPException(status_code=400, detail="Enter a valid login email address")
-
-    if not verify_login_credentials(str(session.get("login_email", "")), current_password):
-        raise HTTPException(status_code=403, detail="Current password is incorrect")
 
     env_updates = {
         "DASHBOARD_LOGIN_EMAIL": new_login_email,

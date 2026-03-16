@@ -231,6 +231,80 @@ def test_notification_email_settings_persist_to_config_and_env(api_client):
     assert 'EMAIL_TO="weekly@example.com"' in env_path.read_text(encoding="utf-8")
 
 
+def test_login_email_update_no_longer_requires_current_password(api_client):
+    client, _, _, env_path, csrf_token = api_client
+
+    response = client.post(
+        "/api/settings/login-email",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"new_login_email": "newlogin@example.com"},
+    )
+
+    assert response.status_code == 200
+    assert "Login email updated" in response.json()["message"]
+    env_text = env_path.read_text(encoding="utf-8")
+    assert 'DASHBOARD_LOGIN_EMAIL="newlogin@example.com"' in env_text
+
+    follow_up = client.get("/api/settings/notifications")
+    assert follow_up.status_code == 401
+
+
+def test_user_account_combined_save_updates_notification_email_only(api_client):
+    client, _, config_path, env_path, csrf_token = api_client
+
+    response = client.post(
+        "/api/settings/user-account",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "login_email": "testuser@example.com",
+            "notification_email": "combined@example.com",
+            "current_password": "",
+            "new_password": "",
+            "confirm_password": "",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["reauth_required"] is False
+    assert payload["notification_email"] == "combined@example.com"
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["email"]["to"] == "combined@example.com"
+    assert 'EMAIL_TO="combined@example.com"' in env_path.read_text(encoding="utf-8")
+
+    still_logged_in = client.get("/api/settings/notifications")
+    assert still_logged_in.status_code == 200
+
+
+def test_user_account_combined_save_updates_login_email_without_password(api_client):
+    client, _, _, env_path, csrf_token = api_client
+
+    response = client.post(
+        "/api/settings/user-account",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "login_email": "combined-login@example.com",
+            "notification_email": "alerts@example.com",
+            "current_password": "",
+            "new_password": "",
+            "confirm_password": "",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["reauth_required"] is True
+    assert payload["login_email"] == "combined-login@example.com"
+    assert (
+        'DASHBOARD_LOGIN_EMAIL="combined-login@example.com"'
+        in env_path.read_text(encoding="utf-8")
+    )
+
+    follow_up = client.get("/api/settings/notifications")
+    assert follow_up.status_code == 401
+
+
 def test_server_selection_settings_persist_to_config(api_client):
     client, _, config_path, _, csrf_token = api_client
 

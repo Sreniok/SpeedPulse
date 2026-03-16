@@ -5,9 +5,19 @@ let settingsServerSelectionId = "";
 let savedBackupPasswordAvailable = false;
 let messageTimeoutId = 0;
 let confirmDialogResolver = null;
+let originalUserAccount = {
+  loginEmail: "",
+  notificationEmail: "",
+};
 
 function byId(id) {
   return document.getElementById(id);
+}
+
+function normalizeEmailAddress(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function isDialogElement(element) {
@@ -311,6 +321,10 @@ function populateSettingsForm(payload) {
   // User account fields
   byId("settings-login-email").value = loginEmail;
   byId("settings-notification-email").value = notificationEmail;
+  originalUserAccount = {
+    loginEmail: normalizeEmailAddress(loginEmail),
+    notificationEmail: normalizeEmailAddress(notificationEmail),
+  };
   const sidebarLoginEmail = byId("settings-sidebar-login-email");
   if (sidebarLoginEmail) {
     sidebarLoginEmail.textContent = loginEmail;
@@ -539,8 +553,103 @@ async function saveNotificationSettings() {
   }
 }
 
+function clearUserAccountPasswordFields() {
+  byId("settings-current-password").value = "";
+  byId("settings-new-password").value = "";
+  byId("settings-confirm-password").value = "";
+}
+
+async function saveUserAccountSettings() {
+  const saveButton = byId("settings-save-user-account");
+  if (!saveButton) return;
+
+  const loginEmail = byId("settings-login-email").value.trim();
+  const notificationEmail = byId("settings-notification-email").value.trim();
+  const currentPassword = byId("settings-current-password").value;
+  const newPassword = byId("settings-new-password").value;
+  const confirmPassword = byId("settings-confirm-password").value;
+
+  const loginChanged =
+    normalizeEmailAddress(loginEmail) !== originalUserAccount.loginEmail;
+  const notificationChanged =
+    normalizeEmailAddress(notificationEmail) !==
+    originalUserAccount.notificationEmail;
+  const passwordRequested = Boolean(
+    currentPassword || newPassword || confirmPassword,
+  );
+
+  if (!loginChanged && !notificationChanged && !passwordRequested) {
+    showMessage("No account changes to save.", "info");
+    return;
+  }
+
+  saveButton.disabled = true;
+
+  try {
+    const response = await fetch("/api/settings/user-account", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        login_email: loginEmail,
+        notification_email: notificationEmail,
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to save account settings",
+      );
+    }
+
+    const savedLoginEmail = String(payload.login_email || loginEmail).trim();
+    const savedNotificationEmail = String(
+      payload.notification_email || notificationEmail,
+    ).trim();
+
+    byId("settings-login-email").value = savedLoginEmail;
+    byId("settings-notification-email").value = savedNotificationEmail;
+    originalUserAccount = {
+      loginEmail: normalizeEmailAddress(savedLoginEmail),
+      notificationEmail: normalizeEmailAddress(savedNotificationEmail),
+    };
+
+    const sidebarLoginEmail = byId("settings-sidebar-login-email");
+    if (sidebarLoginEmail) {
+      sidebarLoginEmail.textContent = savedLoginEmail;
+    }
+
+    clearUserAccountPasswordFields();
+
+    const successMessage = payload.message || "Account settings saved.";
+    showMessage(successMessage, "success");
+
+    if (payload.reauth_required) {
+      window.setTimeout(() => {
+        window.location.href = "/login";
+      }, 1500);
+    }
+  } catch (error) {
+    showMessage(error.message || "Failed to save account settings.", "error");
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
 async function updateDashboardPassword() {
   const saveButton = byId("settings-password-save");
+  if (!saveButton) return;
   saveButton.disabled = true;
 
   try {
@@ -585,6 +694,7 @@ async function updateDashboardPassword() {
 
 async function updateDashboardLoginEmail() {
   const saveButton = byId("settings-save-login-email");
+  if (!saveButton) return;
   saveButton.disabled = true;
 
   try {
@@ -596,7 +706,6 @@ async function updateDashboardLoginEmail() {
       },
       body: JSON.stringify({
         new_login_email: byId("settings-login-email").value.trim(),
-        current_password: byId("settings-login-email-password").value,
       }),
     });
 
@@ -612,7 +721,6 @@ async function updateDashboardLoginEmail() {
       );
     }
 
-    byId("settings-login-email-password").value = "";
     showMessage(payload.message || "Login email updated.", "success");
     setTimeout(() => {
       window.location.href = "/login";
@@ -626,6 +734,7 @@ async function updateDashboardLoginEmail() {
 
 async function saveNotificationEmail() {
   const saveButton = byId("settings-save-notification-email");
+  if (!saveButton) return;
   saveButton.disabled = true;
 
   try {
@@ -812,21 +921,310 @@ async function endCurrentContract() {
   }
 }
 
+function prefersReducedMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function notifySettingsLayoutChanged() {
+  window.dispatchEvent(new Event("settings:layoutchanged"));
+}
+
+function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
+  const instant = Boolean(options.instant) || prefersReducedMotion();
+  const silent = Boolean(options.silent);
+  const panel = toggle.closest(".panel-collapsible");
+  const sectionName = toggle.dataset.collapseName || "section";
+  const action = collapsed ? "Expand" : "Collapse";
+
+  if (body.dataset.animating === "true") return;
+
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  toggle.setAttribute("aria-label", `${action} ${sectionName}`);
+  toggle.setAttribute("title", `${action} ${sectionName}`);
+  panel?.classList.toggle("is-collapsed", collapsed);
+
+  if (instant) {
+    body.dataset.animating = "false";
+    body.hidden = collapsed;
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    if (!silent) notifySettingsLayoutChanged();
+    return;
+  }
+
+  if (collapsed) {
+    const startHeight = body.scrollHeight;
+    if (startHeight <= 0) {
+      body.hidden = true;
+      if (!silent) notifySettingsLayoutChanged();
+      return;
+    }
+
+    body.hidden = false;
+    body.dataset.animating = "true";
+    body.style.overflow = "hidden";
+    body.style.height = `${startHeight}px`;
+    body.style.opacity = "1";
+    body.style.transition = "height 240ms ease, opacity 180ms ease";
+
+    window.requestAnimationFrame(() => {
+      body.style.height = "0px";
+      body.style.opacity = "0";
+    });
+
+    const onCollapseEnd = (event) => {
+      if (event.propertyName !== "height") return;
+      body.hidden = true;
+      body.dataset.animating = "false";
+      body.style.height = "";
+      body.style.opacity = "";
+      body.style.overflow = "";
+      body.style.transition = "";
+      body.removeEventListener("transitionend", onCollapseEnd);
+      if (!silent) notifySettingsLayoutChanged();
+    };
+
+    body.addEventListener("transitionend", onCollapseEnd);
+    return;
+  }
+
+  body.hidden = false;
+  body.dataset.animating = "true";
+  body.style.overflow = "hidden";
+  body.style.height = "0px";
+  body.style.opacity = "0";
+  body.style.transition = "height 260ms ease, opacity 200ms ease";
+
+  const targetHeight = body.scrollHeight;
+  window.requestAnimationFrame(() => {
+    body.style.height = `${targetHeight}px`;
+    body.style.opacity = "1";
+  });
+
+  const onExpandEnd = (event) => {
+    if (event.propertyName !== "height") return;
+    body.dataset.animating = "false";
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    body.removeEventListener("transitionend", onExpandEnd);
+    if (!silent) notifySettingsLayoutChanged();
+  };
+
+  body.addEventListener("transitionend", onExpandEnd);
+}
+
+function bindCollapsiblePanels() {
+  document
+    .querySelectorAll(".panel-collapse-toggle[data-collapse-target]")
+    .forEach((toggle) => {
+      const targetId = String(toggle.dataset.collapseTarget || "");
+      const body = byId(targetId);
+      if (!body) return;
+
+      const initiallyCollapsed =
+        body.hasAttribute("hidden") ||
+        toggle.getAttribute("aria-expanded") !== "true";
+      setPanelCollapsedState(toggle, body, initiallyCollapsed, {
+        instant: true,
+        silent: true,
+      });
+
+      toggle.addEventListener("click", () => {
+        if (body.dataset.animating === "true") return;
+        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+        setPanelCollapsedState(toggle, body, isExpanded);
+      });
+    });
+}
+
+function setActiveSettingsSectionNav(sectionId) {
+  document
+    .querySelectorAll("[data-settings-section-link][href^='#']")
+    .forEach((link) => {
+      const href = String(link.getAttribute("href") || "");
+      const active = href === `#${sectionId}`;
+      link.classList.toggle("active", active);
+      if (active) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
+}
+
+function bindSettingsSectionNav() {
+  const mainShell = document.querySelector(".main-shell");
+  if (!(mainShell instanceof HTMLElement)) return;
+  const jumpbar = byId("settings-jumpbar");
+
+  const rawLinks = Array.from(
+    document.querySelectorAll("[data-settings-section-link][href^='#']"),
+  );
+  if (rawLinks.length === 0) return;
+
+  const expandSectionIfCollapsed = (section) => {
+    const toggle = section.querySelector(
+      ".panel-collapse-toggle[data-collapse-target]",
+    );
+    if (!(toggle instanceof HTMLElement)) return;
+    const targetId = String(toggle.dataset.collapseTarget || "");
+    const body = byId(targetId);
+    if (!(body instanceof HTMLElement)) return;
+    const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+    if (isExpanded) return;
+    setPanelCollapsedState(toggle, body, false, { instant: true });
+  };
+
+  const sections = new Map();
+  rawLinks.forEach((link) => {
+    const href = String(link.getAttribute("href") || "");
+    const sectionId = href.slice(1);
+    const section = byId(sectionId);
+    if (!sectionId || !section) return;
+
+    if (!sections.has(sectionId)) {
+      sections.set(sectionId, { sectionId, section });
+    }
+
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      expandSectionIfCollapsed(section);
+      setActiveSettingsSectionNav(sectionId);
+      const targetTop = Math.max(0, section.offsetTop - scrollAnchorOffset());
+      mainShell.scrollTo({ top: targetTop, behavior: "smooth" });
+      if (window.history && typeof window.history.replaceState === "function") {
+        window.history.replaceState(null, "", `#${sectionId}`);
+      }
+      window.setTimeout(() => recalc(true), 300);
+    });
+  });
+
+  const sectionEntries = Array.from(sections.values());
+  if (sectionEntries.length === 0) return;
+
+  const scrollAnchorOffset = () =>
+    (jumpbar instanceof HTMLElement ? jumpbar.offsetHeight + 12 : 0) + 18;
+  const probeOffset = () => Math.min(mainShell.clientHeight * 0.32, 220);
+  const switchHysteresis = () =>
+    Math.max(66, Math.min(mainShell.clientHeight * 0.14, 124));
+  const topSnapThreshold = () =>
+    Math.max(12, Math.min(scrollAnchorOffset() + 6, 72));
+  const sectionTop = (entry) =>
+    Math.max(0, entry.section.offsetTop - scrollAnchorOffset());
+  const sectionById = new Map(
+    sectionEntries.map((entry) => [entry.sectionId, entry]),
+  );
+
+  let activeSectionId = sectionEntries[0].sectionId;
+  let lastProbeY = 0;
+
+  const candidateForProbe = (probeY) => {
+    if (mainShell.scrollTop <= topSnapThreshold()) {
+      return sectionEntries[0].sectionId;
+    }
+
+    if (mainShell.scrollTop + mainShell.clientHeight >= mainShell.scrollHeight - 6) {
+      return sectionEntries[sectionEntries.length - 1].sectionId;
+    }
+
+    let candidate = sectionEntries[0].sectionId;
+    for (const entry of sectionEntries) {
+      if (probeY >= sectionTop(entry)) {
+        candidate = entry.sectionId;
+      } else {
+        break;
+      }
+    }
+    return candidate;
+  };
+
+  const recalc = (force = false) => {
+    if (mainShell.scrollTop <= topSnapThreshold()) {
+      const topSectionId = sectionEntries[0].sectionId;
+      if (activeSectionId !== topSectionId || force) {
+        activeSectionId = topSectionId;
+        setActiveSettingsSectionNav(activeSectionId);
+      }
+      lastProbeY = mainShell.scrollTop + probeOffset();
+      return;
+    }
+
+    const probeY = mainShell.scrollTop + probeOffset();
+    let candidate = candidateForProbe(probeY);
+
+    if (!force && candidate !== activeSectionId) {
+      const movingDown = probeY >= lastProbeY;
+      const current = sectionById.get(activeSectionId);
+      const next = sectionById.get(candidate);
+      const hysteresis = switchHysteresis();
+
+      if (current && next) {
+        const currentTop = sectionTop(current);
+        const nextTop = sectionTop(next);
+        if (movingDown && probeY < nextTop + hysteresis) {
+          candidate = activeSectionId;
+        }
+        if (!movingDown && probeY > currentTop - hysteresis) {
+          candidate = activeSectionId;
+        }
+      }
+    }
+
+    if (candidate !== activeSectionId || force) {
+      activeSectionId = candidate;
+      setActiveSettingsSectionNav(activeSectionId);
+    }
+    lastProbeY = probeY;
+  };
+
+  let ticking = false;
+  const scheduleRecalc = () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(() => {
+      ticking = false;
+      recalc(false);
+    });
+  };
+
+  mainShell.addEventListener("scroll", scheduleRecalc, { passive: true });
+  window.addEventListener("resize", scheduleRecalc);
+  window.addEventListener("settings:layoutchanged", scheduleRecalc);
+
+  const initialHash = window.location.hash.slice(1);
+  const initialTarget = sectionEntries.find(
+    (entry) => entry.sectionId === initialHash,
+  );
+  if (initialTarget) {
+    expandSectionIfCollapsed(initialTarget.section);
+    mainShell.scrollTop = Math.max(
+      0,
+      initialTarget.section.offsetTop - scrollAnchorOffset(),
+    );
+    activeSectionId = initialTarget.sectionId;
+  }
+
+  recalc(true);
+}
+
 function bindEvents() {
+  bindCollapsiblePanels();
+  bindSettingsSectionNav();
   bindMobileNav();
   settingsSaveButtons().forEach((button) => {
     button.addEventListener("click", () => {
       void saveNotificationSettings();
     });
   });
-  byId("settings-password-save").addEventListener("click", () => {
-    void updateDashboardPassword();
-  });
-  byId("settings-save-login-email").addEventListener("click", () => {
-    void updateDashboardLoginEmail();
-  });
-  byId("settings-save-notification-email").addEventListener("click", () => {
-    void saveNotificationEmail();
+  byId("settings-save-user-account").addEventListener("click", () => {
+    void saveUserAccountSettings();
   });
   byId("settings-test-email").addEventListener("click", () => {
     void sendSettingsTestNotification("email", "settings-test-email");

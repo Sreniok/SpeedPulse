@@ -11,7 +11,7 @@
     <script src="/static/theme.js" defer></script>
     <script src="/static/settings.js" defer></script>
   </head>
-  <body class="dash-body">
+  <body class="dash-body settings-page">
     <div class="app-shell">
       <button
         id="mobile-nav-toggle"
@@ -46,7 +46,6 @@
               d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
             />
           </svg>
-          <p class="brand-user">{{ login_email }}</p>
         </div>
 
         <section class="sidebar-card sidebar-card-account">
@@ -80,13 +79,13 @@
 
         <nav class="nav-block nav-block-sections">
           <p class="eyebrow">Sections</p>
-          <a class="nav-link-section" href="#section-appearance">Appearance</a>
-          <a class="nav-link-section" href="#section-user">User account</a>
-          <a class="nav-link-section" href="#section-broadband">Broadband</a>
-          <a class="nav-link-section" href="#section-schedule">Schedule</a>
-          <a class="nav-link-section" href="#section-email">Email (SMTP)</a>
-          <a class="nav-link-section" href="#section-push">Push alerts</a>
-          <a class="nav-link-section" href="#section-backup">Backup</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-appearance">Appearance</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-user">User account</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-broadband">Broadband</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-schedule">Schedule</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-email">Email (SMTP)</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-push">Push alerts</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-backup">Backup</a>
         </nav>
 
         <section class="sidebar-footer" aria-label="Application version">
@@ -104,6 +103,9 @@
 
           <div class="topbar-controls">
             <a href="/" class="btn-muted">Back to dashboard</a>
+            <p class="topbar-account-email" title="{{ login_email }}">
+              {{ login_email }}
+            </p>
             <a href="/logout" class="btn-ghost">Logout</a>
           </div>
         </header>
@@ -116,6 +118,56 @@
           aria-atomic="true"
           aria-hidden="true"
         ></section>
+
+        <section
+          class="section-jumpbar-wrap settings-jumpbar-wrap"
+          aria-label="Settings sections"
+        >
+          <nav id="settings-jumpbar" class="section-jumpbar">
+            <a
+              class="nav-link nav-link-inline settings-jump-link active"
+              data-settings-section-link
+              href="#section-appearance"
+              >Appearance</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-user"
+              >User</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-broadband"
+              >Broadband</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-schedule"
+              >Schedule</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-email"
+              >Email</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-push"
+              >Push</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
+              href="#section-backup"
+              >Backup</a
+            >
+          </nav>
+        </section>
 
         <section class="settings-grid settings-grid-stack">
           <article id="section-appearance" class="panel settings-card">
@@ -172,321 +224,355 @@
 
         <!-- ── User Account ────────────────────────────────── -->
         <section class="settings-grid settings-grid-stack">
-          <article id="section-user" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">User</p>
-              <h2>Your account</h2>
-              <p class="panel-subtext">
-                Manage your sign-in email, password, and the separate email
-                address used for alerts and weekly reports.
-              </p>
+          <article
+            id="section-user"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">User</p>
+                <h2>Your account</h2>
+                <p class="panel-subtext">
+                  Manage your sign-in email, password, and the separate email
+                  address used for alerts and weekly reports.
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="section-user-body"
+                data-collapse-target="section-user-body"
+                data-collapse-name="User account section"
+                aria-label="Expand User account section"
+                title="Expand User account section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
             </div>
 
-            <div class="user-account-sections">
-              <!-- Login email -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Login email</h3>
-                    <p class="panel-subtext">
-                      Used to sign in and receive password reset links. Changing
-                      it will log you out.
-                    </p>
+            <div id="section-user-body" class="panel-collapse-body" hidden>
+              <div class="user-account-sections user-account-sections-compact">
+                <!-- Login email -->
+                <div class="user-account-row user-account-card user-account-card-login">
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Login email</h3>
+                      <p class="panel-subtext">
+                        Used to sign in and receive password reset links.
+                        Changing it will log you out.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="settings-fields settings-fields-single">
+                    <div class="settings-field-group">
+                      <label for="settings-login-email">Login email</label>
+                      <input
+                        id="settings-login-email"
+                        type="email"
+                        autocomplete="email"
+                        placeholder="you@example.com"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-login-email">Login email</label>
-                    <input
-                      id="settings-login-email"
-                      type="email"
-                      autocomplete="email"
-                      placeholder="you@example.com"
-                    />
+
+                <!-- Password -->
+                <div
+                  class="user-account-row user-account-card user-account-card-password"
+                >
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Password</h3>
+                      <p class="panel-subtext">
+                        Changes take effect immediately and log you out.
+                      </p>
+                    </div>
                   </div>
-                  <div class="settings-field-group">
-                    <label for="settings-login-email-password"
-                      >Current password</label
-                    >
-                    <input
-                      id="settings-login-email-password"
-                      type="password"
-                      autocomplete="current-password"
-                      placeholder="Required to confirm change"
-                    />
+                  <div class="settings-fields settings-fields-single">
+                    <div class="settings-field-group">
+                      <label for="settings-current-password"
+                        >Current password</label
+                      >
+                      <input
+                        id="settings-current-password"
+                        type="password"
+                        autocomplete="current-password"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-new-password">New password</label>
+                      <input
+                        id="settings-new-password"
+                        type="password"
+                        autocomplete="new-password"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-confirm-password"
+                        >Confirm new password</label
+                      >
+                      <input
+                        id="settings-confirm-password"
+                        type="password"
+                        autocomplete="new-password"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-save-login-email"
-                    class="btn-primary"
-                    type="button"
-                  >
-                    Update login email
-                  </button>
+
+                <!-- Notification email -->
+                <div
+                  class="user-account-row user-account-card user-account-card-notification"
+                >
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Notification email</h3>
+                      <p class="panel-subtext">
+                        Used for alerts and weekly reports. This does not affect
+                        sign-in.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="settings-fields settings-fields-single">
+                    <div class="settings-field-group">
+                      <label for="settings-notification-email"
+                        >Notification email</label
+                      >
+                      <input
+                        id="settings-notification-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        autocomplete="email"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <!-- Password -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Password</h3>
-                    <p class="panel-subtext">
-                      Changes take effect immediately and log you out.
-                    </p>
-                  </div>
-                </div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-current-password"
-                      >Current password</label
-                    >
-                    <input
-                      id="settings-current-password"
-                      type="password"
-                      autocomplete="current-password"
-                    />
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-new-password">New password</label>
-                    <input
-                      id="settings-new-password"
-                      type="password"
-                      autocomplete="new-password"
-                    />
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-confirm-password"
-                      >Confirm new password</label
-                    >
-                    <input
-                      id="settings-confirm-password"
-                      type="password"
-                      autocomplete="new-password"
-                    />
-                  </div>
-                </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-password-save"
-                    class="btn-primary"
-                    type="button"
-                  >
-                    Update password
-                  </button>
-                </div>
-              </div>
-
-              <!-- Notification email -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Notification email</h3>
-                    <p class="panel-subtext">
-                      Used for alerts and weekly reports. This does not affect
-                      sign-in.
-                    </p>
-                  </div>
-                </div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-notification-email"
-                      >Notification email</label
-                    >
-                    <input
-                      id="settings-notification-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      autocomplete="email"
-                    />
-                  </div>
-                </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-save-notification-email"
-                    class="btn-primary"
-                    type="button"
-                  >
-                    Save notification email
-                  </button>
-                </div>
+              <p class="panel-subtext settings-user-save-note">
+                Password change requires your current password. Changing login
+                email or password signs you out.
+              </p>
+              <div class="settings-actions settings-actions-user">
+                <button
+                  id="settings-save-user-account"
+                  class="btn-primary"
+                  type="button"
+                >
+                  Save account changes
+                </button>
               </div>
             </div>
           </article>
 
           <!-- ── Broadband & Contract ──────────────────────── -->
-          <article id="section-broadband" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">Broadband</p>
-              <h2>Account &amp; contract</h2>
-              <p class="panel-subtext">
-                Store account details and track your ISP contract period and
-                promised speeds.
-              </p>
-            </div>
-            <div class="settings-fields settings-fields-split">
-              <div class="settings-field-group">
-                <label for="settings-account-name">Account holder name</label>
-                <input
-                  id="settings-account-name"
-                  type="text"
-                  placeholder="Your name or household account name"
-                />
+          <article
+            id="section-broadband"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Broadband</p>
+                <h2>Account &amp; contract</h2>
+                <p class="panel-subtext">
+                  Store account details and track your ISP contract period and
+                  promised speeds.
+                </p>
               </div>
-              <div class="settings-field-group">
-                <label for="settings-account-number"
-                  >Broadband account number</label
-                >
-                <input
-                  id="settings-account-number"
-                  type="text"
-                  placeholder="Account number"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-provider-detected"
-                  >Broadband provider (auto-detected)</label
-                >
-                <input
-                  id="settings-provider-detected"
-                  type="text"
-                  readonly
-                  placeholder="Detected from latest speed test"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-ip-detected"
-                  >Public IP address (latest speed test)</label
-                >
-                <input
-                  id="settings-ip-detected"
-                  type="text"
-                  readonly
-                  placeholder="Detected from latest speed test"
-                />
-              </div>
-            </div>
-
-            <h3 class="contract-heading">Contract</h3>
-            <div class="settings-fields settings-fields-split">
-              <div class="settings-field-group">
-                <label for="settings-contract-start">Contract start date</label>
-                <input id="settings-contract-start" type="date" />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-contract-end">Contract end date</label>
-                <input id="settings-contract-end" type="date" />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-contract-download"
-                  >Contracted download (Mbps)</label
-                >
-                <input
-                  id="settings-contract-download"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 500"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-contract-upload"
-                  >Contracted upload (Mbps)</label
-                >
-                <input
-                  id="settings-contract-upload"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 50"
-                />
-              </div>
-            </div>
-
-            <h3 class="contract-heading">Alert thresholds</h3>
-            <p class="panel-subtext">
-              These thresholds are used by dashboard compliance charts and
-              realtime alert notifications.
-            </p>
-            <div class="settings-fields settings-fields-split">
-              <div class="settings-field-group">
-                <label for="settings-threshold-download"
-                  >Minimum download threshold (Mbps)</label
-                >
-                <input
-                  id="settings-threshold-download"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 500"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-threshold-upload"
-                  >Minimum upload threshold (Mbps)</label
-                >
-                <input
-                  id="settings-threshold-upload"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 80"
-                />
-              </div>
-            </div>
-
-            <div class="settings-fields">
-              <div class="settings-field-group settings-field-group-inline">
-                <label class="toggle-label">
-                  <input id="settings-contract-reminder" type="checkbox" />
-                  Enable expiry reminder
-                </label>
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-contract-reminder-days"
-                  >Remind days before end</label
-                >
-                <input
-                  id="settings-contract-reminder-days"
-                  type="number"
-                  min="1"
-                  max="365"
-                  step="1"
-                  placeholder="31"
-                />
-              </div>
-            </div>
-
-            <div
-              id="contract-days-remaining"
-              class="panel-subtext contract-days-remaining"
-            ></div>
-
-            <div class="settings-actions">
               <button
-                id="settings-save-account"
-                class="btn-primary"
+                class="btn-icon panel-collapse-toggle"
                 type="button"
-                data-save-settings
+                aria-expanded="false"
+                aria-controls="section-broadband-body"
+                data-collapse-target="section-broadband-body"
+                data-collapse-name="Broadband section"
+                aria-label="Expand Broadband section"
+                title="Expand Broadband section"
               >
-                Save account &amp; contract
-              </button>
-              <button
-                id="settings-end-contract"
-                class="btn-ghost"
-                type="button"
-              >
-                End contract &amp; archive
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
               </button>
             </div>
+            <div id="section-broadband-body" class="panel-collapse-body" hidden>
+              <div class="settings-broadband-grid">
+                <section class="settings-broadband-block">
+                  <h3 class="contract-heading contract-heading-compact">
+                    Account details
+                  </h3>
+                  <div class="settings-fields settings-fields-split">
+                    <div class="settings-field-group">
+                      <label for="settings-account-name">Account holder name</label>
+                      <input
+                        id="settings-account-name"
+                        type="text"
+                        placeholder="Your name or household account name"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-account-number"
+                        >Broadband account number</label
+                      >
+                      <input
+                        id="settings-account-number"
+                        type="text"
+                        placeholder="Account number"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-provider-detected"
+                        >Broadband provider (auto-detected)</label
+                      >
+                      <input
+                        id="settings-provider-detected"
+                        type="text"
+                        readonly
+                        placeholder="Detected from latest speed test"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-ip-detected"
+                        >Public IP address (latest speed test)</label
+                      >
+                      <input
+                        id="settings-ip-detected"
+                        type="text"
+                        readonly
+                        placeholder="Detected from latest speed test"
+                      />
+                    </div>
+                  </div>
+                </section>
 
-            <div
-              id="contract-history-section"
-              class="hidden contract-history-section"
-            >
-              <h3 class="contract-history-heading">Previous contracts</h3>
-              <div id="contract-history-list"></div>
+                <section class="settings-broadband-block">
+                  <h3 class="contract-heading contract-heading-compact">
+                    Contract
+                  </h3>
+                  <div class="settings-fields settings-fields-split">
+                    <div class="settings-field-group">
+                      <label for="settings-contract-start"
+                        >Contract start date</label
+                      >
+                      <input id="settings-contract-start" type="date" />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-contract-end">Contract end date</label>
+                      <input id="settings-contract-end" type="date" />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-contract-download"
+                        >Contracted download (Mbps)</label
+                      >
+                      <input
+                        id="settings-contract-download"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="e.g. 500"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-contract-upload"
+                        >Contracted upload (Mbps)</label
+                      >
+                      <input
+                        id="settings-contract-upload"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="e.g. 50"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-broadband-block settings-broadband-block-wide">
+                  <h3 class="contract-heading contract-heading-compact">
+                    Alert thresholds
+                  </h3>
+                  <p class="panel-subtext">
+                    These thresholds are used by dashboard compliance charts and
+                    realtime alert notifications.
+                  </p>
+                  <div class="settings-fields settings-fields-split">
+                    <div class="settings-field-group">
+                      <label for="settings-threshold-download"
+                        >Minimum download threshold (Mbps)</label
+                      >
+                      <input
+                        id="settings-threshold-download"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="e.g. 500"
+                      />
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-threshold-upload"
+                        >Minimum upload threshold (Mbps)</label
+                      >
+                      <input
+                        id="settings-threshold-upload"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="e.g. 80"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="settings-fields settings-fields-split settings-fields-reminder">
+                    <div class="settings-field-group settings-field-group-inline">
+                      <label class="toggle-label">
+                        <input id="settings-contract-reminder" type="checkbox" />
+                        Enable expiry reminder
+                      </label>
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-contract-reminder-days"
+                        >Remind days before end</label
+                      >
+                      <input
+                        id="settings-contract-reminder-days"
+                        type="number"
+                        min="1"
+                        max="365"
+                        step="1"
+                        placeholder="31"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    id="contract-days-remaining"
+                    class="panel-subtext contract-days-remaining"
+                  ></div>
+
+                  <div class="settings-actions">
+                    <button
+                      id="settings-save-account"
+                      class="btn-primary"
+                      type="button"
+                      data-save-settings
+                    >
+                      Save account &amp; contract
+                    </button>
+                    <button
+                      id="settings-end-contract"
+                      class="btn-ghost"
+                      type="button"
+                    >
+                      End contract &amp; archive
+                    </button>
+                  </div>
+                </section>
+              </div>
+
+              <div
+                id="contract-history-section"
+                class="hidden contract-history-section"
+              >
+                <h3 class="contract-history-heading">Previous contracts</h3>
+                <div id="contract-history-list"></div>
+              </div>
             </div>
           </article>
 
@@ -590,349 +676,409 @@
           </article>
 
           <!-- ── SMTP & Email ──────────────────────────────── -->
-          <article id="section-email" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">Email</p>
-              <h2>SMTP configuration</h2>
-              <p class="panel-subtext">
-                Configure the outgoing mail server used for alerts and reports.
-                Emails are sent to your account email above.
-              </p>
-            </div>
-            <div class="settings-fields settings-fields-split">
-              <div class="settings-field-group">
-                <label for="settings-smtp-server">SMTP server</label>
-                <input id="settings-smtp-server" type="text" />
+          <article
+            id="section-email"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Email</p>
+                <h2>SMTP configuration</h2>
+                <p class="panel-subtext">
+                  Configure the outgoing mail server used for alerts and reports.
+                  Emails are sent to your account email above.
+                </p>
               </div>
-              <div class="settings-field-group">
-                <label for="settings-smtp-port">SMTP port</label>
-                <input
-                  id="settings-smtp-port"
-                  type="number"
-                  min="1"
-                  max="65535"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-smtp-username">SMTP username</label>
-                <input id="settings-smtp-username" type="text" />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-smtp-password"
-                  >SMTP password (leave blank to keep)</label
-                >
-                <input
-                  id="settings-smtp-password"
-                  type="password"
-                  autocomplete="new-password"
-                />
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-email-from">Send from address</label>
-                <input id="settings-email-from" type="email" />
-              </div>
-            </div>
-            <div class="toggle-grid">
-              <label class="toggle-row" for="settings-realtime-alerts">
-                <input id="settings-realtime-alerts" type="checkbox" />
-                <span>Enable realtime email alerts</span>
-              </label>
-            </div>
-            <div class="settings-actions">
               <button
-                id="settings-save-email"
-                class="btn-primary"
+                class="btn-icon panel-collapse-toggle"
                 type="button"
-                data-save-settings
+                aria-expanded="false"
+                aria-controls="section-email-body"
+                data-collapse-target="section-email-body"
+                data-collapse-name="Email section"
+                aria-label="Expand Email section"
+                title="Expand Email section"
               >
-                Save email
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
               </button>
-              <button id="settings-test-email" class="btn-muted" type="button">
-                Test email
-              </button>
+            </div>
+            <div id="section-email-body" class="panel-collapse-body" hidden>
+              <div class="settings-fields settings-fields-split">
+                <div class="settings-field-group">
+                  <label for="settings-smtp-server">SMTP server</label>
+                  <input id="settings-smtp-server" type="text" />
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-smtp-port">SMTP port</label>
+                  <input
+                    id="settings-smtp-port"
+                    type="number"
+                    min="1"
+                    max="65535"
+                  />
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-smtp-username">SMTP username</label>
+                  <input id="settings-smtp-username" type="text" />
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-smtp-password"
+                    >SMTP password (leave blank to keep)</label
+                  >
+                  <input
+                    id="settings-smtp-password"
+                    type="password"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-email-from">Send from address</label>
+                  <input id="settings-email-from" type="email" />
+                </div>
+              </div>
+              <div class="toggle-grid">
+                <label class="toggle-row" for="settings-realtime-alerts">
+                  <input id="settings-realtime-alerts" type="checkbox" />
+                  <span>Enable realtime email alerts</span>
+                </label>
+              </div>
+              <div class="settings-actions">
+                <button
+                  id="settings-save-email"
+                  class="btn-primary"
+                  type="button"
+                  data-save-settings
+                >
+                  Save email
+                </button>
+                <button id="settings-test-email" class="btn-muted" type="button">
+                  Test email
+                </button>
+              </div>
             </div>
           </article>
 
           <!-- ── Push Notifications ────────────────────────── -->
-          <article id="section-push" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">Push</p>
-              <h2>Webhook & ntfy</h2>
-              <p class="panel-subtext">
-                Use webhook for automation pipelines or ntfy for direct
-                mobile/desktop push alerts.
-              </p>
-            </div>
-            <div class="settings-grid settings-grid-two-col">
-              <section class="settings-channel">
-                <label class="toggle-row" for="settings-webhook-enabled">
-                  <input id="settings-webhook-enabled" type="checkbox" />
-                  <span>Enable webhook alerts</span>
-                </label>
-                <label for="settings-webhook-url">Webhook URL</label>
-                <input
-                  id="settings-webhook-url"
-                  type="url"
-                  placeholder="https://example.com/webhook"
-                />
-                <div class="settings-actions">
-                  <button
-                    id="settings-test-webhook"
-                    class="btn-muted btn-small"
-                    type="button"
-                  >
-                    Test webhook
-                  </button>
-                </div>
-              </section>
-              <section class="settings-channel">
-                <label class="toggle-row" for="settings-ntfy-enabled">
-                  <input id="settings-ntfy-enabled" type="checkbox" />
-                  <span>Enable ntfy alerts</span>
-                </label>
-                <label for="settings-ntfy-server">ntfy server</label>
-                <input
-                  id="settings-ntfy-server"
-                  type="url"
-                  placeholder="https://ntfy.sh"
-                />
-                <label for="settings-ntfy-topic">ntfy topic</label>
-                <input
-                  id="settings-ntfy-topic"
-                  type="text"
-                  placeholder="your-topic"
-                />
-                <div class="settings-actions">
-                  <button
-                    id="settings-test-ntfy"
-                    class="btn-muted btn-small"
-                    type="button"
-                  >
-                    Test ntfy
-                  </button>
-                </div>
-              </section>
-            </div>
-            <div class="settings-actions">
+          <article
+            id="section-push"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Push</p>
+                <h2>Webhook & ntfy</h2>
+                <p class="panel-subtext">
+                  Use webhook for automation pipelines or ntfy for direct
+                  mobile/desktop push alerts.
+                </p>
+              </div>
               <button
-                id="settings-save-push"
-                class="btn-primary"
+                class="btn-icon panel-collapse-toggle"
                 type="button"
-                data-save-settings
+                aria-expanded="false"
+                aria-controls="section-push-body"
+                data-collapse-target="section-push-body"
+                data-collapse-name="Push section"
+                aria-label="Expand Push section"
+                title="Expand Push section"
               >
-                Save push
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
               </button>
+            </div>
+            <div id="section-push-body" class="panel-collapse-body" hidden>
+              <div class="settings-grid settings-grid-two-col">
+                <section class="settings-channel">
+                  <label class="toggle-row" for="settings-webhook-enabled">
+                    <input id="settings-webhook-enabled" type="checkbox" />
+                    <span>Enable webhook alerts</span>
+                  </label>
+                  <label for="settings-webhook-url">Webhook URL</label>
+                  <input
+                    id="settings-webhook-url"
+                    type="url"
+                    placeholder="https://example.com/webhook"
+                  />
+                  <div class="settings-actions">
+                    <button
+                      id="settings-test-webhook"
+                      class="btn-muted btn-small"
+                      type="button"
+                    >
+                      Test webhook
+                    </button>
+                  </div>
+                </section>
+                <section class="settings-channel">
+                  <label class="toggle-row" for="settings-ntfy-enabled">
+                    <input id="settings-ntfy-enabled" type="checkbox" />
+                    <span>Enable ntfy alerts</span>
+                  </label>
+                  <label for="settings-ntfy-server">ntfy server</label>
+                  <input
+                    id="settings-ntfy-server"
+                    type="url"
+                    placeholder="https://ntfy.sh"
+                  />
+                  <label for="settings-ntfy-topic">ntfy topic</label>
+                  <input
+                    id="settings-ntfy-topic"
+                    type="text"
+                    placeholder="your-topic"
+                  />
+                  <div class="settings-actions">
+                    <button
+                      id="settings-test-ntfy"
+                      class="btn-muted btn-small"
+                      type="button"
+                    >
+                      Test ntfy
+                    </button>
+                  </div>
+                </section>
+              </div>
+              <div class="settings-actions">
+                <button
+                  id="settings-save-push"
+                  class="btn-primary"
+                  type="button"
+                  data-save-settings
+                >
+                  Save push
+                </button>
+              </div>
             </div>
           </article>
 
           <!-- ── Backup & Restore ────────────────────────── -->
-          <article id="section-backup" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">Backup</p>
-              <h2>Backup &amp; restore</h2>
-              <p class="panel-subtext">
-                Create encrypted backups of your settings, speed logs, and
-                database. Restore from a previous backup to recover your data.
-                Backups are saved to the configured backup directory (mount a
-                NAS share for off-site storage).
-              </p>
+          <article
+            id="section-backup"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Backup</p>
+                <h2>Backup &amp; restore</h2>
+                <p class="panel-subtext">
+                  Create encrypted backups of your settings, speed logs, and
+                  database. Restore from a previous backup to recover your data.
+                  Backups are saved to the configured backup directory (mount a
+                  NAS share for off-site storage).
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="section-backup-body"
+                data-collapse-target="section-backup-body"
+                data-collapse-name="Backup section"
+                aria-label="Expand Backup section"
+                title="Expand Backup section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
             </div>
 
-            <div class="user-account-sections">
-              <!-- Create backup -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Create backup</h3>
-                    <p class="panel-subtext">
-                      Includes configuration, SMTP credentials, notification
-                      history, and optionally speed test logs. Manual backups
-                      are always written to the configured backup directory
-                      first, then can be downloaded separately if needed.
-                    </p>
+            <div id="section-backup-body" class="panel-collapse-body" hidden>
+              <div class="user-account-sections">
+                <!-- Create backup -->
+                <div class="user-account-row settings-row-split">
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Create backup</h3>
+                      <p class="panel-subtext">
+                        Includes configuration, SMTP credentials, notification
+                        history, and optionally speed test logs. Manual backups
+                        are always written to the configured backup directory
+                        first, then can be downloaded separately if needed.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-backup-password"
-                      >Backup password (min 6 characters)</label
-                    >
-                    <input
-                      id="settings-backup-password"
-                      type="password"
-                      autocomplete="new-password"
-                      placeholder="Password to encrypt the backup"
-                      minlength="6"
-                    />
-                    <p
-                      id="settings-backup-password-hint"
-                      class="panel-subtext"
-                    >
-                      Enter a password for this backup, or save one under
-                      Scheduled backups to reuse it by default.
-                    </p>
-                  </div>
-                  <div class="settings-field-group settings-field-group-inline">
-                    <label class="toggle-label">
+                  <div class="settings-fields settings-fields-single">
+                    <div class="settings-field-group">
+                      <label for="settings-backup-password"
+                        >Backup password (min 6 characters)</label
+                      >
                       <input
-                        id="settings-backup-include-logs"
-                        type="checkbox"
-                        checked
+                        id="settings-backup-password"
+                        type="password"
+                        autocomplete="new-password"
+                        placeholder="Password to encrypt the backup"
+                        minlength="6"
                       />
-                      Include speed test logs
-                    </label>
+                      <p
+                        id="settings-backup-password-hint"
+                        class="panel-subtext"
+                      >
+                        Enter a password for this backup, or save one under
+                        Scheduled backups to reuse it by default.
+                      </p>
+                    </div>
+                    <div class="settings-field-group settings-field-group-inline">
+                      <label class="toggle-label">
+                        <input
+                          id="settings-backup-include-logs"
+                          type="checkbox"
+                          checked
+                        />
+                        Include speed test logs
+                      </label>
+                    </div>
+                  </div>
+                  <div class="settings-actions">
+                    <button
+                      id="settings-backup-create-save"
+                      class="btn-primary"
+                      type="button"
+                    >
+                      Save backup to NAS
+                    </button>
+                    <button
+                      id="settings-backup-create-download"
+                      class="btn-muted"
+                      type="button"
+                    >
+                      Save &amp; download now
+                    </button>
                   </div>
                 </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-backup-create-save"
-                    class="btn-primary"
-                    type="button"
-                  >
-                    Save backup to NAS
-                  </button>
-                  <button
-                    id="settings-backup-create-download"
-                    class="btn-muted"
-                    type="button"
-                  >
-                    Save &amp; download now
-                  </button>
-                </div>
-              </div>
 
-              <!-- Scheduled backups -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Scheduled backups</h3>
-                    <p class="panel-subtext">
-                      Automatically create encrypted backups on a recurring
-                      schedule. Requires a backup password stored server-side.
-                    </p>
+                <!-- Scheduled backups -->
+                <div class="user-account-row settings-row-split">
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Scheduled backups</h3>
+                      <p class="panel-subtext">
+                        Automatically create encrypted backups on a recurring
+                        schedule. Requires a backup password stored server-side.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div class="settings-fields">
-                  <div class="settings-field-group settings-field-group-inline">
-                    <label class="toggle-label">
+                  <div class="settings-fields">
+                    <div class="settings-field-group settings-field-group-inline">
+                      <label class="toggle-label">
+                        <input
+                          id="settings-scheduled-backup-enabled"
+                          type="checkbox"
+                        />
+                        Enable scheduled backups
+                      </label>
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-scheduled-backup-frequency"
+                        >Frequency</label
+                      >
+                      <select id="settings-scheduled-backup-frequency">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly (Sunday)</option>
+                        <option value="monthly">Monthly (1st)</option>
+                      </select>
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-scheduled-backup-time"
+                        >Backup time (HH:MM)</label
+                      >
                       <input
-                        id="settings-scheduled-backup-enabled"
-                        type="checkbox"
+                        id="settings-scheduled-backup-time"
+                        type="time"
+                        value="03:00"
                       />
-                      Enable scheduled backups
-                    </label>
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-scheduled-backup-frequency"
-                      >Frequency</label
-                    >
-                    <select id="settings-scheduled-backup-frequency">
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly (Sunday)</option>
-                      <option value="monthly">Monthly (1st)</option>
-                    </select>
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-scheduled-backup-time"
-                      >Backup time (HH:MM)</label
-                    >
-                    <input
-                      id="settings-scheduled-backup-time"
-                      type="time"
-                      value="03:00"
-                    />
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-scheduled-backup-password"
-                      >Backup password</label
-                    >
-                    <input
-                      id="settings-scheduled-backup-password"
-                      type="password"
-                      autocomplete="new-password"
-                      placeholder="Leave blank to keep current"
-                    />
-                  </div>
-                  <div class="settings-field-group settings-field-group-inline">
-                    <label class="toggle-label">
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-scheduled-backup-password"
+                        >Backup password</label
+                      >
                       <input
-                        id="settings-scheduled-backup-include-logs"
-                        type="checkbox"
-                        checked
+                        id="settings-scheduled-backup-password"
+                        type="password"
+                        autocomplete="new-password"
+                        placeholder="Leave blank to keep current"
                       />
-                      Include speed test logs
-                    </label>
+                    </div>
+                    <div class="settings-field-group settings-field-group-inline">
+                      <label class="toggle-label">
+                        <input
+                          id="settings-scheduled-backup-include-logs"
+                          type="checkbox"
+                          checked
+                        />
+                        Include speed test logs
+                      </label>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Existing backups -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Saved backups</h3>
-                    <p class="panel-subtext">
-                      Backups stored in the configured backup directory.
-                    </p>
+                <!-- Existing backups -->
+                <div class="user-account-row settings-row-split">
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Saved backups</h3>
+                      <p class="panel-subtext">
+                        Backups stored in the configured backup directory.
+                      </p>
+                    </div>
+                    <button
+                      id="settings-backup-refresh"
+                      class="btn-muted btn-small"
+                      type="button"
+                    >
+                      Refresh
+                    </button>
                   </div>
-                  <button
-                    id="settings-backup-refresh"
-                    class="btn-muted btn-small"
-                    type="button"
-                  >
-                    Refresh
-                  </button>
+                  <div id="backup-list-container">
+                    <p class="panel-subtext" id="backup-list-empty">
+                      No backups found.
+                    </p>
+                    <table id="backup-list-table" class="backup-table hidden">
+                      <thead>
+                        <tr>
+                          <th>Filename</th>
+                          <th>Size</th>
+                          <th>Created</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody id="backup-list-body"></tbody>
+                    </table>
+                  </div>
                 </div>
-                <div id="backup-list-container">
-                  <p class="panel-subtext" id="backup-list-empty">
-                    No backups found.
-                  </p>
-                  <table id="backup-list-table" class="backup-table hidden">
-                    <thead>
-                      <tr>
-                        <th>Filename</th>
-                        <th>Size</th>
-                        <th>Created</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="backup-list-body"></tbody>
-                  </table>
-                </div>
-              </div>
 
-              <!-- Restore backup -->
-              <div class="user-account-row">
-                <div class="user-account-row-head">
-                  <div>
-                    <h3>Restore from backup</h3>
-                    <p class="panel-subtext">
-                      Upload a backup file to restore settings, logs, and
-                      database. This will overwrite current data.
-                    </p>
+                <!-- Restore backup -->
+                <div class="user-account-row settings-row-split">
+                  <div class="user-account-row-head">
+                    <div>
+                      <h3>Restore from backup</h3>
+                      <p class="panel-subtext">
+                        Upload a backup file to restore settings, logs, and
+                        database. This will overwrite current data.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-restore-file">Backup file</label>
-                    <input
-                      id="settings-restore-file"
-                      type="file"
-                      accept=".speedpulse-backup"
-                    />
-                    <p id="settings-restore-file-note" class="panel-subtext">
-                      No backup selected.
-                    </p>
+                  <div class="settings-fields settings-fields-single">
+                    <div class="settings-field-group">
+                      <label for="settings-restore-file">Backup file</label>
+                      <div class="settings-file-picker">
+                        <input
+                          id="settings-restore-file"
+                          class="settings-file-input"
+                          type="file"
+                          accept=".speedpulse-backup"
+                        />
+                      </div>
+                      <p id="settings-restore-file-note" class="panel-subtext">
+                        No backup selected.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-restore-apply"
-                    class="btn-ghost"
-                    type="button"
-                  >
-                    Restore backup
-                  </button>
+                  <div class="settings-actions">
+                    <button
+                      id="settings-restore-apply"
+                      class="btn-ghost"
+                      type="button"
+                    >
+                      Restore backup
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

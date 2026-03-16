@@ -12,7 +12,7 @@
     <script src="/static/vendor/chart.umd.min.js" defer></script>
     <script src="/static/dashboard.js" defer></script>
   </head>
-  <body class="dash-body">
+  <body class="dash-body dashboard-page">
     <div class="app-shell">
       <button
         id="mobile-nav-toggle"
@@ -47,7 +47,6 @@
               d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
             />
           </svg>
-          <p class="brand-user">{{ login_email }}</p>
         </div>
 
         <section class="sidebar-card sidebar-card-account">
@@ -139,6 +138,9 @@
             <button id="run-test" class="btn-primary" type="button">
               Manual speed test
             </button>
+            <p class="topbar-account-email" title="{{ login_email }}">
+              {{ login_email }}
+            </p>
             <a href="/logout" class="btn-ghost">Logout</a>
           </div>
         </header>
@@ -153,6 +155,18 @@
         ></section>
         <section class="status-line">
           <span id="status">Loading...</span>
+        </section>
+
+        <section class="section-jumpbar-wrap" aria-label="Dashboard sections">
+          <nav id="section-jumpbar" class="section-jumpbar">
+            <a class="nav-link nav-link-inline active" href="#overview"
+              >Overview</a
+            >
+            <a class="nav-link nav-link-inline" href="#charts">Charts</a>
+            <a class="nav-link nav-link-inline" href="#latest-results"
+              >Results</a
+            >
+          </nav>
         </section>
 
         <dialog
@@ -377,78 +391,6 @@
           </section>
         </section>
 
-        <section class="panel panel-large panel-wide" id="heatmap-section">
-          <div class="panel-head">
-            <p class="eyebrow">Patterns</p>
-            <h2>Speed by time of day</h2>
-            <p class="panel-subtext">
-              Average download speed (Mbps) by hour and day of week. Darker =
-              faster.
-            </p>
-          </div>
-          <div id="heatmap-grid" class="heatmap-grid"></div>
-          <div class="heatmap-legend">
-            <span class="heatmap-legend-low">Slow</span>
-            <span class="heatmap-legend-bar"></span>
-            <span class="heatmap-legend-high">Fast</span>
-          </div>
-        </section>
-
-        <section class="insights-grid" id="reliability">
-          <section class="panel panel-large sla-panel">
-            <div class="panel-head">
-              <p class="eyebrow">SLA</p>
-              <h2>Threshold compliance</h2>
-              <p id="sla-summary" class="panel-subtext">
-                Based on your configured thresholds across the selected window.
-              </p>
-            </div>
-            <div id="sla-cards" class="sla-cards"></div>
-            <div class="sla-deep-dive">
-              <section class="sla-chart-card">
-                <div class="panel-head sla-section-head">
-                  <div>
-                    <h3>Breach breakdown</h3>
-                    <p id="sla-breakdown-summary" class="panel-subtext">
-                      Which thresholds are failing most often in this window.
-                    </p>
-                  </div>
-                </div>
-                <div class="sla-chart-wrap">
-                  <canvas
-                    id="slaBreakdownChart"
-                    aria-label="Breach breakdown by threshold type"
-                    role="img"
-                  ></canvas>
-                </div>
-              </section>
-              <div id="sla-highlights" class="sla-highlights"></div>
-            </div>
-          </section>
-
-          <section class="panel panel-large">
-            <div class="panel-head">
-              <p class="eyebrow">Incidents</p>
-              <h2>Incident history</h2>
-              <p id="incident-summary" class="panel-subtext">
-                Grouped from consecutive breached tests in the selected range.
-              </p>
-            </div>
-            <div id="incident-list" class="incident-list"></div>
-          </section>
-        </section>
-
-        <section class="panel panel-large panel-wide" id="notification-history">
-          <div class="panel-head">
-            <p class="eyebrow">Activity</p>
-            <h2>Notification history</h2>
-            <p class="panel-subtext">
-              Recent alerts, weekly reports, and health checks that were sent.
-            </p>
-          </div>
-          <div id="notification-log" class="notification-log"></div>
-        </section>
-
         <section class="panel results-panel" id="latest-results">
           <div class="panel-head panel-head-row">
             <div>
@@ -536,6 +478,129 @@
                 <option value="100">100</option>
               </select>
             </div>
+          </div>
+        </section>
+
+        <section class="panel panel-large panel-wide" id="heatmap-section">
+          <div class="panel-head">
+            <p class="eyebrow">Patterns</p>
+            <h2>Speed by time of day</h2>
+            <p class="panel-subtext">
+              Average download speed (Mbps) by hour and day of week. Darker =
+              faster.
+            </p>
+          </div>
+          <div id="heatmap-grid" class="heatmap-grid"></div>
+          <div class="heatmap-legend">
+            <span class="heatmap-legend-low">Slow</span>
+            <span class="heatmap-legend-bar"></span>
+            <span class="heatmap-legend-high">Fast</span>
+          </div>
+        </section>
+
+        <section class="insights-grid" id="reliability">
+          <section class="panel panel-large sla-panel panel-collapsible is-collapsed">
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">SLA</p>
+                <h2>Threshold compliance</h2>
+                <p id="sla-summary" class="panel-subtext">
+                  Based on your configured thresholds across the selected window.
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="sla-panel-body"
+                data-collapse-target="sla-panel-body"
+                data-collapse-name="SLA section"
+                aria-label="Expand SLA section"
+                title="Expand SLA section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div id="sla-panel-body" class="panel-collapse-body" hidden>
+              <div id="sla-cards" class="sla-cards"></div>
+              <div class="sla-deep-dive">
+                <section class="sla-chart-card">
+                  <div class="panel-head sla-section-head">
+                    <div>
+                      <h3>Breach breakdown</h3>
+                      <p id="sla-breakdown-summary" class="panel-subtext">
+                        Which thresholds are failing most often in this window.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="sla-chart-wrap">
+                    <canvas
+                      id="slaBreakdownChart"
+                      aria-label="Breach breakdown by threshold type"
+                      role="img"
+                    ></canvas>
+                  </div>
+                </section>
+                <div id="sla-highlights" class="sla-highlights"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel panel-large panel-collapsible is-collapsed">
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Incidents</p>
+                <h2>Incident history</h2>
+                <p id="incident-summary" class="panel-subtext">
+                  Grouped from consecutive breached tests in the selected range.
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="incident-panel-body"
+                data-collapse-target="incident-panel-body"
+                data-collapse-name="Incidents section"
+                aria-label="Expand incidents section"
+                title="Expand incidents section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div id="incident-panel-body" class="panel-collapse-body" hidden>
+              <div id="incident-list" class="incident-list"></div>
+            </div>
+          </section>
+        </section>
+
+        <section
+          class="panel panel-large panel-wide panel-collapsible is-collapsed"
+          id="notification-history"
+        >
+          <div class="panel-head panel-head-row">
+            <div>
+              <p class="eyebrow">Activity</p>
+              <h2>Notification history</h2>
+              <p class="panel-subtext">
+                Recent alerts, weekly reports, and health checks that were sent.
+              </p>
+            </div>
+            <button
+              class="btn-icon panel-collapse-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="notification-history-body"
+              data-collapse-target="notification-history-body"
+              data-collapse-name="Notification history section"
+              aria-label="Expand notification history section"
+              title="Expand notification history section"
+            >
+              <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+            </button>
+          </div>
+          <div id="notification-history-body" class="panel-collapse-body" hidden>
+            <div id="notification-log" class="notification-log"></div>
           </div>
         </section>
       </main>

@@ -840,6 +840,7 @@ function metricCard(
       ? options.deltaChip
       : null;
   const compact = Boolean(options.compact);
+  const reserveDeltaSpace = Boolean(options.reserveDeltaSpace);
   const card = document.createElement("article");
   card.className = "metric-card";
   if (compact) {
@@ -865,6 +866,11 @@ function metricCard(
     chipEl.className = `metric-delta-chip ${deltaChip.tone || toneClass}`;
     chipEl.textContent = deltaChip.label;
     card.appendChild(chipEl);
+  } else if (reserveDeltaSpace) {
+    const spacer = document.createElement("span");
+    spacer.className = "metric-delta-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    card.appendChild(spacer);
   }
 
   card.appendChild(noteEl);
@@ -997,7 +1003,7 @@ function renderHeroMetrics(data) {
       `${scheduledToday} / ${data.scheduled_tests_per_day || 0}`,
       todayTrend.label,
       todayTrend.tone,
-      { compact: true },
+      { reserveDeltaSpace: true },
     ),
   );
   root.appendChild(
@@ -1006,7 +1012,7 @@ function renderHeroMetrics(data) {
       `${manualToday}`,
       manualTrend.label,
       manualTrend.tone,
-      { compact: true },
+      { reserveDeltaSpace: true },
     ),
   );
 }
@@ -1021,9 +1027,6 @@ function renderHeroMetricsSkeleton(cardCount = 5) {
   for (let index = 0; index < cardCount; index += 1) {
     const card = document.createElement("article");
     card.className = "metric-card metric-card-skeleton";
-    if (index >= 3) {
-      card.classList.add("metric-card-compact");
-    }
     card.setAttribute("aria-hidden", "true");
 
     const title = document.createElement("span");
@@ -1476,17 +1479,29 @@ function chartOptions() {
           boxWidth: 12,
           usePointStyle: true,
           pointStyle: "line",
+          filter: (item, data) => {
+            const dataset = data?.datasets?.[item.datasetIndex];
+            return !dataset?.hideFromLegend;
+          },
         },
       },
     },
     scales: {
       x: {
         ticks: { color: cssVar("--chart-label") },
-        grid: { color: cssVar("--chart-grid") },
+        grid: {
+          color: cssVar("--chart-grid"),
+          lineWidth: 0.8,
+          drawTicks: false,
+        },
       },
       y: {
         ticks: { color: cssVar("--chart-label") },
-        grid: { color: cssVar("--chart-grid") },
+        grid: {
+          color: cssVar("--chart-grid"),
+          lineWidth: 0.8,
+          drawTicks: false,
+        },
       },
     },
   };
@@ -1514,12 +1529,20 @@ function latencyChartOptions() {
   options.scales = {
     x: {
       ticks: { color: cssVar("--chart-label") },
-      grid: { color: cssVar("--chart-grid") },
+      grid: {
+        color: cssVar("--chart-grid"),
+        lineWidth: 0.8,
+        drawTicks: false,
+      },
     },
     y: {
       beginAtZero: true,
       ticks: { color: cssVar("--chart-label") },
-      grid: { color: cssVar("--chart-grid") },
+      grid: {
+        color: cssVar("--chart-grid"),
+        lineWidth: 0.8,
+        drawTicks: false,
+      },
       title: {
         display: true,
         text: "ms",
@@ -1551,7 +1574,11 @@ function thresholdChartOptions() {
       color: cssVar("--chart-label"),
       precision: 0,
     },
-    grid: { color: cssVar("--chart-grid") },
+    grid: {
+      color: cssVar("--chart-grid"),
+      lineWidth: 0.8,
+      drawTicks: false,
+    },
     title: {
       display: true,
       text: "Breaches (count)",
@@ -1603,7 +1630,7 @@ function renderCharts(data) {
   const thresholdDatasets = [];
   if (dlThreshold > 0) {
     thresholdDatasets.push({
-      label: `Min download (${dlThreshold} Mbps)`,
+      label: `Min download threshold (${dlThreshold} Mbps)`,
       data: labels.map(() => dlThreshold),
       borderColor: "rgba(255,107,107,0.6)",
       borderDash: [4, 4],
@@ -1615,7 +1642,7 @@ function renderCharts(data) {
   }
   if (ulThreshold > 0) {
     thresholdDatasets.push({
-      label: `Min upload (${ulThreshold} Mbps)`,
+      label: `Min upload threshold (${ulThreshold} Mbps)`,
       data: labels.map(() => ulThreshold),
       borderColor: "rgba(255,170,80,0.5)",
       borderDash: [4, 4],
@@ -1632,7 +1659,7 @@ function renderCharts(data) {
       labels,
       datasets: [
         {
-          label: "Download",
+          label: "Download (measured)",
           data: download,
           borderColor: cssVar("--chart-download"),
           backgroundColor: cssVar("--chart-download-fill"),
@@ -1641,7 +1668,7 @@ function renderCharts(data) {
           pointRadius: 2,
         },
         {
-          label: "Upload",
+          label: "Upload (measured)",
           data: upload,
           borderColor: cssVar("--chart-upload"),
           backgroundColor: cssVar("--chart-upload-fill"),
@@ -1650,7 +1677,7 @@ function renderCharts(data) {
           pointRadius: 2,
         },
         {
-          label: "Download (7-test avg)",
+          label: "Download trend (7-test avg)",
           data: downloadTrend,
           borderColor: cssVar("--chart-dl-avg"),
           borderDash: [8, 5],
@@ -1659,7 +1686,7 @@ function renderCharts(data) {
           pointRadius: 0,
         },
         {
-          label: "Upload (7-test avg)",
+          label: "Upload trend (7-test avg)",
           data: uploadTrend,
           borderColor: cssVar("--chart-ul-avg"),
           borderDash: [8, 5],
@@ -1723,6 +1750,7 @@ function renderCharts(data) {
                 pointHitRadius: 0,
                 type: "line",
                 yAxisID: "y",
+                hideFromLegend: true,
               },
             ]
           : []),
@@ -1971,21 +1999,36 @@ function renderResultsSkeleton(rowCount = 5) {
 }
 
 function setDashboardLoadingState(isLoading, isInitial = false) {
+  const panelTargets = [
+    byId("latest-results"),
+    byId("heatmap-section"),
+    byId("notification-history"),
+    ...Array.from(document.querySelectorAll("#charts .panel")),
+    ...Array.from(document.querySelectorAll("#reliability .panel")),
+  ].filter(Boolean);
+
   if (isInitial) {
     if (isLoading) {
       renderHeroMetricsSkeleton();
       renderResultsSkeleton();
     }
 
-    byId("latest-results")?.classList.toggle("panel-loading", isLoading);
-    document.querySelectorAll("#charts .panel").forEach((panel) => {
+    panelTargets.forEach((panel) => {
       panel.classList.toggle("panel-loading", isLoading);
+      panel.classList.remove("panel-refreshing");
     });
-    byId("heatmap-section")?.classList.toggle("panel-loading", isLoading);
-    byId("notification-history")?.classList.toggle("panel-loading", isLoading);
+  } else {
+    panelTargets.forEach((panel) => {
+      panel.classList.toggle("panel-refreshing", isLoading);
+      panel.classList.remove("panel-loading");
+    });
   }
 
   byId("hero-metrics")?.classList.toggle("hero-metrics-loading", isLoading);
+  byId("hero-metrics")?.classList.toggle(
+    "hero-metrics-refreshing",
+    isLoading && !isInitial,
+  );
 }
 
 function renderTable() {
@@ -2291,7 +2334,121 @@ async function runSpeedtestNow(serverId = "") {
   }
 }
 
+function prefersReducedMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
+  const instant = Boolean(options.instant) || prefersReducedMotion();
+  const panel = toggle.closest(".panel-collapsible");
+  const sectionName = toggle.dataset.collapseName || "section";
+  const action = collapsed ? "Expand" : "Collapse";
+
+  if (body.dataset.animating === "true") return;
+
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  toggle.setAttribute("aria-label", `${action} ${sectionName}`);
+  toggle.setAttribute("title", `${action} ${sectionName}`);
+  panel?.classList.toggle("is-collapsed", collapsed);
+
+  if (instant) {
+    body.dataset.animating = "false";
+    body.hidden = collapsed;
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    return;
+  }
+
+  if (collapsed) {
+    const startHeight = body.scrollHeight;
+    if (startHeight <= 0) {
+      body.hidden = true;
+      return;
+    }
+
+    body.hidden = false;
+    body.dataset.animating = "true";
+    body.style.overflow = "hidden";
+    body.style.height = `${startHeight}px`;
+    body.style.opacity = "1";
+    body.style.transition = "height 240ms ease, opacity 180ms ease";
+
+    window.requestAnimationFrame(() => {
+      body.style.height = "0px";
+      body.style.opacity = "0";
+    });
+
+    const onCollapseEnd = (event) => {
+      if (event.propertyName !== "height") return;
+      body.hidden = true;
+      body.dataset.animating = "false";
+      body.style.height = "";
+      body.style.opacity = "";
+      body.style.overflow = "";
+      body.style.transition = "";
+      body.removeEventListener("transitionend", onCollapseEnd);
+    };
+
+    body.addEventListener("transitionend", onCollapseEnd);
+    return;
+  }
+
+  body.hidden = false;
+  body.dataset.animating = "true";
+  body.style.overflow = "hidden";
+  body.style.height = "0px";
+  body.style.opacity = "0";
+  body.style.transition = "height 260ms ease, opacity 200ms ease";
+
+  const targetHeight = body.scrollHeight;
+  window.requestAnimationFrame(() => {
+    body.style.height = `${targetHeight}px`;
+    body.style.opacity = "1";
+  });
+
+  const onExpandEnd = (event) => {
+    if (event.propertyName !== "height") return;
+    body.dataset.animating = "false";
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    body.removeEventListener("transitionend", onExpandEnd);
+  };
+
+  body.addEventListener("transitionend", onExpandEnd);
+}
+
+function bindCollapsiblePanels() {
+  document
+    .querySelectorAll(".panel-collapse-toggle[data-collapse-target]")
+    .forEach((toggle) => {
+      const targetId = String(toggle.dataset.collapseTarget || "");
+      const body = byId(targetId);
+      if (!body) return;
+
+      const initiallyCollapsed =
+        body.hasAttribute("hidden") ||
+        toggle.getAttribute("aria-expanded") !== "true";
+      setPanelCollapsedState(toggle, body, initiallyCollapsed, {
+        instant: true,
+      });
+
+      toggle.addEventListener("click", () => {
+        if (body.dataset.animating === "true") return;
+        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+        setPanelCollapsedState(toggle, body, isExpanded);
+      });
+    });
+}
+
 function bindEvents() {
+  bindCollapsiblePanels();
   bindSectionNavHighlight();
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
@@ -2400,6 +2557,7 @@ function setActiveSectionNav(sectionId) {
 function bindSectionNavHighlight() {
   const mainShell = document.querySelector(".main-shell");
   if (!(mainShell instanceof HTMLElement)) return;
+  const jumpbar = byId("section-jumpbar");
 
   const sectionLinks = Array.from(
     document.querySelectorAll("a.nav-link[href^='#']"),
@@ -2415,12 +2573,15 @@ function bindSectionNavHighlight() {
 
   if (sectionLinks.length === 0) return;
 
-  const scrollAnchorOffset = 18;
+  const scrollAnchorOffset = () =>
+    (jumpbar instanceof HTMLElement ? jumpbar.offsetHeight + 12 : 0) + 18;
   const probeOffset = () => Math.min(mainShell.clientHeight * 0.31, 210);
   const switchHysteresis = () =>
     Math.max(72, Math.min(mainShell.clientHeight * 0.16, 140));
+  const topSnapThreshold = () =>
+    Math.max(12, Math.min(scrollAnchorOffset() + 6, 72));
   const sectionTop = (entry) =>
-    Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
+    Math.max(0, entry.section.offsetTop - scrollAnchorOffset());
   const sectionById = new Map(
     sectionLinks.map((entry) => [entry.sectionId, entry]),
   );
@@ -2429,6 +2590,10 @@ function bindSectionNavHighlight() {
   let lastProbeY = 0;
 
   const candidateForProbe = (probeY) => {
+    if (mainShell.scrollTop <= topSnapThreshold()) {
+      return sectionLinks[0].sectionId;
+    }
+
     if (mainShell.scrollTop + mainShell.clientHeight >= mainShell.scrollHeight - 6) {
       return sectionLinks[sectionLinks.length - 1].sectionId;
     }
@@ -2445,6 +2610,16 @@ function bindSectionNavHighlight() {
   };
 
   const recalc = (force = false) => {
+    if (mainShell.scrollTop <= topSnapThreshold()) {
+      const topSectionId = sectionLinks[0].sectionId;
+      if (activeSectionId !== topSectionId || force) {
+        activeSectionId = topSectionId;
+        setActiveSectionNav(activeSectionId);
+      }
+      lastProbeY = mainShell.scrollTop + probeOffset();
+      return;
+    }
+
     const probeY = mainShell.scrollTop + probeOffset();
     let candidate = candidateForProbe(probeY);
 
@@ -2488,7 +2663,10 @@ function bindSectionNavHighlight() {
       event.preventDefault();
       activeSectionId = entry.sectionId;
       setActiveSectionNav(activeSectionId);
-      const targetTop = Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
+      const targetTop = Math.max(
+        0,
+        entry.section.offsetTop - scrollAnchorOffset(),
+      );
       mainShell.scrollTo({ top: targetTop, behavior: "smooth" });
       if (window.history && typeof window.history.replaceState === "function") {
         window.history.replaceState(null, "", `#${entry.sectionId}`);
@@ -2507,7 +2685,7 @@ function bindSectionNavHighlight() {
   if (initialTarget) {
     mainShell.scrollTop = Math.max(
       0,
-      initialTarget.section.offsetTop - scrollAnchorOffset,
+      initialTarget.section.offsetTop - scrollAnchorOffset(),
     );
     activeSectionId = initialTarget.sectionId;
     setActiveSectionNav(activeSectionId);
