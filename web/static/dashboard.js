@@ -16,7 +16,6 @@ let lastHandledRunCompletion = "";
 let completionWatchId = null;
 let completionWatchRequestInFlight = false;
 let lastSeenCompletionSequence = 0;
-let autoRefreshId = null;
 let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
@@ -1972,24 +1971,6 @@ async function loadMetrics() {
   }
 }
 
-function toggleAutoRefresh() {
-  const btn = byId("auto-refresh-toggle");
-  if (autoRefreshId) {
-    clearInterval(autoRefreshId);
-    autoRefreshId = null;
-    if (btn) {
-      btn.textContent = "Auto-refresh: Off";
-      btn.setAttribute("aria-pressed", "false");
-    }
-  } else {
-    autoRefreshId = setInterval(loadMetrics, 60000);
-    if (btn) {
-      btn.textContent = "Auto-refresh: On";
-      btn.setAttribute("aria-pressed", "true");
-    }
-  }
-}
-
 function saveChartAsPng(chartId) {
   const chartMap = {
     speedChart,
@@ -2137,7 +2118,6 @@ async function runSpeedtestNow(serverId = "") {
 }
 
 function bindEvents() {
-  byId("auto-refresh-toggle").addEventListener("click", toggleAutoRefresh);
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
   const defaultServerSelect = byId("server-select");
