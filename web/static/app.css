@@ -379,13 +379,165 @@ select {
   padding: 1rem 1.05rem;
 }
 
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
 .brand {
   font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
 
-.brand-copy,
+.brand-wordmark-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.1rem;
+}
+
+.brand-wordmark-svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.1rem;
+}
+
+.brand-wordmark-speed,
+.brand-wordmark-pulse {
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 66px;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+}
+
+.brand-wordmark-speed {
+  fill: color-mix(in srgb, var(--text) 92%, white 8%);
+  stroke: color-mix(in srgb, var(--bg) 62%, black 38%);
+  stroke-width: 3px;
+  paint-order: stroke fill;
+}
+
+.brand-wordmark-pulse {
+  fill: color-mix(in srgb, var(--chart-download) 86%, var(--text) 14%);
+}
+
+.brand-wordmark-line-base,
+.brand-wordmark-line-runner {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+}
+
+.brand-wordmark-line-base {
+  stroke: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.brand-wordmark-line-runner {
+  stroke: var(--accent);
+  stroke-dasharray: 44 250;
+  stroke-dashoffset: 294;
+  animation: brand-wordmark-pulse-scan 1.45s linear infinite;
+}
+
+@keyframes brand-wordmark-pulse-scan {
+  from {
+    stroke-dashoffset: 294;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-wordmark-line-runner {
+    animation: none;
+  }
+}
+
+.brand-header-logo-only {
+  justify-content: center;
+  width: 100%;
+}
+
+.brand-mark-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.4rem;
+  min-width: 5.4rem;
+  padding: 0.42rem 0.5rem;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background:
+    radial-gradient(
+      120% 120% at 50% 0%,
+      color-mix(in srgb, var(--chart-download) 14%, transparent),
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--surface-strong) 92%, white 8%);
+  box-shadow:
+    0 14px 34px color-mix(in srgb, var(--accent) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 26%, transparent);
+  overflow: visible;
+}
+
+.brand-header-logo-only .brand-mark-shell {
+  width: 100%;
+  min-width: 0;
+  padding: 0.52rem 0.78rem;
+}
+
+.brand-mark-shell::before,
+.brand-mark-shell::after {
+  content: "";
+  position: absolute;
+  inset: -0.22rem;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--chart-download) 30%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.brand-mark-shell::before {
+  animation: none;
+}
+
+.brand-mark-shell::after {
+  animation: none;
+}
+
+.brand-mark {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter:
+    drop-shadow(0 10px 20px color-mix(in srgb, var(--accent) 16%, transparent))
+    drop-shadow(0 0 18px color-mix(in srgb, var(--chart-download) 14%, transparent));
+  transform-origin: 50% 60%;
+  animation: none;
+}
+
+.brand-mark-large {
+  width: 100%;
+}
+
+.brand-mark-shell-large {
+  width: min(18rem, 100%);
+  min-width: 0;
+  margin-inline: auto;
+  padding: 0.62rem 0.92rem;
+  border-radius: 30px;
+}
+
 .sidebar-card p,
 .topbar-text,
 .status-line,
@@ -393,6 +545,13 @@ select {
   margin: 0.35rem 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.brand-user {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 .eyebrow {
@@ -510,13 +669,6 @@ select {
 .schedule-detail-row-stack {
   padding-top: 0.15rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.brand-user {
-  margin: 0.3rem 0 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-  overflow-wrap: anywhere;
 }
 
 .main-shell {
@@ -1943,6 +2095,14 @@ tbody tr:hover td {
 .login-card {
   padding: 1.25rem;
   border-radius: 26px;
+}
+
+.login-brand {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  width: 100%;
 }
 
 .login-form {

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="120" viewBox="0 0 520 120" fill="none">
+  <defs>
+    <linearGradient id="pulseYellow" x1="14" y1="92" x2="360" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB300" />
+      <stop offset="1" stop-color="#FFD95A" />
+    </linearGradient>
+    <linearGradient id="wordBlue" x1="205" y1="20" x2="335" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6FD8FF" />
+      <stop offset="1" stop-color="#1297F0" />
+    </linearGradient>
+    <filter id="logoShadow" x="-6%" y="-22%" width="118%" height="170%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#04121F" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <g filter="url(#logoShadow)">
+    <text
+      x="10"
+      y="68"
+      font-family="'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif"
+      font-size="66"
+      font-style="italic"
+      font-weight="800"
+      letter-spacing="-1.2"
+      fill="#F5F8FF"
+      stroke="#0A1E32"
+      stroke-width="3"
+      paint-order="stroke fill"
+    >
+      Speed<tspan fill="url(#wordBlue)">Pulse</tspan>
+    </text>
+
+    <path
+      d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
+      stroke="url(#pulseYellow)"
+      stroke-opacity="0.35"
+      stroke-width="5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
+      stroke="url(#pulseYellow)"
+      stroke-width="5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-dasharray="44 250"
+      stroke-dashoffset="294"
+    >
+      <animate
+        attributeName="stroke-dashoffset"
+        from="294"
+        to="0"
+        dur="1.45s"
+        repeatCount="indefinite"
+      />
+    </path>
+  </g>
+</svg>

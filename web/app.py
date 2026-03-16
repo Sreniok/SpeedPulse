@@ -28,7 +28,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -61,8 +61,11 @@ from state_store import (
 SCRIPT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 ENV_PATH = SCRIPT_DIR / ".env"
+LOGO_PATH = Path(__file__).parent / "static" / "logo2.svg"
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 TEMPLATES.env.globals["app_version"] = __version__
+_LOGO_VERSION = str(int(LOGO_PATH.stat().st_mtime_ns)) if LOGO_PATH.is_file() else __version__
+TEMPLATES.env.globals["logo_version"] = _LOGO_VERSION
 
 LOGGER = logging.getLogger("speedpulse.web")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -249,6 +252,17 @@ async def lifespan(_: FastAPI):
 
 APP = FastAPI(title="SpeedPulse Dashboard", version=__version__, lifespan=lifespan)
 APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
+
+@APP.get("/logo.svg", include_in_schema=False)
+def app_logo() -> FileResponse:
+    if not LOGO_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Logo not found.")
+    response = FileResponse(LOGO_PATH, media_type="image/svg+xml")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 def _infer_manual_run_stage(line: str) -> str | None:

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/logo.svg?v={{ logo_version }}" type="image/svg+xml" />
     <title>SpeedPulse Login</title>
     <script src="/static/theme-boot.js"></script>
     <link rel="stylesheet" href="/static/app.css" />
@@ -10,7 +11,12 @@
   <body class="login-body">
     <main class="login-shell">
       <section class="login-card">
-        <h1>SpeedPulse</h1>
+        <div class="login-brand">
+          <span class="brand-mark-shell brand-mark-shell-large" aria-hidden="true">
+            <img class="brand-mark brand-mark-large" src="/logo.svg?v={{ logo_version }}" alt="SpeedPulse logo" />
+          </span>
+        </div>
+        <h1>{% if setup_mode %}Create Account{% else %}Sign In{% endif %}</h1>
         {% if setup_mode %}
         <p>Create the first dashboard account to get started.</p>
         {% else %}

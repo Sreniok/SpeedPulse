@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token }}" />
+    <link rel="icon" href="/logo.svg?v={{ logo_version }}" type="image/svg+xml" />
     <title>SpeedPulse Settings</title>
     <script src="/static/theme-boot.js"></script>
     <link rel="stylesheet" href="/static/app.css" />
@@ -27,7 +28,23 @@
       <aside id="sidebar" class="sidebar">
         <div class="brand-lockup">
           <p class="eyebrow">LAN only</p>
-          <div class="brand">SpeedPulse</div>
+          <svg
+            class="brand-wordmark-svg"
+            viewBox="0 0 380 120"
+            role="img"
+            aria-label="SpeedPulse logo"
+          >
+            <text class="brand-wordmark-speed" x="10" y="68">Speed</text>
+            <text class="brand-wordmark-pulse" x="184" y="68">Pulse</text>
+            <path
+              class="brand-wordmark-line-base"
+              d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
+            />
+            <path
+              class="brand-wordmark-line-runner"
+              d="M14 92H78L86 88L94 96L102 89L110 92H252L268 77L278 99L288 86L296 92H360"
+            />
+          </svg>
           <p class="brand-user">{{ login_email }}</p>
         </div>
 
