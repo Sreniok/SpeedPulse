@@ -56,11 +56,15 @@ def run_script(script_name: str) -> None:
         return
 
     log(f"Starting job: {script_name}")
+    child_env = os.environ.copy()
+    if script_name == "CheckSpeed.py":
+        child_env["SPEEDTEST_RUN_SOURCE"] = "scheduled"
     result = subprocess.run(
         [sys.executable, str(script_path)],
         cwd=SCRIPT_DIR,
         capture_output=True,
         text=True,
+        env=child_env,
     )
 
     if result.stdout:

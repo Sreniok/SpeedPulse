@@ -53,6 +53,7 @@ from state_store import (
     get_session_version,
     initialize_state_store,
     load_manual_runtime_state,
+    load_speedtest_completion_state,
     register_failed_login as state_register_failed_login,
     save_manual_runtime_state,
     store_reset_token,
@@ -152,6 +153,16 @@ def _env_int(name: str, default: int) -> int:
 
 def _iso_now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _iso_from_epoch(value: float | int | None) -> str | None:
+    try:
+        epoch = float(value or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if epoch <= 0:
+        return None
+    return datetime.fromtimestamp(epoch).isoformat(timespec="seconds")
 
 
 def _manual_run_snapshot() -> dict:
@@ -320,6 +331,7 @@ def _manual_speedtest_worker(selected_server_id: str = "") -> None:
         _update_manual_run_state(stage="Launching speed test")
         child_env = os.environ.copy()
         child_env["PYTHONUNBUFFERED"] = "1"
+        child_env["SPEEDTEST_RUN_SOURCE"] = "manual"
         if selected_server_id:
             child_env["SPEEDTEST_SERVER_ID"] = selected_server_id
         else:
@@ -2379,6 +2391,21 @@ def speedtest_run_status(request: Request) -> JSONResponse:
     payload = _manual_run_snapshot()
     payload["cooldown_remaining_seconds"] = remaining
     return JSONResponse(payload)
+
+
+@APP.get("/api/run/speedtest/completion")
+def speedtest_completion_status(request: Request) -> JSONResponse:
+    require_session(request)
+    state = load_speedtest_completion_state()
+    return JSONResponse(
+        {
+            "sequence": int(state.get("sequence", 0)),
+            "status": str(state.get("status", "unknown")),
+            "source": str(state.get("source", "unknown")),
+            "completed_at": _iso_from_epoch(state.get("completed_at")),
+            "updated_at": _iso_from_epoch(state.get("updated_at")),
+        }
+    )
 
 
 @APP.post("/api/run/speedtest")

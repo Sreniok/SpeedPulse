@@ -13,6 +13,9 @@ let runModalAutoCloseId = null;
 let runStatusPollId = null;
 let runStatusRequestInFlight = false;
 let lastHandledRunCompletion = "";
+let completionWatchId = null;
+let completionWatchRequestInFlight = false;
+let lastSeenCompletionSequence = 0;
 let autoRefreshId = null;
 let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
@@ -535,6 +538,7 @@ async function syncRunStatus(announceFinal = false) {
           );
           setStatus("Speed test completed");
           await loadMetrics();
+          void syncCompletionWatcher(true);
         } else {
           showMessage(payload.message || "Speed test failed.", "error");
           setStatus(
@@ -542,6 +546,8 @@ async function syncRunStatus(announceFinal = false) {
               ? "Speed test timed out"
               : "Speed test failed",
           );
+          await loadMetrics();
+          void syncCompletionWatcher(true);
         }
       }
 
@@ -565,6 +571,55 @@ function startRunStatusPolling() {
   runStatusPollId = window.setInterval(() => {
     void syncRunStatus(true);
   }, 1200);
+}
+
+async function syncCompletionWatcher(rebaselineOnly = false) {
+  if (completionWatchRequestInFlight) {
+    return;
+  }
+
+  completionWatchRequestInFlight = true;
+  try {
+    const response = await fetch("/api/run/speedtest/completion");
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    const sequence = Number(payload.sequence || 0);
+    if (!Number.isFinite(sequence) || sequence < 0) {
+      return;
+    }
+
+    if (rebaselineOnly || lastSeenCompletionSequence === 0) {
+      lastSeenCompletionSequence = sequence;
+      return;
+    }
+
+    if (sequence > lastSeenCompletionSequence) {
+      lastSeenCompletionSequence = sequence;
+      await loadMetrics();
+    }
+  } catch (error) {
+    // Ignore transient watcher errors.
+  } finally {
+    completionWatchRequestInFlight = false;
+  }
+}
+
+function startCompletionWatcher() {
+  if (completionWatchId) {
+    window.clearInterval(completionWatchId);
+  }
+
+  void syncCompletionWatcher(true);
+  completionWatchId = window.setInterval(() => {
+    void syncCompletionWatcher(false);
+  }, 5000);
 }
 
 function setStatus(text) {
@@ -2306,5 +2361,6 @@ bindEvents();
 void loadServerSettings();
 void syncRunStatus(false);
 loadMetrics();
+startCompletionWatcher();
 renderSidebarContract();
 loadNotificationLog();

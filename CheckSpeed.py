@@ -18,6 +18,7 @@ from pathlib import Path
 
 from config_loader import load_json_config_or_exit
 from logger_setup import get_logger
+from state_store import record_speedtest_completion
 
 log = get_logger("CheckSpeed")
 
@@ -364,6 +365,18 @@ def display_results(config, download, upload, ping, jitter, packet_loss):
     )
 
 
+def persist_completion_event(success):
+    source = os.getenv("SPEEDTEST_RUN_SOURCE", "scheduled").strip().lower()
+    if source not in {"manual", "scheduled"}:
+        source = "scheduled"
+
+    status = "success" if success else "failed"
+    try:
+        record_speedtest_completion(status=status, source=source)
+    except Exception as e:
+        log.warning("Failed to persist completion marker: %s", e)
+
+
 def main():
     """Main execution"""
     config = load_config()
@@ -386,11 +399,23 @@ def main():
 
 
 if __name__ == "__main__":
+    exit_code = 0
     try:
         main()
+    except SystemExit as e:
+        if e.code is None:
+            exit_code = 0
+        elif isinstance(e.code, int):
+            exit_code = e.code
+        else:
+            exit_code = 1
     except KeyboardInterrupt:
         log.warning("Speed test cancelled by user.")
-        sys.exit(1)
+        exit_code = 1
     except Exception as e:
         log.exception("Unexpected error: %s", e)
-        sys.exit(1)
+        exit_code = 1
+    finally:
+        persist_completion_event(exit_code == 0)
+
+    sys.exit(exit_code)

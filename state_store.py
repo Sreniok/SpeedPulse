@@ -71,6 +71,18 @@ def initialize_state_store(default_manual_state: dict) -> None:
             """
         )
         connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS speedtest_completion_state (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              sequence INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL DEFAULT 'unknown',
+              source TEXT NOT NULL DEFAULT 'unknown',
+              completed_at REAL NOT NULL DEFAULT 0,
+              updated_at REAL NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
             "INSERT OR IGNORE INTO metadata(key, value) VALUES ('session_version', '1')"
         )
         connection.execute(
@@ -79,6 +91,13 @@ def initialize_state_store(default_manual_state: dict) -> None:
             VALUES (1, ?, 0)
             """,
             (payload_json,),
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO speedtest_completion_state(
+              id, sequence, status, source, completed_at, updated_at
+            ) VALUES (1, 0, 'unknown', 'unknown', 0, 0)
+            """
         )
         connection.execute(
             """
@@ -274,6 +293,111 @@ def save_manual_runtime_state(payload: dict, last_manual_speedtest_at: float) ->
             """,
             (json.dumps(payload), float(last_manual_speedtest_at)),
         )
+
+
+def load_speedtest_completion_state() -> dict:
+    with _connect() as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS speedtest_completion_state (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              sequence INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL DEFAULT 'unknown',
+              source TEXT NOT NULL DEFAULT 'unknown',
+              completed_at REAL NOT NULL DEFAULT 0,
+              updated_at REAL NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO speedtest_completion_state(
+              id, sequence, status, source, completed_at, updated_at
+            ) VALUES (1, 0, 'unknown', 'unknown', 0, 0)
+            """
+        )
+        row = connection.execute(
+            "SELECT sequence, status, source, completed_at, updated_at FROM speedtest_completion_state WHERE id = 1"
+        ).fetchone()
+
+    if not row:
+        return {
+            "sequence": 0,
+            "status": "unknown",
+            "source": "unknown",
+            "completed_at": 0.0,
+            "updated_at": 0.0,
+        }
+
+    return {
+        "sequence": int(row["sequence"] or 0),
+        "status": str(row["status"] or "unknown"),
+        "source": str(row["source"] or "unknown"),
+        "completed_at": float(row["completed_at"] or 0.0),
+        "updated_at": float(row["updated_at"] or 0.0),
+    }
+
+
+def record_speedtest_completion(status: str, source: str, completed_at: float | None = None) -> dict:
+    import time
+
+    normalized_status = str(status or "failed").strip().lower()
+    if normalized_status not in {"success", "failed"}:
+        normalized_status = "failed"
+
+    normalized_source = str(source or "unknown").strip().lower()
+    if normalized_source not in {"manual", "scheduled"}:
+        normalized_source = "unknown"
+
+    completed_ts = float(completed_at if completed_at is not None else time.time())
+    updated_ts = time.time()
+
+    with _DB_LOCK, _connect() as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS speedtest_completion_state (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              sequence INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL DEFAULT 'unknown',
+              source TEXT NOT NULL DEFAULT 'unknown',
+              completed_at REAL NOT NULL DEFAULT 0,
+              updated_at REAL NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO speedtest_completion_state(
+              id, sequence, status, source, completed_at, updated_at
+            ) VALUES (1, 0, 'unknown', 'unknown', 0, 0)
+            """
+        )
+        row = connection.execute(
+            "SELECT sequence FROM speedtest_completion_state WHERE id = 1"
+        ).fetchone()
+        sequence = (int(row["sequence"] or 0) if row else 0) + 1
+        connection.execute(
+            """
+            INSERT INTO speedtest_completion_state(
+              id, sequence, status, source, completed_at, updated_at
+            ) VALUES (1, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              sequence = excluded.sequence,
+              status = excluded.status,
+              source = excluded.source,
+              completed_at = excluded.completed_at,
+              updated_at = excluded.updated_at
+            """,
+            (sequence, normalized_status, normalized_source, completed_ts, updated_ts),
+        )
+
+    return {
+        "sequence": sequence,
+        "status": normalized_status,
+        "source": normalized_source,
+        "completed_at": completed_ts,
+        "updated_at": updated_ts,
+    }
 
 
 def log_notification(channel: str, event_type: str, summary: str) -> None:
