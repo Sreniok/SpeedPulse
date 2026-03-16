@@ -9,23 +9,21 @@ See .env.example for the recommended credential configuration.
 """
 
 import getpass
-import json
 import smtplib
 import sys
-from pathlib import Path
 
+from config_loader import load_json_config_or_exit
 from credentials_manager import CredentialsManager
 
 
 def load_config():
     """Load configuration from config.json"""
-    config_path = Path(__file__).parent / "config.json"
-    if not config_path.exists():
-        print("❌ config.json not found!")
-        sys.exit(1)
-
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return load_json_config_or_exit(
+        __file__,
+        missing_message="❌ config.json not found!",
+        on_missing=print,
+        exit_code=1,
+    )
 
 
 def test_smtp_connection(smtp_server, smtp_port, email_user, email_pass):

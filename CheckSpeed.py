@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from config_loader import load_json_config_or_exit
 from logger_setup import get_logger
 
 log = get_logger("CheckSpeed")
@@ -23,13 +24,12 @@ log = get_logger("CheckSpeed")
 
 def load_config():
     """Load configuration from config.json"""
-    config_path = Path(__file__).parent / "config.json"
-    if not config_path.exists():
-        log.error("Configuration file not found: config.json")
-        sys.exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json_config_or_exit(
+        __file__,
+        missing_message="Configuration file not found: config.json",
+        on_missing=log.error,
+        exit_code=1,
+    )
 
 
 def write_error_log(config, message):

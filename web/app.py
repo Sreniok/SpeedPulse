@@ -540,6 +540,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     account_cfg = loaded.get("account", {})
     email_cfg = loaded.get("email", {})
     notifications_cfg = loaded.get("notifications", {})
+    thresholds_cfg = loaded.get("thresholds", {})
     scheduling_cfg = loaded.get("scheduling", {})
     backup_cfg = loaded.get("backup", {})
 
@@ -588,6 +589,12 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "ntfy_server": str(notifications_cfg.get("ntfy_server", "https://ntfy.sh")),
             "ntfy_topic": str(notifications_cfg.get("ntfy_topic", "")),
         },
+        "thresholds": {
+            "download_mbps": _safe_float(thresholds_cfg.get("download_mbps", 0), 0.0),
+            "upload_mbps": _safe_float(thresholds_cfg.get("upload_mbps", 0), 0.0),
+            "ping_ms": _safe_float(thresholds_cfg.get("ping_ms", 0), 0.0),
+            "packet_loss_percent": _safe_float(thresholds_cfg.get("packet_loss_percent", 0), 0.0),
+        },
         "contract": {
             "current": {
                 "start_date": str(current_contract.get("start_date", "")),
@@ -630,6 +637,13 @@ def _validate_hhmm(value: str) -> bool:
     hour = int(hour_text)
     minute = int(minute_text)
     return 0 <= hour <= 23 and 0 <= minute <= 59
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_test_times(values: object) -> list[str]:
@@ -2016,6 +2030,21 @@ async def update_notification_settings(request: Request) -> JSONResponse:
             current["reminder_days"] = max(1, int(contract_current.get("reminder_days", 31) or 31))
         except (TypeError, ValueError):
             current["reminder_days"] = 31
+
+    thresholds_payload = payload.get("thresholds", {})
+    if thresholds_payload:
+        thresholds_cfg = config.setdefault("thresholds", {})
+        try:
+            download_floor = float(thresholds_payload.get("download_mbps", thresholds_cfg.get("download_mbps", 0)) or 0)
+            upload_floor = float(thresholds_payload.get("upload_mbps", thresholds_cfg.get("upload_mbps", 0)) or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Download and upload thresholds must be numeric") from None
+
+        if download_floor < 0 or upload_floor < 0:
+            raise HTTPException(status_code=400, detail="Download and upload thresholds must be 0 or higher")
+
+        thresholds_cfg["download_mbps"] = download_floor
+        thresholds_cfg["upload_mbps"] = upload_floor
 
     backup_payload = payload.get("backup", {})
     if backup_payload:

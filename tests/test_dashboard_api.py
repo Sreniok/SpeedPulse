@@ -159,6 +159,62 @@ def test_metrics_payload_includes_sla_and_incidents(api_client):
     assert payload["incidents"][0]["primary_server"] == "Manchester"
 
 
+def test_broadband_threshold_settings_update_metrics_and_alert_thresholds(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    current_settings = client.get("/api/settings/notifications")
+    assert current_settings.status_code == 200
+    settings_payload = current_settings.json()
+
+    update_payload = {
+        "account_name": settings_payload["account"]["name"],
+        "broadband_provider": settings_payload["account"]["provider"],
+        "broadband_account_number": settings_payload["account"]["number"],
+        "smtp_server": settings_payload["email"]["smtp_server"],
+        "smtp_port": settings_payload["email"]["smtp_port"],
+        "smtp_username": settings_payload["email"]["smtp_username"],
+        "smtp_password": "",
+        "email_from": settings_payload["email"]["from"],
+        "send_realtime_alerts": settings_payload["email"]["send_realtime_alerts"],
+        "weekly_report_enabled": settings_payload["notifications"]["weekly_report_enabled"],
+        "weekly_report_time": settings_payload["notifications"]["weekly_report_time"],
+        "test_times": settings_payload["notifications"]["test_times"],
+        "server_id": settings_payload["server_selection_id"],
+        "webhook_enabled": settings_payload["notifications"]["webhook_enabled"],
+        "webhook_url": settings_payload["notifications"]["webhook_url"],
+        "ntfy_enabled": settings_payload["notifications"]["ntfy_enabled"],
+        "ntfy_server": settings_payload["notifications"]["ntfy_server"],
+        "ntfy_topic": settings_payload["notifications"]["ntfy_topic"],
+        "thresholds": {
+            "download_mbps": 555,
+            "upload_mbps": 85,
+        },
+        "contract": settings_payload["contract"],
+        "backup": settings_payload["backup"],
+    }
+
+    save_response = client.post(
+        "/api/settings/notifications",
+        headers={"X-CSRF-Token": csrf_token},
+        json=update_payload,
+    )
+
+    assert save_response.status_code == 200
+    saved_payload = save_response.json()
+    assert saved_payload["thresholds"]["download_mbps"] == 555.0
+    assert saved_payload["thresholds"]["upload_mbps"] == 85.0
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["thresholds"]["download_mbps"] == 555.0
+    assert saved_config["thresholds"]["upload_mbps"] == 85.0
+
+    metrics_response = client.get("/api/metrics?mode=days&days=30")
+    assert metrics_response.status_code == 200
+    metrics_payload = metrics_response.json()
+    assert metrics_payload["thresholds"]["download_mbps"] == 555.0
+    assert metrics_payload["thresholds"]["upload_mbps"] == 85.0
+
+
 def test_notification_email_settings_persist_to_config_and_env(api_client):
     client, _, config_path, env_path, csrf_token = api_client
 

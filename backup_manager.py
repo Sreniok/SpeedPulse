@@ -7,14 +7,13 @@ import io
 import json
 import os
 import re
-import shutil
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from version import __version__
 
@@ -22,6 +21,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 _BACKUP_EXT = ".speedpulse-backup"
 _MANIFEST_NAME = "manifest.json"
+_CONFIG_NAME = "config.json"
+_ENV_NAME = ".env"
+_ENV_BACKUP_NAME = "env_backup.json"
+_RUNTIME_DB_NAME = "runtime_state.sqlite3"
+_STATE_DB_DEFAULT = "Archive/runtime_state.sqlite3"
+_LOG_DIR_NAME = "Log"
+_LOG_PATTERN = "speed_log_week_*.txt"
+_DEFAULT_BACKUP_DIR = "Backups"
+_DEFAULT_MAX_BACKUPS = 10
 _SALT_LENGTH = 16
 _KDF_ITERATIONS = 480_000
 # Only these .env keys are included in backups (secrets like APP_SECRET_KEY
@@ -82,6 +90,52 @@ def _resolve_path(value: str) -> Path:
     return SCRIPT_DIR / p
 
 
+def _load_config(config: dict | None = None) -> dict:
+    """Return provided config or load config.json from SCRIPT_DIR."""
+    if config is not None:
+        return config
+    config_path = SCRIPT_DIR / _CONFIG_NAME
+    if not config_path.is_file():
+        return {}
+    with config_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _runtime_state_db_path() -> Path:
+    raw_path = os.getenv("STATE_DB_PATH", _STATE_DB_DEFAULT).strip()
+    return _resolve_path(raw_path)
+
+
+def _backup_files(backup_dir: Path, *, newest_first: bool) -> list[Path]:
+    return sorted(
+        backup_dir.glob(f"*{_BACKUP_EXT}"),
+        key=lambda file_path: file_path.stat().st_mtime,
+        reverse=newest_first,
+    )
+
+
+def _read_manifest_from_archive(zf: zipfile.ZipFile, names: list[str]) -> dict:
+    if _MANIFEST_NAME not in names:
+        raise ValueError("Invalid backup: manifest not found.")
+    return json.loads(zf.read(_MANIFEST_NAME))
+
+
+def _restore_log_files(zf: zipfile.ZipFile, names: list[str], summary: dict) -> int:
+    log_dir = SCRIPT_DIR / _LOG_DIR_NAME
+    restored_count = 0
+    for name in names:
+        if not (name.startswith(f"{_LOG_DIR_NAME}/") and name.endswith(".txt")):
+            continue
+        safe_name = Path(name).name
+        if not safe_name or ".." in name:
+            summary["warnings"].append(f"Skipped suspicious path: {name}")
+            continue
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / safe_name).write_bytes(zf.read(name))
+        restored_count += 1
+    return restored_count
+
+
 def _read_env_subset(env_path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     if not env_path.is_file():
@@ -116,31 +170,30 @@ def create_backup(password: str, include_logs: bool = True) -> tuple[bytes, str]
 
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # config.json
-        config_path = SCRIPT_DIR / "config.json"
+        config_path = SCRIPT_DIR / _CONFIG_NAME
         if config_path.is_file():
-            zf.write(config_path, "config.json")
-            manifest["files"].append("config.json")
+            zf.write(config_path, _CONFIG_NAME)
+            manifest["files"].append(_CONFIG_NAME)
 
         # .env subset
-        env_path = SCRIPT_DIR / ".env"
+        env_path = SCRIPT_DIR / _ENV_NAME
         env_data = _read_env_subset(env_path)
         if env_data:
-            zf.writestr("env_backup.json", json.dumps(env_data, indent=2))
-            manifest["files"].append("env_backup.json")
+            zf.writestr(_ENV_BACKUP_NAME, json.dumps(env_data, indent=2))
+            manifest["files"].append(_ENV_BACKUP_NAME)
 
         # SQLite database
-        db_raw = os.getenv("STATE_DB_PATH", "Archive/runtime_state.sqlite3").strip()
-        db_path = _resolve_path(db_raw)
+        db_path = _runtime_state_db_path()
         if db_path.is_file():
-            zf.write(db_path, "runtime_state.sqlite3")
-            manifest["files"].append("runtime_state.sqlite3")
+            zf.write(db_path, _RUNTIME_DB_NAME)
+            manifest["files"].append(_RUNTIME_DB_NAME)
 
         # Speed test logs
         if include_logs:
-            log_dir = SCRIPT_DIR / "Log"
+            log_dir = SCRIPT_DIR / _LOG_DIR_NAME
             if log_dir.is_dir():
-                for log_file in sorted(log_dir.glob("speed_log_week_*.txt")):
-                    arcname = f"Log/{log_file.name}"
+                for log_file in sorted(log_dir.glob(_LOG_PATTERN)):
+                    arcname = f"{_LOG_DIR_NAME}/{log_file.name}"
                     zf.write(log_file, arcname)
                     manifest["files"].append(arcname)
 
@@ -156,10 +209,8 @@ def validate_backup(data: bytes, password: str) -> dict:
     """Decrypt and return the manifest without restoring anything."""
     decrypted = _decrypt(data, password)
     with zipfile.ZipFile(io.BytesIO(decrypted), "r") as zf:
-        if _MANIFEST_NAME not in zf.namelist():
-            raise ValueError("Invalid backup: manifest not found.")
-        manifest = json.loads(zf.read(_MANIFEST_NAME))
-    return manifest
+        names = zf.namelist()
+        return _read_manifest_from_archive(zf, names)
 
 
 def restore_backup(data: bytes, password: str) -> dict:
@@ -172,45 +223,30 @@ def restore_backup(data: bytes, password: str) -> dict:
 
     with zipfile.ZipFile(io.BytesIO(decrypted), "r") as zf:
         names = zf.namelist()
-        if _MANIFEST_NAME not in names:
-            raise ValueError("Invalid backup: manifest not found.")
-
-        manifest = json.loads(zf.read(_MANIFEST_NAME))
-        summary["manifest"] = manifest
+        summary["manifest"] = _read_manifest_from_archive(zf, names)
 
         # config.json
-        if "config.json" in names:
-            content = zf.read("config.json")
+        if _CONFIG_NAME in names:
+            content = zf.read(_CONFIG_NAME)
             json.loads(content)  # validate JSON
-            (SCRIPT_DIR / "config.json").write_bytes(content)
-            summary["restored"].append("config.json")
+            (SCRIPT_DIR / _CONFIG_NAME).write_bytes(content)
+            summary["restored"].append(_CONFIG_NAME)
 
         # .env subset — merge into existing .env, preserving security tokens
-        if "env_backup.json" in names:
-            restored_env = json.loads(zf.read("env_backup.json"))
+        if _ENV_BACKUP_NAME in names:
+            restored_env = json.loads(zf.read(_ENV_BACKUP_NAME))
             _merge_env_values(restored_env)
             summary["restored"].append(".env settings")
 
         # SQLite database
-        if "runtime_state.sqlite3" in names:
-            db_raw = os.getenv("STATE_DB_PATH", "Archive/runtime_state.sqlite3").strip()
-            db_path = _resolve_path(db_raw)
+        if _RUNTIME_DB_NAME in names:
+            db_path = _runtime_state_db_path()
             db_path.parent.mkdir(parents=True, exist_ok=True)
-            db_path.write_bytes(zf.read("runtime_state.sqlite3"))
-            summary["restored"].append("runtime_state.sqlite3")
+            db_path.write_bytes(zf.read(_RUNTIME_DB_NAME))
+            summary["restored"].append(_RUNTIME_DB_NAME)
 
         # Speed test logs
-        log_dir = SCRIPT_DIR / "Log"
-        log_count = 0
-        for name in names:
-            if name.startswith("Log/") and name.endswith(".txt"):
-                safe_name = Path(name).name
-                if not safe_name or ".." in name:
-                    summary["warnings"].append(f"Skipped suspicious path: {name}")
-                    continue
-                log_dir.mkdir(parents=True, exist_ok=True)
-                (log_dir / safe_name).write_bytes(zf.read(name))
-                log_count += 1
+        log_count = _restore_log_files(zf, names, summary)
         if log_count:
             summary["restored"].append(f"{log_count} speed log files")
 
@@ -223,7 +259,7 @@ def _merge_env_values(restored: dict[str, str]) -> None:
     Only keys in ``_ENV_KEYS_TO_BACKUP`` are written.  Security tokens
     (APP_SECRET_KEY, AUTH_SALT, etc.) are never touched.
     """
-    env_path = SCRIPT_DIR / ".env"
+    env_path = SCRIPT_DIR / _ENV_NAME
     lines: list[str] = []
     if env_path.is_file():
         lines = env_path.read_text(encoding="utf-8").splitlines()
@@ -256,14 +292,8 @@ def _merge_env_values(restored: dict[str, str]) -> None:
 
 
 def _backup_dir(config: dict | None = None) -> Path:
-    if config is None:
-        config_path = SCRIPT_DIR / "config.json"
-        if config_path.is_file():
-            with config_path.open("r", encoding="utf-8") as f:
-                config = json.load(f)
-        else:
-            config = {}
-    raw = config.get("backup", {}).get("backup_directory", "Backups")
+    loaded_config = _load_config(config)
+    raw = loaded_config.get("backup", {}).get("backup_directory", _DEFAULT_BACKUP_DIR)
     return _resolve_path(raw)
 
 
@@ -280,7 +310,8 @@ def save_backup_to_path(
     dest = backup_dir / filename
     dest.write_bytes(encrypted_bytes)
 
-    max_backups = int((config or {}).get("backup", {}).get("max_backups", 10))
+    loaded_config = _load_config(config)
+    max_backups = int(loaded_config.get("backup", {}).get("max_backups", _DEFAULT_MAX_BACKUPS))
     _enforce_max_backups(backup_dir, max_backups)
 
     return dest
@@ -293,7 +324,7 @@ def list_backups(config: dict | None = None) -> list[dict]:
         return []
 
     result: list[dict] = []
-    for p in sorted(backup_dir.glob(f"*{_BACKUP_EXT}"), key=lambda f: f.stat().st_mtime, reverse=True):
+    for p in _backup_files(backup_dir, newest_first=True):
         stat = p.stat()
         result.append({
             "filename": p.name,
@@ -331,7 +362,7 @@ def delete_backup(filename: str, config: dict | None = None) -> bool:
 def _enforce_max_backups(backup_dir: Path, max_backups: int) -> None:
     if max_backups <= 0:
         return
-    files = sorted(backup_dir.glob(f"*{_BACKUP_EXT}"), key=lambda f: f.stat().st_mtime)
+    files = _backup_files(backup_dir, newest_first=False)
     while len(files) > max_backups:
         oldest = files.pop(0)
         oldest.unlink(missing_ok=True)
@@ -349,11 +380,7 @@ def run_scheduled_backup() -> str:
     if not password or len(password) < 6:
         return "Scheduled backup skipped: BACKUP_PASSWORD not set or too short (min 6 chars)."
 
-    config_path = SCRIPT_DIR / "config.json"
-    config: dict = {}
-    if config_path.is_file():
-        with config_path.open("r", encoding="utf-8") as f:
-            config = json.load(f)
+    config = _load_config()
 
     backup_cfg = config.get("backup", {})
     include_logs = backup_cfg.get("scheduled_backup_include_logs", True)

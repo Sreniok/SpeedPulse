@@ -5,7 +5,6 @@ Sends weekly speed test reports via email with charts and statistics
 Uses SMTP credentials from environment variables (.env in Docker)
 """
 
-import json
 import os
 import smtplib
 import subprocess
@@ -17,6 +16,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+from config_loader import load_json_config
 from log_parser import parse_weekly_log_file
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
@@ -33,9 +33,7 @@ def get_iso_week(date=None):
 
 def load_config():
     """Load configuration from config.json"""
-    config_path = Path(__file__).parent / "config.json"
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return load_json_config(__file__)
 
 
 def parse_log_file(log_file):

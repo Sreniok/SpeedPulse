@@ -342,6 +342,7 @@ function populateSettingsForm(payload) {
   const account = payload.account || {};
   const email = payload.email || {};
   const notifications = payload.notifications || {};
+  const thresholds = payload.thresholds || {};
   const contract = payload.contract || {};
   const currentContract = contract.current || {};
   settingsServerSelectionId = String(payload.server_selection_id || "");
@@ -362,6 +363,10 @@ function populateSettingsForm(payload) {
   byId("settings-contract-download").value =
     currentContract.download_mbps || "";
   byId("settings-contract-upload").value = currentContract.upload_mbps || "";
+  byId("settings-threshold-download").value =
+    thresholds.download_mbps ?? "";
+  byId("settings-threshold-upload").value =
+    thresholds.upload_mbps ?? "";
   byId("settings-contract-reminder").checked = Boolean(
     currentContract.reminder_enabled,
   );
@@ -459,6 +464,10 @@ function collectSettingsPayload() {
     ntfy_enabled: byId("settings-ntfy-enabled").checked,
     ntfy_server: byId("settings-ntfy-server").value.trim(),
     ntfy_topic: byId("settings-ntfy-topic").value.trim(),
+    thresholds: {
+      download_mbps: Number(byId("settings-threshold-download").value) || 0,
+      upload_mbps: Number(byId("settings-threshold-upload").value) || 0,
+    },
     contract: {
       current: {
         start_date: byId("settings-contract-start").value,

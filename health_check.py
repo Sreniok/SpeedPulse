@@ -4,7 +4,6 @@ health_check.py - System Health Monitoring
 Performs daily health checks and sends email alerts when issues are detected
 """
 
-import json
 import os
 import smtplib
 import sys
@@ -13,18 +12,18 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+from config_loader import load_json_config_or_exit
 from mail_settings import load_mail_settings
 
 
 def load_config():
     """Load configuration from config.json"""
-    config_path = Path(__file__).parent / "config.json"
-    if not config_path.exists():
-        print("❌ Configuration file not found: config.json")
-        sys.exit(1)
-
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return load_json_config_or_exit(
+        __file__,
+        missing_message="❌ Configuration file not found: config.json",
+        on_missing=print,
+        exit_code=1,
+    )
 
 
 def check_disk_space(path, min_gb=1.0):

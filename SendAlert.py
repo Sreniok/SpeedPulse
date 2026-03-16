@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+from config_loader import load_json_config
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
 from version import USER_AGENT
@@ -40,9 +41,7 @@ def _validate_outbound_url(url: str) -> None:
 
 def load_config():
     """Load configuration from config.json"""
-    config_path = Path(__file__).parent / "config.json"
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return load_json_config(__file__)
 
 
 def check_cooldown(cooldown_file, cooldown_minutes):
