@@ -1,4 +1,3 @@
-const themeStorageKey = "speedpulse-theme";
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
@@ -15,6 +14,7 @@ const broadbandProviders = new Set([
 ]);
 let settingsServerSelectionId = "";
 let savedBackupPasswordAvailable = false;
+let messageTimeoutId = 0;
 
 function byId(id) {
   return document.getElementById(id);
@@ -41,44 +41,118 @@ function populateSelectOptions(select, options, selectedId) {
 
 function showMessage(text, kind = "info") {
   const element = byId("message");
+  if (!element) return;
+
+  if (messageTimeoutId) {
+    window.clearTimeout(messageTimeoutId);
+    messageTimeoutId = 0;
+  }
+
   element.textContent = text;
   element.classList.remove("hidden", "info", "success", "warning", "error");
   element.classList.add(kind);
+  element.setAttribute("aria-hidden", "false");
+
+  const timeoutMs =
+    kind === "error" ? 8000 : kind === "warning" ? 6000 : 4500;
+  messageTimeoutId = window.setTimeout(() => {
+    clearMessage();
+  }, timeoutMs);
 }
 
 function clearMessage() {
   const element = byId("message");
+  if (!element) return;
+
+  if (messageTimeoutId) {
+    window.clearTimeout(messageTimeoutId);
+    messageTimeoutId = 0;
+  }
+
   element.textContent = "";
+  element.classList.remove("info", "success", "warning", "error");
   element.classList.add("hidden");
+  element.setAttribute("aria-hidden", "true");
 }
 
-function preferredTheme() {
-  const stored = window.localStorage.getItem(themeStorageKey);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
+function themeDisplayName(themeApi, themeId) {
+  return themeApi?.themeMap?.[themeId]?.name || "Default";
 }
 
-function applyTheme(theme, persist = true) {
-  document.documentElement.dataset.theme = theme;
-  document.body.dataset.theme = theme;
+function renderThemeSummary(preferences) {
+  const summary = byId("settings-theme-summary");
+  const themeApi = window.SpeedPulseTheme;
+  if (!summary || !themeApi) return;
 
-  const button = byId("theme-toggle");
-  if (button) {
-    button.textContent = theme === "dark" ? "Light mode" : "Dark mode";
-    button.setAttribute("aria-pressed", String(theme === "light"));
+  const activeThemeName = themeDisplayName(themeApi, preferences.activeTheme);
+  const lightThemeName = themeDisplayName(themeApi, preferences.lightTheme);
+  const darkThemeName = themeDisplayName(themeApi, preferences.darkTheme);
+
+  if (preferences.mode === "system") {
+    summary.textContent =
+      `System mode is active and currently using ${activeThemeName}. ` +
+      `Saved light palette: ${lightThemeName}. Saved dark palette: ${darkThemeName}.`;
+    return;
   }
 
-  if (persist) {
-    window.localStorage.setItem(themeStorageKey, theme);
+  if (preferences.mode === "light") {
+    summary.textContent =
+      `Light mode is active with ${lightThemeName}. ` +
+      `If you switch back to System or Dark later, ${darkThemeName} is ready for dark mode.`;
+    return;
   }
+
+  summary.textContent =
+    `Dark mode is active with ${darkThemeName}. ` +
+    `If you switch back to System or Light later, ${lightThemeName} is ready for light mode.`;
 }
 
-function toggleTheme() {
-  const nextTheme =
-    document.documentElement.dataset.theme === "light" ? "dark" : "light";
-  applyTheme(nextTheme);
+function initializeTheme() {
+  const themeApi = window.SpeedPulseTheme;
+  const modeSelect = byId("settings-theme-mode");
+  const lightSelect = byId("settings-theme-light");
+  const darkSelect = byId("settings-theme-dark");
+  if (!themeApi || !modeSelect || !lightSelect || !darkSelect) return;
+
+  populateSelectOptions(
+    lightSelect,
+    themeApi.lightThemes.map((theme) => ({
+      id: theme.id,
+      label: theme.name,
+    })),
+    themeApi.currentPreferences().lightTheme,
+  );
+  populateSelectOptions(
+    darkSelect,
+    themeApi.darkThemes.map((theme) => ({
+      id: theme.id,
+      label: theme.name,
+    })),
+    themeApi.currentPreferences().darkTheme,
+  );
+
+  const syncControls = (preferences = themeApi.currentPreferences()) => {
+    modeSelect.value = preferences.mode;
+    lightSelect.value = preferences.lightTheme;
+    darkSelect.value = preferences.darkTheme;
+    renderThemeSummary(preferences);
+  };
+
+  syncControls(themeApi.currentPreferences());
+
+  modeSelect.addEventListener("change", () => {
+    syncControls(themeApi.setMode(modeSelect.value));
+  });
+  lightSelect.addEventListener("change", () => {
+    syncControls(themeApi.setTheme("light", lightSelect.value));
+  });
+  darkSelect.addEventListener("change", () => {
+    syncControls(themeApi.setTheme("dark", darkSelect.value));
+  });
+
+  document.addEventListener("speedpulse:themechange", (event) => {
+    syncControls(event.detail || themeApi.currentPreferences());
+  });
 }
 
 function toggleNotificationFieldState() {
@@ -747,7 +821,6 @@ async function endCurrentContract() {
 }
 
 function bindEvents() {
-  byId("theme-toggle").addEventListener("click", toggleTheme);
   bindMobileNav();
   settingsSaveButtons().forEach((button) => {
     button.addEventListener("click", () => {
@@ -1158,7 +1231,7 @@ function bindMobileNav() {
   });
 }
 
-applyTheme(preferredTheme(), false);
+initializeTheme();
 bindEvents();
 void loadNotificationSettings();
 void loadScheduledServerOptions();

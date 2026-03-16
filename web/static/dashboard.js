@@ -18,8 +18,6 @@ let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
 let serverOptions = [];
-
-const themeStorageKey = "speedpulse-theme";
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
@@ -573,17 +571,42 @@ function setStatus(text) {
   byId("status").textContent = text;
 }
 
+let messageTimeoutId = 0;
+
 function showMessage(text, kind = "info") {
   const element = byId("message");
+  if (!element) return;
+
+  if (messageTimeoutId) {
+    window.clearTimeout(messageTimeoutId);
+    messageTimeoutId = 0;
+  }
+
   element.textContent = text;
   element.classList.remove("hidden", "info", "success", "warning", "error");
   element.classList.add(kind);
+  element.setAttribute("aria-hidden", "false");
+
+  const timeoutMs =
+    kind === "error" ? 8000 : kind === "warning" ? 6000 : 4500;
+  messageTimeoutId = window.setTimeout(() => {
+    clearMessage();
+  }, timeoutMs);
 }
 
 function clearMessage() {
   const element = byId("message");
+  if (!element) return;
+
+  if (messageTimeoutId) {
+    window.clearTimeout(messageTimeoutId);
+    messageTimeoutId = 0;
+  }
+
   element.textContent = "";
+  element.classList.remove("info", "success", "warning", "error");
   element.classList.add("hidden");
+  element.setAttribute("aria-hidden", "true");
 }
 
 function safeFixed(value, digits = 2) {
@@ -597,38 +620,49 @@ function cssVar(name) {
     .trim();
 }
 
-function preferredTheme() {
-  const stored = window.localStorage.getItem(themeStorageKey);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
+function withAlpha(color, alpha) {
+  const normalized = String(color || "").trim();
+  if (!normalized) return color;
+
+  if (normalized.startsWith("#")) {
+    let hex = normalized.slice(1);
+    if (hex.length === 3) {
+      hex = hex
+        .split("")
+        .map((char) => char + char)
+        .join("");
+    }
+    if (hex.length >= 6) {
+      const r = Number.parseInt(hex.slice(0, 2), 16);
+      const g = Number.parseInt(hex.slice(2, 4), 16);
+      const b = Number.parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+  }
+
+  const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const [r = "0", g = "0", b = "0"] = rgbMatch[1]
+      .split(",")
+      .map((part) => part.trim());
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  return normalized;
 }
 
-function applyTheme(theme, persist = true) {
-  document.documentElement.dataset.theme = theme;
-  document.body.dataset.theme = theme;
-
-  const button = byId("theme-toggle");
-  if (button) {
-    button.textContent = theme === "dark" ? "Light mode" : "Dark mode";
-    button.setAttribute("aria-pressed", String(theme === "light"));
-  }
-
-  if (persist) {
-    window.localStorage.setItem(themeStorageKey, theme);
-  }
-
-  if (currentPayload) {
-    renderSlaPanel(currentPayload);
-    renderCharts(currentPayload);
-  }
+function cssAlpha(name, opacityPercent) {
+  return withAlpha(cssVar(name), opacityPercent / 100);
 }
 
-function toggleTheme() {
-  const nextTheme =
-    document.documentElement.dataset.theme === "light" ? "dark" : "light";
-  applyTheme(nextTheme);
+function initializeTheme() {
+  const themeApi = window.SpeedPulseTheme;
+  if (!themeApi) return;
+  const { activeTheme } = themeApi.currentPreferences();
+  document.documentElement.dataset.theme = activeTheme;
+  if (document.body) {
+    document.body.dataset.theme = activeTheme;
+  }
 }
 
 function healthyLabel(row) {
@@ -994,10 +1028,10 @@ function renderSlaBreakdown(data, summaryElement) {
         {
           data: values,
           backgroundColor: [
-            "rgba(24, 182, 255, 0.36)",
-            "rgba(255, 178, 36, 0.36)",
-            "rgba(255, 123, 140, 0.36)",
-            "rgba(255, 212, 107, 0.32)",
+            cssAlpha("--chart-download", 36),
+            cssAlpha("--chart-upload", 36),
+            cssAlpha("--chart-ping", 36),
+            cssAlpha("--chart-loss", 32),
           ],
           borderColor: [
             cssVar("--chart-download"),
@@ -1549,10 +1583,10 @@ function renderCharts(data) {
             Number(breaches.packet_loss || 0),
           ],
           backgroundColor: [
-            "rgba(24, 182, 255, 0.42)",
-            "rgba(255, 178, 36, 0.42)",
-            "rgba(255, 123, 140, 0.42)",
-            "rgba(255, 212, 107, 0.42)",
+            cssAlpha("--chart-download", 42),
+            cssAlpha("--chart-upload", 42),
+            cssAlpha("--chart-ping", 42),
+            cssAlpha("--chart-loss", 42),
           ],
           borderColor: [
             cssVar("--chart-download"),
@@ -2048,7 +2082,6 @@ async function runSpeedtestNow(serverId = "") {
 }
 
 function bindEvents() {
-  byId("theme-toggle").addEventListener("click", toggleTheme);
   byId("auto-refresh-toggle").addEventListener("click", toggleAutoRefresh);
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
@@ -2260,7 +2293,14 @@ async function loadNotificationLog() {
   }
 }
 
-applyTheme(preferredTheme(), false);
+document.addEventListener("speedpulse:themechange", () => {
+  if (currentPayload) {
+    renderSlaPanel(currentPayload);
+    renderCharts(currentPayload);
+  }
+});
+
+initializeTheme();
 bindSorting();
 bindEvents();
 void loadServerSettings();

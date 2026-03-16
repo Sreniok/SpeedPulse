@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token }}" />
     <title>SpeedPulse Settings</title>
+    <script src="/static/theme-boot.js"></script>
     <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/theme.js" defer></script>
     <script src="/static/settings.js" defer></script>
   </head>
-  <body class="dash-body" data-theme="dark">
+  <body class="dash-body">
     <div class="app-shell">
       <button
         id="mobile-nav-toggle"
@@ -57,6 +59,7 @@
 
         <nav class="nav-block nav-block-sections">
           <p class="eyebrow">Sections</p>
+          <a class="nav-link-section" href="#section-appearance">Appearance</a>
           <a class="nav-link-section" href="#section-user">User account</a>
           <a class="nav-link-section" href="#section-broadband">Broadband</a>
           <a class="nav-link-section" href="#section-schedule">Schedule</a>
@@ -74,14 +77,6 @@
           </div>
 
           <div class="topbar-controls">
-            <button
-              id="theme-toggle"
-              class="btn-muted"
-              type="button"
-              aria-pressed="false"
-            >
-              Light mode
-            </button>
             <a href="/" class="btn-muted">Back to dashboard</a>
             <a href="/logout" class="btn-ghost">Logout</a>
           </div>
@@ -92,7 +87,62 @@
           class="message hidden"
           role="status"
           aria-live="polite"
+          aria-atomic="true"
+          aria-hidden="true"
         ></section>
+
+        <section class="settings-grid settings-grid-stack">
+          <article id="section-appearance" class="panel settings-card">
+            <div class="panel-head">
+              <p class="eyebrow">Appearance</p>
+              <h2>Theme</h2>
+              <p class="panel-subtext">
+                Choose whether SpeedPulse follows your device theme or always
+                uses a fixed light or dark palette. This preference is saved on
+                this browser only.
+              </p>
+            </div>
+            <div class="settings-fields settings-fields-split">
+              <div class="settings-field-group">
+                <label for="settings-theme-mode">Mode</label>
+                <select id="settings-theme-mode">
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+                <p class="panel-subtext">
+                  System mode switches automatically with your device
+                  preference.
+                </p>
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-theme-light">Light palette</label>
+                <select
+                  id="settings-theme-light"
+                  aria-describedby="settings-theme-light-note"
+                ></select>
+                <p id="settings-theme-light-note" class="panel-subtext">
+                  Used in Light mode and when System mode detects a light
+                  preference.
+                </p>
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-theme-dark">Dark palette</label>
+                <select
+                  id="settings-theme-dark"
+                  aria-describedby="settings-theme-dark-note"
+                ></select>
+                <p id="settings-theme-dark-note" class="panel-subtext">
+                  Used in Dark mode and when System mode detects a dark
+                  preference.
+                </p>
+              </div>
+            </div>
+            <p id="settings-theme-summary" class="settings-theme-summary">
+              Loading theme settings...
+            </p>
+          </article>
+        </section>
 
         <!-- ── User Account ────────────────────────────────── -->
         <section class="settings-grid settings-grid-stack">
