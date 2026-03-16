@@ -547,6 +547,34 @@ def _resolve_login_email(config: dict | None = None) -> str:
     return ""
 
 
+def _detected_account_network_identity(
+    config: dict,
+    entries: list[dict] | None = None,
+) -> dict[str, str]:
+    account_cfg = config.get("account", {})
+    detected_provider = str(account_cfg.get("provider", "") or "").strip()
+    detected_ip = str(account_cfg.get("ip_address", "") or "").strip()
+
+    source_entries = entries
+    if source_entries is None:
+        log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
+        source_entries = load_all_log_entries(log_dir)
+
+    if source_entries:
+        latest = source_entries[-1]
+        latest_provider = str(latest.get("isp", "") or "").strip()
+        latest_ip = str(latest.get("ip_address", "") or "").strip()
+        if latest_provider:
+            detected_provider = latest_provider
+        if latest_ip:
+            detected_ip = latest_ip
+
+    return {
+        "provider": detected_provider,
+        "ip_address": detected_ip,
+    }
+
+
 def dashboard_settings_payload(config: dict | None = None) -> dict:
     loaded = config or load_config()
     account_cfg = loaded.get("account", {})
@@ -570,6 +598,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     contract_history = contract_cfg.get("history", [])
     login_email = _resolve_login_email(loaded)
     notification_email = _resolve_notification_email(loaded)
+    detected_identity = _detected_account_network_identity(loaded)
 
     return {
         "login_email": login_email,
@@ -579,7 +608,8 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
         "account": {
             "name": str(account_cfg.get("name", "")),
             "number": str(account_cfg.get("number", "")),
-            "provider": str(account_cfg.get("provider", "")),
+            "provider": detected_identity["provider"],
+            "ip_address": detected_identity["ip_address"],
         },
         "server_selection_id": str(loaded.get("speedtest", {}).get("server_id", "") or ""),
         "email": {
@@ -1375,9 +1405,12 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
     scheduling = config.get("scheduling", {})
     log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
     entries = load_all_log_entries(log_dir)
+    detected_identity = _detected_account_network_identity(config, entries=entries)
     now = datetime.now()
     scheduled_tests_per_day = len(scheduling.get("test_times", []))
     today_entries = [entry for entry in entries if entry["timestamp"].date() == now.date()]
+    today_manual_entries = [entry for entry in today_entries if str(entry.get("source", "")).lower() == "manual"]
+    today_scheduled_entries = [entry for entry in today_entries if str(entry.get("source", "")).lower() != "manual"]
 
     recent_entries = _filter_entries_for_mode(entries, now, days, mode)
 
@@ -1439,6 +1472,7 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
             "jitter_ms": entry["jitter_ms"],
             "packet_loss_percent": entry["packet_loss_percent"],
             "server": entry.get("server", "Unknown"),
+            "source": entry.get("source", "unknown"),
             "status": "Completed",
             "healthy": _entry_is_healthy(entry, thresholds),
         }
@@ -1453,6 +1487,10 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
         "total_tests": len(recent_entries),
         "scheduled_tests_per_day": scheduled_tests_per_day,
         "today_tests": len(today_entries),
+        "today_scheduled_tests": len(today_scheduled_entries),
+        "today_manual_tests": len(today_manual_entries),
+        "detected_provider": detected_identity["provider"],
+        "detected_ip_address": detected_identity["ip_address"],
         "averages": {
             "download_mbps": avg(download_values),
             "upload_mbps": avg(upload_values),
@@ -1867,6 +1905,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
 
     config = load_config()
     account = config.get("account", {})
+    detected_identity = _detected_account_network_identity(config)
 
     response = TEMPLATES.TemplateResponse(
         request,
@@ -1876,7 +1915,8 @@ def dashboard_page(request: Request) -> HTMLResponse:
             "login_email": session["login_email"],
             "account_name": account.get("name", "N/A"),
             "account_number": account.get("number", "N/A"),
-            "account_provider": account.get("provider", ""),
+            "account_provider": detected_identity["provider"],
+            "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
         },
     )
@@ -1894,6 +1934,7 @@ def settings_page(request: Request) -> HTMLResponse:
 
     config = load_config()
     account = config.get("account", {})
+    detected_identity = _detected_account_network_identity(config)
 
     response = TEMPLATES.TemplateResponse(
         request,
@@ -1903,7 +1944,8 @@ def settings_page(request: Request) -> HTMLResponse:
             "login_email": session["login_email"],
             "account_name": account.get("name", "N/A"),
             "account_number": account.get("number", "N/A"),
-            "account_provider": account.get("provider", ""),
+            "account_provider": detected_identity["provider"],
+            "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
         },
     )
@@ -2002,8 +2044,12 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     notifications_cfg = config.setdefault("notifications", {})
     speedtest_cfg = config.setdefault("speedtest", {})
 
+    detected_identity = _detected_account_network_identity(config)
+    effective_provider = detected_identity["provider"] or broadband_provider
+
     account_cfg["name"] = account_name
-    account_cfg["provider"] = broadband_provider
+    account_cfg["provider"] = effective_provider
+    account_cfg["ip_address"] = detected_identity["ip_address"]
     account_cfg["number"] = broadband_account_number
 
     email_cfg["smtp_server"] = smtp_server

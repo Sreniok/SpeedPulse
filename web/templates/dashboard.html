@@ -53,7 +53,12 @@
         <section class="sidebar-card sidebar-card-account">
           <p class="eyebrow">Account</p>
           <strong>{{ account_name }}</strong>
-          <p>{{ account_provider or "Provider not set" }}</p>
+          <p id="sidebar-account-provider">
+            {{ account_provider or "Provider not detected yet" }}
+          </p>
+          <p id="sidebar-account-ip">
+            IP: {{ account_ip_address or "Not detected yet" }}
+          </p>
           {% if account_number and account_number != 'N/A' and
           account_number|length > 4 %}
           <p>

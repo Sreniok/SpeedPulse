@@ -144,6 +144,7 @@ def normalize_speedtest_result(raw_data):
     if isinstance(raw_data.get("download"), dict) and "bandwidth" in raw_data["download"]:
         server = raw_data.get("server", {})
         ping_data = raw_data.get("ping", {})
+        interface = raw_data.get("interface", {})
 
         return {
             "download_bps": float(raw_data["download"].get("bandwidth", 0.0)) * 8,
@@ -155,6 +156,9 @@ def normalize_speedtest_result(raw_data):
             "server_location": server.get("location") or server.get("country", "Unknown"),
             "server_id": str(server.get("id", "N/A")),
             "isp": raw_data.get("isp", "Unknown"),
+            "external_ip": interface.get("externalIp")
+            or interface.get("ip")
+            or "N/A",
             "result_url": raw_data.get("result", {}).get("url") or "N/A",
         }
 
@@ -173,6 +177,7 @@ def normalize_speedtest_result(raw_data):
             "server_location": server.get("country", "Unknown"),
             "server_id": str(server.get("id", "N/A")),
             "isp": client.get("isp", "Unknown"),
+            "external_ip": client.get("ip", "N/A"),
             "result_url": raw_data.get("share") or "N/A",
         }
 
@@ -266,6 +271,9 @@ def log_result(config, result):
     """Log speed test result to weekly log file"""
     timestamp = datetime.now()
     week_num = get_week_number()
+    run_source = os.getenv("SPEEDTEST_RUN_SOURCE", "scheduled").strip().lower()
+    if run_source not in {"manual", "scheduled"}:
+        run_source = "scheduled"
 
     script_dir = Path(__file__).parent
     log_dir = script_dir / config["paths"]["log_directory"]
@@ -278,12 +286,15 @@ def log_result(config, result):
     ping_ms = round(result["ping_ms"], 2)
     jitter_ms = round(result.get("jitter_ms", 0.0), 2)
     packet_loss = round(result.get("packet_loss_percent", 0.0), 2)
+    external_ip = str(result.get("external_ip", "N/A") or "N/A")
 
     header = f"{'=' * 20}  {timestamp.strftime('%d-%m-%Y')} Speed Test Result  {'=' * 20}\n"
     entry = f"""Date: {timestamp.strftime('%d-%m-%Y')}
 Time: {timestamp.strftime('%H:%M')}
+Source: {run_source}
 Server: {result['server_name']} – {result['server_location']} (id: {result['server_id']})
 ISP: {result['isp']}
+IP: {external_ip}
 Ping: {ping_ms} ms
 Jitter: {jitter_ms} ms
 Packet Loss: {packet_loss}%

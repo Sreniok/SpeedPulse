@@ -142,6 +142,28 @@ class TestParseWeeklyLogFileMultiLine:
         assert entries[0]["timestamp"] < entries[1]["timestamp"]
         assert entries[0]["download_mbps"] == 400.0
         assert entries[1]["download_mbps"] == 600.0
+        assert entries[0]["source"] == "scheduled"
+
+    def test_source_field_is_parsed_when_present(self, tmp_path: Path):
+        content = """\
+Date: 01-01-2026
+Time: 08:00
+Source: manual
+IP: 203.0.113.10
+Server: London
+ISP: BT
+Ping: 10 ms
+Jitter: 1 ms
+Packet Loss: 0%
+Download: 400 Mbps
+Upload: 50 Mbps
+"""
+        log = tmp_path / "week.txt"
+        log.write_text(content, encoding="utf-8")
+        entries = parse_weekly_log_file(log)
+        assert len(entries) == 1
+        assert entries[0]["source"] == "manual"
+        assert entries[0]["ip_address"] == "203.0.113.10"
 
     def test_missing_file_returns_empty(self, tmp_path: Path):
         missing = tmp_path / "no_such_file.txt"

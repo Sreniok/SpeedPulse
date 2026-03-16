@@ -53,7 +53,10 @@
           <p class="eyebrow">Account</p>
           <strong id="settings-sidebar-account-name">{{ account_name }}</strong>
           <p id="settings-sidebar-account-provider">
-            {{ account_provider or "Provider not set" }}
+            {{ account_provider or "Provider not detected yet" }}
+          </p>
+          <p id="settings-sidebar-account-ip">
+            IP: {{ account_ip_address or "Not detected yet" }}
           </p>
           {% if account_number and account_number != 'N/A' and
           account_number|length > 4 %}
@@ -342,32 +345,25 @@
                 />
               </div>
               <div class="settings-field-group">
-                <label for="settings-provider">Broadband provider</label>
-                <select id="settings-provider">
-                  <option value="">Select provider</option>
-                  <option value="BT">BT</option>
-                  <option value="Virgin Media">Virgin Media</option>
-                  <option value="Sky Broadband">Sky Broadband</option>
-                  <option value="TalkTalk">TalkTalk</option>
-                  <option value="Vodafone">Vodafone</option>
-                  <option value="Plusnet">Plusnet</option>
-                  <option value="EE">EE</option>
-                  <option value="Community Fibre">Community Fibre</option>
-                  <option value="Hyperoptic">Hyperoptic</option>
-                  <option value="custom">Custom provider</option>
-                </select>
-              </div>
-              <div
-                id="settings-provider-custom-group"
-                class="settings-field-group hidden"
-              >
-                <label for="settings-provider-custom"
-                  >Custom provider name</label
+                <label for="settings-provider-detected"
+                  >Broadband provider (auto-detected)</label
                 >
                 <input
-                  id="settings-provider-custom"
+                  id="settings-provider-detected"
                   type="text"
-                  placeholder="Enter broadband provider"
+                  readonly
+                  placeholder="Detected from latest speed test"
+                />
+              </div>
+              <div class="settings-field-group">
+                <label for="settings-ip-detected"
+                  >Public IP address (latest speed test)</label
+                >
+                <input
+                  id="settings-ip-detected"
+                  type="text"
+                  readonly
+                  placeholder="Detected from latest speed test"
                 />
               </div>
             </div>

@@ -33,8 +33,10 @@ _FLOAT_RE = re.compile(r"(\d+(?:\.\d+)?)")
 _MULTI_LINE_PREFIX_TO_KEY = {
     "Date:": "date",
     "Time:": "time",
+    "Source:": "source",
     "Server:": "server",
     "ISP:": "isp",
+    "IP:": "ip_address",
     "Ping:": "ping",
     "Jitter:": "jitter",
     "Packet Loss:": "packet_loss",
@@ -75,6 +77,8 @@ def _parse_pipe_line(line: str) -> dict | None:
         "packet_loss_percent": _extract_float(parts[5]) if len(parts) > 5 else 0.0,
         "server": "Unknown",
         "isp": "Unknown",
+        "source": "unknown",
+        "ip_address": "",
     }
 
 
@@ -85,7 +89,11 @@ def _is_legacy_pipe_line(line: str) -> bool:
 def _update_current_block(current: dict[str, str], line: str) -> None:
     for prefix, key in _MULTI_LINE_PREFIX_TO_KEY.items():
         if line.startswith(prefix):
-            current[key] = line.split(":", 1)[1].strip() if prefix in {"Date:", "Time:", "Server:", "ISP:"} else line
+            current[key] = (
+                line.split(":", 1)[1].strip()
+                if prefix in {"Date:", "Time:", "Source:", "Server:", "ISP:", "IP:"}
+                else line
+            )
             return
 
 
@@ -100,6 +108,10 @@ def _build_multiline_entry(current: dict[str, str]) -> dict | None:
     except ValueError:
         return None
 
+    source = str(current.get("source", "scheduled")).strip().lower()
+    if source not in {"manual", "scheduled"}:
+        source = "scheduled"
+
     return {
         "timestamp": timestamp,
         "download_mbps": _extract_float(current.get("download", "")),
@@ -109,6 +121,8 @@ def _build_multiline_entry(current: dict[str, str]) -> dict | None:
         "packet_loss_percent": _extract_float(current.get("packet_loss", "")),
         "server": current.get("server", "Unknown"),
         "isp": current.get("isp", "Unknown"),
+        "source": source,
+        "ip_address": str(current.get("ip_address", "")).strip(),
     }
 
 

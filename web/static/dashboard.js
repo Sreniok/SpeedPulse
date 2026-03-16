@@ -524,30 +524,34 @@ async function syncRunStatus(announceFinal = false) {
       setRunButtonState(false);
       manualRunInFlight = false;
 
-      if (
+      const shouldPresentFinal =
         announceFinal &&
         completionKey &&
-        completionKey !== lastHandledRunCompletion
-      ) {
-        lastHandledRunCompletion = completionKey;
-        if (payload.status === "completed") {
-          showMessage(
-            payload.message || "Speed test completed successfully.",
-            "success",
-          );
-          setStatus("Speed test completed");
-          await loadMetrics();
-          void syncCompletionWatcher(true);
-        } else {
-          showMessage(payload.message || "Speed test failed.", "error");
-          setStatus(
-            payload.stage === "Timed out"
-              ? "Speed test timed out"
-              : "Speed test failed",
-          );
-          await loadMetrics();
-          void syncCompletionWatcher(true);
-        }
+        completionKey !== lastHandledRunCompletion;
+
+      if (!shouldPresentFinal) {
+        closeRunModal();
+        return;
+      }
+
+      lastHandledRunCompletion = completionKey;
+      if (payload.status === "completed") {
+        showMessage(
+          payload.message || "Speed test completed successfully.",
+          "success",
+        );
+        setStatus("Speed test completed");
+        await loadMetrics();
+        void syncCompletionWatcher(true);
+      } else {
+        showMessage(payload.message || "Speed test failed.", "error");
+        setStatus(
+          payload.stage === "Timed out"
+            ? "Speed test timed out"
+            : "Speed test failed",
+        );
+        await loadMetrics();
+        void syncCompletionWatcher(true);
       }
 
       renderRunModal(payload);
@@ -756,7 +760,7 @@ function trendSummary(current, previous, higherIsBetter = true) {
 
 function scanSummary(todayCount, scheduledCount) {
   if (!scheduledCount) {
-    return { label: `${todayCount} scans logged today`, tone: "tone-muted" };
+    return { label: `${todayCount} scheduled scans logged today`, tone: "tone-muted" };
   }
 
   if (todayCount >= scheduledCount) {
@@ -772,16 +776,75 @@ function scanSummary(todayCount, scheduledCount) {
   };
 }
 
+function manualScanSummary(manualCount) {
+  if (!manualCount) {
+    return { label: "No manual scans today", tone: "tone-muted" };
+  }
+
+  return {
+    label: `${manualCount} manual scan${manualCount === 1 ? "" : "s"} today`,
+    tone: "tone-good",
+  };
+}
+
+function buildTrendSteps(values, higherIsBetter = true, maxSteps = 5) {
+  const numericValues = (values || []).filter(
+    (value) => typeof value === "number" && !Number.isNaN(value),
+  );
+  if (numericValues.length < 2) {
+    return [];
+  }
+
+  const startIndex = Math.max(1, numericValues.length - maxSteps);
+  const steps = [];
+
+  for (let index = startIndex; index < numericValues.length; index += 1) {
+    const previous = numericValues[index - 1];
+    const current = numericValues[index];
+    const delta = current - previous;
+    const noiseGate = Math.max(Math.abs(previous) * 0.003, 0.05);
+
+    let direction = "flat";
+    if (delta > noiseGate) direction = "up";
+    else if (delta < -noiseGate) direction = "down";
+
+    let tone = "trend-flat";
+    if (direction !== "flat") {
+      const favorable = higherIsBetter
+        ? direction === "up"
+        : direction === "down";
+      tone = favorable ? "trend-good" : "trend-bad";
+    }
+
+    steps.push({
+      tone,
+      symbol: direction === "up" ? "↗" : direction === "down" ? "↘" : "→",
+      label:
+        direction === "up"
+          ? "Higher than previous scan"
+          : direction === "down"
+            ? "Lower than previous scan"
+            : "Near previous scan",
+    });
+  }
+
+  return steps;
+}
+
 function metricCard(
   title,
   valueText,
   noteText,
   toneClass = "tone-muted",
-  sparkData = null,
-  sparkColor = null,
+  options = {},
 ) {
+  const trendSteps = Array.isArray(options.trendSteps) ? options.trendSteps : [];
+  const compact = Boolean(options.compact);
   const card = document.createElement("article");
   card.className = "metric-card";
+  if (compact) {
+    card.classList.add("metric-card-compact");
+  }
 
   const titleEl = document.createElement("h3");
   titleEl.textContent = title;
@@ -797,46 +860,24 @@ function metricCard(
   card.appendChild(titleEl);
   card.appendChild(valueEl);
 
-  if (sparkData && sparkData.length > 1) {
-    const canvas = document.createElement("canvas");
-    canvas.className = "sparkline";
-    canvas.width = 120;
-    canvas.height = 28;
-    card.appendChild(canvas);
-    requestAnimationFrame(() =>
-      drawSparkline(canvas, sparkData, sparkColor || "var(--accent)"),
-    );
+  if (trendSteps.length > 0) {
+    const trendStrip = document.createElement("div");
+    trendStrip.className = "metric-trend-strip";
+    trendStrip.setAttribute("aria-label", "Recent scan direction");
+
+    for (const step of trendSteps) {
+      const marker = document.createElement("span");
+      marker.className = `metric-trend-step ${step.tone}`;
+      marker.textContent = step.symbol;
+      marker.title = step.label;
+      trendStrip.appendChild(marker);
+    }
+
+    card.appendChild(trendStrip);
   }
 
   card.appendChild(noteEl);
   return card;
-}
-
-function drawSparkline(canvas, data, color) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx || data.length < 2) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const step = w / (data.length - 1);
-
-  const resolvedColor = color.startsWith("var(")
-    ? cssVar(color.slice(4, -1))
-    : color;
-
-  ctx.clearRect(0, 0, w, h);
-  ctx.beginPath();
-  data.forEach((val, i) => {
-    const x = i * step;
-    const y = h - ((val - min) / range) * (h - 4) - 2;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = resolvedColor;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
 }
 
 function reliabilityHighlightCard(
@@ -897,15 +938,27 @@ function renderHeroMetrics(data) {
       ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false)
       : trendSummary(latest.ping_ms, previous?.ping_ms, false);
   const periodLabel = prevAvg.total_tests > 0 ? " vs prev period" : "";
+  const scheduledToday =
+    data.today_scheduled_tests ?? data.today_tests ?? 0;
+  const manualToday = data.today_manual_tests || 0;
   const todayTrend = scanSummary(
-    data.today_tests || 0,
+    scheduledToday,
     data.scheduled_tests_per_day || 0,
   );
+  const manualTrend = manualScanSummary(manualToday);
 
   const ts = data.timeseries || [];
-  const sparkDl = ts.map((p) => p.download_mbps).slice(-30);
-  const sparkUl = ts.map((p) => p.upload_mbps).slice(-30);
-  const sparkPing = ts.map((p) => p.ping_ms).slice(-30);
+  const trendDownload = buildTrendSteps(
+    ts.map((point) => point.download_mbps),
+    true,
+    5,
+  );
+  const trendUpload = buildTrendSteps(
+    ts.map((point) => point.upload_mbps),
+    true,
+    5,
+  );
+  const trendPing = buildTrendSteps(ts.map((point) => point.ping_ms), false, 5);
 
   root.appendChild(
     metricCard(
@@ -913,8 +966,7 @@ function renderHeroMetrics(data) {
       `${safeFixed(latest.download_mbps)} Mbps`,
       downloadTrend.label + periodLabel,
       downloadTrend.tone,
-      sparkDl,
-      "var(--chart-download)",
+      { trendSteps: trendDownload },
     ),
   );
   root.appendChild(
@@ -923,8 +975,7 @@ function renderHeroMetrics(data) {
       `${safeFixed(latest.upload_mbps)} Mbps`,
       uploadTrend.label + periodLabel,
       uploadTrend.tone,
-      sparkUl,
-      "var(--chart-upload)",
+      { trendSteps: trendUpload },
     ),
   );
   root.appendChild(
@@ -933,16 +984,25 @@ function renderHeroMetrics(data) {
       `${safeFixed(latest.ping_ms)} ms`,
       pingTrend.label + periodLabel,
       pingTrend.tone,
-      sparkPing,
-      "var(--chart-ping)",
+      { trendSteps: trendPing },
     ),
   );
   root.appendChild(
     metricCard(
-      "Today's scans",
-      `${data.today_tests || 0} / ${data.scheduled_tests_per_day || 0}`,
+      "Scheduled scans",
+      `${scheduledToday} / ${data.scheduled_tests_per_day || 0}`,
       todayTrend.label,
       todayTrend.tone,
+      { compact: true },
+    ),
+  );
+  root.appendChild(
+    metricCard(
+      "Manual scans",
+      `${manualToday}`,
+      manualTrend.label,
+      manualTrend.tone,
+      { compact: true },
     ),
   );
 }
@@ -1284,8 +1344,10 @@ function renderScheduleNote(data) {
     "Auto (nearest server)";
   const timesHost = byId("schedule-times");
 
+  const scheduledToday =
+    data.today_scheduled_tests ?? data.today_tests ?? 0;
   byId("scan-plan").textContent =
-    `${data.today_tests || 0} / ${data.scheduled_tests_per_day || 0} scans today`;
+    `${scheduledToday} / ${data.scheduled_tests_per_day || 0} scheduled scans today`;
   byId("schedule-server").textContent = `Server: ${selectedServer}`;
   byId("schedule-weekly").textContent = `Weekly report: ${weekly}`;
 
@@ -1305,6 +1367,21 @@ function renderScheduleNote(data) {
       chip.textContent = "Not scheduled";
       timesHost.appendChild(chip);
     }
+  }
+}
+
+function renderDetectedConnectionInfo(data) {
+  const provider = String(data?.detected_provider || "").trim();
+  const ipAddress = String(data?.detected_ip_address || "").trim();
+
+  const providerNode = byId("sidebar-account-provider");
+  if (providerNode) {
+    providerNode.textContent = provider || "Provider not detected yet";
+  }
+
+  const ipNode = byId("sidebar-account-ip");
+  if (ipNode) {
+    ipNode.textContent = `IP: ${ipAddress || "Not detected yet"}`;
   }
 }
 
@@ -1950,6 +2027,7 @@ async function loadMetrics() {
     currentPage = 1;
     currentServerLabel = data.server_selection_label || currentServerLabel;
 
+    renderDetectedConnectionInfo(data);
     renderScheduleNote(data);
     renderHeroMetrics(data);
     renderSlaPanel(data);
@@ -2118,6 +2196,7 @@ async function runSpeedtestNow(serverId = "") {
 }
 
 function bindEvents() {
+  bindSectionNavHighlight();
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
   const defaultServerSelect = byId("server-select");
@@ -2206,6 +2285,96 @@ function bindEvents() {
       void loadMetrics();
     }
   });
+}
+
+function setActiveSectionNav(sectionId) {
+  document.querySelectorAll("a.nav-link").forEach((link) => {
+    const href = String(link.getAttribute("href") || "");
+    const isHashLink = href.startsWith("#");
+    const active = isHashLink && href === `#${sectionId}`;
+    link.classList.toggle("active", active);
+    if (active) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+}
+
+function bindSectionNavHighlight() {
+  const mainShell = document.querySelector(".main-shell");
+  if (!(mainShell instanceof HTMLElement)) return;
+
+  const sectionLinks = Array.from(
+    document.querySelectorAll("a.nav-link[href^='#']"),
+  )
+    .map((link) => {
+      const href = String(link.getAttribute("href") || "");
+      const sectionId = href.slice(1);
+      const section = byId(sectionId);
+      if (!sectionId || !section) return null;
+      return { link, sectionId, section };
+    })
+    .filter(Boolean);
+
+  if (sectionLinks.length === 0) return;
+
+  const scrollAnchorOffset = 18;
+  const probeOffset = () => Math.min(mainShell.clientHeight * 0.4, 260);
+
+  const recalc = () => {
+    const probeY = mainShell.scrollTop + probeOffset();
+    let activeSectionId = sectionLinks[0].sectionId;
+
+    for (const entry of sectionLinks) {
+      const top = Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
+      if (probeY >= top) {
+        activeSectionId = entry.sectionId;
+      }
+    }
+
+    setActiveSectionNav(activeSectionId);
+  };
+
+  let ticking = false;
+  const scheduleRecalc = () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(() => {
+      ticking = false;
+      recalc();
+    });
+  };
+
+  for (const entry of sectionLinks) {
+    entry.link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setActiveSectionNav(entry.sectionId);
+      const targetTop = Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
+      mainShell.scrollTo({ top: targetTop, behavior: "smooth" });
+      if (window.history && typeof window.history.replaceState === "function") {
+        window.history.replaceState(null, "", `#${entry.sectionId}`);
+      }
+      scheduleRecalc();
+    });
+  }
+
+  mainShell.addEventListener("scroll", scheduleRecalc, { passive: true });
+  window.addEventListener("resize", scheduleRecalc);
+
+  const initialHash = window.location.hash.slice(1);
+  const initialTarget = sectionLinks.find(
+    (entry) => entry.sectionId === initialHash,
+  );
+  if (initialTarget) {
+    mainShell.scrollTop = Math.max(
+      0,
+      initialTarget.section.offsetTop - scrollAnchorOffset,
+    );
+    setActiveSectionNav(initialTarget.sectionId);
+  } else {
+    recalc();
+  }
 }
 
 function bindMobileNav() {

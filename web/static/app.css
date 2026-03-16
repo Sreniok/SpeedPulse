@@ -1479,7 +1479,7 @@ button:disabled {
 
 .hero-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 0.9rem;
 }
 
@@ -1516,13 +1516,44 @@ button:disabled {
   font-weight: 700;
 }
 
-.sparkline {
-  display: block;
-  width: 100%;
-  max-width: 120px;
-  height: 28px;
-  margin: 0.15rem 0;
-  opacity: 0.7;
+.metric-card-compact {
+  padding: 0.85rem 0.95rem;
+}
+
+.metric-card-compact .metric-value {
+  font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+  margin: 0.35rem 0 0.2rem;
+}
+
+.metric-trend-strip {
+  display: flex;
+  gap: 0.28rem;
+  margin: 0.2rem 0 0.3rem;
+}
+
+.metric-trend-step {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.metric-trend-step.trend-good {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+}
+
+.metric-trend-step.trend-bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
 }
 
 .metric-card-empty {

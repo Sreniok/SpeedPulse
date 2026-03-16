@@ -1,17 +1,6 @@
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
-const broadbandProviders = new Set([
-  "BT",
-  "Virgin Media",
-  "Sky Broadband",
-  "TalkTalk",
-  "Vodafone",
-  "Plusnet",
-  "EE",
-  "Community Fibre",
-  "Hyperoptic",
-]);
 let settingsServerSelectionId = "";
 let savedBackupPasswordAvailable = false;
 let messageTimeoutId = 0;
@@ -194,50 +183,19 @@ function toggleNotificationFieldState() {
   byId("settings-weekly-time").disabled = !weeklyEnabled;
 }
 
-function syncProviderFieldState() {
-  const providerValue = byId("settings-provider")?.value || "";
-  const customGroup = byId("settings-provider-custom-group");
-  const customInput = byId("settings-provider-custom");
-  const isCustom = providerValue === "custom";
-
-  customGroup.classList.toggle("hidden", !isCustom);
-  customInput.disabled = !isCustom;
-  if (!isCustom) {
-    customInput.value = "";
-  }
-}
-
-function populateProviderFields(provider) {
-  const normalizedProvider = String(provider || "").trim();
-  if (normalizedProvider && broadbandProviders.has(normalizedProvider)) {
-    byId("settings-provider").value = normalizedProvider;
-    byId("settings-provider-custom").value = "";
-  } else if (normalizedProvider) {
-    byId("settings-provider").value = "custom";
-    byId("settings-provider-custom").value = normalizedProvider;
-  } else {
-    byId("settings-provider").value = "";
-    byId("settings-provider-custom").value = "";
-  }
-
-  syncProviderFieldState();
-}
-
-function selectedBroadbandProvider() {
-  const providerValue = byId("settings-provider").value;
-  if (providerValue === "custom") {
-    return byId("settings-provider-custom").value.trim();
-  }
-  return providerValue.trim();
-}
-
 function renderAccountSummary(account) {
   const name = String(account?.name || "").trim() || "N/A";
-  const provider = String(account?.provider || "").trim() || "Provider not set";
+  const provider =
+    String(account?.provider || "").trim() || "Provider not detected yet";
+  const ipAddress = String(account?.ip_address || "").trim() || "Not detected yet";
   const number = String(account?.number || "").trim() || "N/A";
 
   byId("settings-sidebar-account-name").textContent = name;
   byId("settings-sidebar-account-provider").textContent = provider;
+  const ipNode = byId("settings-sidebar-account-ip");
+  if (ipNode) {
+    ipNode.textContent = `IP: ${ipAddress}`;
+  }
   byId("settings-sidebar-account-number").textContent = `Account No: ${number}`;
 }
 
@@ -377,7 +335,8 @@ function populateSettingsForm(payload) {
 
   byId("settings-account-name").value = account.name || "";
   byId("settings-account-number").value = account.number || "";
-  populateProviderFields(account.provider || "");
+  byId("settings-provider-detected").value = account.provider || "";
+  byId("settings-ip-detected").value = account.ip_address || "";
 
   byId("settings-smtp-server").value = email.smtp_server || "";
   byId("settings-smtp-port").value = String(email.smtp_port || 465);
@@ -447,7 +406,7 @@ function populateSettingsForm(payload) {
 function collectSettingsPayload() {
   return {
     account_name: byId("settings-account-name").value.trim(),
-    broadband_provider: selectedBroadbandProvider(),
+    broadband_provider: byId("settings-provider-detected").value.trim(),
     broadband_account_number: byId("settings-account-number").value.trim(),
     smtp_server: byId("settings-smtp-server").value.trim(),
     smtp_port: Number(byId("settings-smtp-port").value || "465"),
@@ -547,13 +506,6 @@ async function saveNotificationSettings() {
   });
 
   try {
-    if (
-      byId("settings-provider").value === "custom" &&
-      !byId("settings-provider-custom").value.trim()
-    ) {
-      throw new Error("Enter a custom broadband provider name.");
-    }
-
     const response = await fetch("/api/settings/notifications", {
       method: "POST",
       headers: {
@@ -897,7 +849,6 @@ function bindEvents() {
     "change",
     toggleNotificationFieldState,
   );
-  byId("settings-provider").addEventListener("change", syncProviderFieldState);
   byId("settings-add-scan-time").addEventListener("click", () => {
     addDailyScanTimeRow();
   });
