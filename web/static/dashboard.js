@@ -1706,7 +1706,7 @@ function renderCharts(data) {
       labels,
       datasets: [
         {
-          label: "Ping",
+          label: "Ping (measured)",
           data: ping,
           borderColor: cssVar("--chart-ping"),
           backgroundColor: cssVar("--chart-ping-fill"),
@@ -1717,7 +1717,7 @@ function renderCharts(data) {
           yAxisID: "y",
         },
         {
-          label: "Jitter",
+          label: "Jitter (measured)",
           data: jitter,
           borderColor: cssVar("--chart-download"),
           backgroundColor: cssVar("--chart-download-fill"),
@@ -1728,7 +1728,7 @@ function renderCharts(data) {
           yAxisID: "y",
         },
         {
-          label: "Packet loss",
+          label: "Packet loss (measured %)",
           data: loss,
           borderColor: "transparent",
           backgroundColor: cssVar("--chart-loss-fill"),
@@ -1740,7 +1740,7 @@ function renderCharts(data) {
         ...(pingThreshold > 0
           ? [
               {
-                label: `Max ping (${pingThreshold} ms)`,
+                label: `Max ping threshold (${pingThreshold} ms)`,
                 data: labels.map(() => pingThreshold),
                 borderColor: "rgba(255,107,107,0.5)",
                 borderDash: [4, 4],
@@ -1750,7 +1750,6 @@ function renderCharts(data) {
                 pointHitRadius: 0,
                 type: "line",
                 yAxisID: "y",
-                hideFromLegend: true,
               },
             ]
           : []),
