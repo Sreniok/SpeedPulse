@@ -1694,6 +1694,32 @@ button:disabled {
   background: var(--surface-soft);
 }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding: 0.95rem 0.9rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-footer-label,
+.sidebar-footer-value {
+  margin: 0;
+}
+
+.sidebar-footer-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sidebar-footer-value {
+  margin-top: 0.3rem;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .panel-head-row {
   display: flex;
   justify-content: space-between;

@@ -62,6 +62,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 ENV_PATH = SCRIPT_DIR / ".env"
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+TEMPLATES.env.globals["app_version"] = __version__
 
 LOGGER = logging.getLogger("speedpulse.web")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
