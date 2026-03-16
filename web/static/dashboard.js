@@ -743,23 +743,27 @@ function trendSummary(
     typeof previous !== "number" ||
     previous <= 0
   ) {
+    const fallbackNote =
+      comparisonLabel === "previous period"
+        ? "Need previous period data"
+        : "Need one more scan to compare";
     return {
       label: "No baseline yet",
       tone: "tone-muted",
-      note: `Need more data to compare with ${comparisonLabel}`,
+      note: fallbackNote,
       chip: null,
     };
   }
 
   const pct = ((current - previous) / previous) * 100;
   const absPct = Math.abs(pct).toFixed(1);
-  const comparedWith = `Compared with ${comparisonLabel}`;
+  const comparedWith = `vs ${comparisonLabel}`;
 
   if (Math.abs(pct) < 0.1) {
     return {
       label: "Stable",
       tone: "tone-muted",
-      note: comparedWith,
+      note: `Stable ${comparedWith}`,
       chip: { label: "• 0.0%", tone: "tone-muted" },
     };
   }
@@ -769,13 +773,13 @@ function trendSummary(
       ? {
           label: "Faster",
           tone: "tone-good",
-          note: comparedWith,
+          note: `Faster ${comparedWith}`,
           chip: { label: `▲ ${absPct}%`, tone: "tone-good" },
         }
       : {
           label: "Slower",
           tone: "tone-bad",
-          note: comparedWith,
+          note: `Slower ${comparedWith}`,
           chip: { label: `▼ ${absPct}%`, tone: "tone-bad" },
         };
   }
@@ -784,13 +788,13 @@ function trendSummary(
     ? {
         label: "Lower latency",
         tone: "tone-good",
-        note: comparedWith,
+        note: `Lower latency ${comparedWith}`,
         chip: { label: `▼ ${absPct}%`, tone: "tone-good" },
       }
     : {
         label: "Higher latency",
         tone: "tone-bad",
-        note: comparedWith,
+        note: `Higher latency ${comparedWith}`,
         chip: { label: `▲ ${absPct}%`, tone: "tone-bad" },
       };
 }
@@ -2412,8 +2416,9 @@ function bindSectionNavHighlight() {
   if (sectionLinks.length === 0) return;
 
   const scrollAnchorOffset = 18;
-  const switchHysteresis = 86;
-  const probeOffset = () => Math.min(mainShell.clientHeight * 0.34, 220);
+  const probeOffset = () => Math.min(mainShell.clientHeight * 0.31, 210);
+  const switchHysteresis = () =>
+    Math.max(72, Math.min(mainShell.clientHeight * 0.16, 140));
   const sectionTop = (entry) =>
     Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
   const sectionById = new Map(
@@ -2447,14 +2452,15 @@ function bindSectionNavHighlight() {
       const movingDown = probeY >= lastProbeY;
       const current = sectionById.get(activeSectionId);
       const next = sectionById.get(candidate);
+      const hysteresis = switchHysteresis();
 
       if (current && next) {
         const currentTop = sectionTop(current);
         const nextTop = sectionTop(next);
-        if (movingDown && probeY < nextTop + switchHysteresis) {
+        if (movingDown && probeY < nextTop + hysteresis) {
           candidate = activeSectionId;
         }
-        if (!movingDown && probeY > currentTop - switchHysteresis) {
+        if (!movingDown && probeY > currentTop - hysteresis) {
           candidate = activeSectionId;
         }
       }
@@ -2487,7 +2493,7 @@ function bindSectionNavHighlight() {
       if (window.history && typeof window.history.replaceState === "function") {
         window.history.replaceState(null, "", `#${entry.sectionId}`);
       }
-      window.setTimeout(() => recalc(true), 240);
+      window.setTimeout(() => recalc(true), 320);
     });
   }
 
