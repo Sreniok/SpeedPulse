@@ -16,6 +16,7 @@ let lastHandledRunCompletion = "";
 let completionWatchId = null;
 let completionWatchRequestInFlight = false;
 let lastSeenCompletionSequence = 0;
+let initialMetricsLoaded = false;
 let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
@@ -731,31 +732,67 @@ function defaultDirectionForKey(key) {
   return key === "timestamp_iso" ? "desc" : "asc";
 }
 
-function trendSummary(current, previous, higherIsBetter = true) {
+function trendSummary(
+  current,
+  previous,
+  higherIsBetter = true,
+  comparisonLabel = "previous scan",
+) {
   if (
     typeof current !== "number" ||
     typeof previous !== "number" ||
     previous <= 0
   ) {
-    return { label: "No baseline", tone: "tone-muted" };
+    return {
+      label: "No baseline yet",
+      tone: "tone-muted",
+      note: `Need more data to compare with ${comparisonLabel}`,
+      chip: null,
+    };
   }
 
   const pct = ((current - previous) / previous) * 100;
   const absPct = Math.abs(pct).toFixed(1);
+  const comparedWith = `Compared with ${comparisonLabel}`;
 
   if (Math.abs(pct) < 0.1) {
-    return { label: "Stable", tone: "tone-muted" };
+    return {
+      label: "Stable",
+      tone: "tone-muted",
+      note: comparedWith,
+      chip: { label: "• 0.0%", tone: "tone-muted" },
+    };
   }
 
   if (higherIsBetter) {
     return pct > 0
-      ? { label: `${absPct}% faster`, tone: "tone-good" }
-      : { label: `${absPct}% slower`, tone: "tone-bad" };
+      ? {
+          label: "Faster",
+          tone: "tone-good",
+          note: comparedWith,
+          chip: { label: `▲ ${absPct}%`, tone: "tone-good" },
+        }
+      : {
+          label: "Slower",
+          tone: "tone-bad",
+          note: comparedWith,
+          chip: { label: `▼ ${absPct}%`, tone: "tone-bad" },
+        };
   }
 
   return pct < 0
-    ? { label: `${absPct}% better`, tone: "tone-good" }
-    : { label: `${absPct}% slower`, tone: "tone-bad" };
+    ? {
+        label: "Lower latency",
+        tone: "tone-good",
+        note: comparedWith,
+        chip: { label: `▼ ${absPct}%`, tone: "tone-good" },
+      }
+    : {
+        label: "Higher latency",
+        tone: "tone-bad",
+        note: comparedWith,
+        chip: { label: `▲ ${absPct}%`, tone: "tone-bad" },
+      };
 }
 
 function scanSummary(todayCount, scheduledCount) {
@@ -787,50 +824,6 @@ function manualScanSummary(manualCount) {
   };
 }
 
-function buildTrendSteps(values, higherIsBetter = true, maxSteps = 5) {
-  const numericValues = (values || []).filter(
-    (value) => typeof value === "number" && !Number.isNaN(value),
-  );
-  if (numericValues.length < 2) {
-    return [];
-  }
-
-  const startIndex = Math.max(1, numericValues.length - maxSteps);
-  const steps = [];
-
-  for (let index = startIndex; index < numericValues.length; index += 1) {
-    const previous = numericValues[index - 1];
-    const current = numericValues[index];
-    const delta = current - previous;
-    const noiseGate = Math.max(Math.abs(previous) * 0.003, 0.05);
-
-    let direction = "flat";
-    if (delta > noiseGate) direction = "up";
-    else if (delta < -noiseGate) direction = "down";
-
-    let tone = "trend-flat";
-    if (direction !== "flat") {
-      const favorable = higherIsBetter
-        ? direction === "up"
-        : direction === "down";
-      tone = favorable ? "trend-good" : "trend-bad";
-    }
-
-    steps.push({
-      tone,
-      symbol: direction === "up" ? "↗" : direction === "down" ? "↘" : "→",
-      label:
-        direction === "up"
-          ? "Higher than previous scan"
-          : direction === "down"
-            ? "Lower than previous scan"
-            : "Near previous scan",
-    });
-  }
-
-  return steps;
-}
-
 function metricCard(
   title,
   valueText,
@@ -838,7 +831,10 @@ function metricCard(
   toneClass = "tone-muted",
   options = {},
 ) {
-  const trendSteps = Array.isArray(options.trendSteps) ? options.trendSteps : [];
+  const deltaChip =
+    options.deltaChip && options.deltaChip.label
+      ? options.deltaChip
+      : null;
   const compact = Boolean(options.compact);
   const card = document.createElement("article");
   card.className = "metric-card";
@@ -860,20 +856,11 @@ function metricCard(
   card.appendChild(titleEl);
   card.appendChild(valueEl);
 
-  if (trendSteps.length > 0) {
-    const trendStrip = document.createElement("div");
-    trendStrip.className = "metric-trend-strip";
-    trendStrip.setAttribute("aria-label", "Recent scan direction");
-
-    for (const step of trendSteps) {
-      const marker = document.createElement("span");
-      marker.className = `metric-trend-step ${step.tone}`;
-      marker.textContent = step.symbol;
-      marker.title = step.label;
-      trendStrip.appendChild(marker);
-    }
-
-    card.appendChild(trendStrip);
+  if (deltaChip) {
+    const chipEl = document.createElement("span");
+    chipEl.className = `metric-delta-chip ${deltaChip.tone || toneClass}`;
+    chipEl.textContent = deltaChip.label;
+    card.appendChild(chipEl);
   }
 
   card.appendChild(noteEl);
@@ -909,6 +896,7 @@ function reliabilityHighlightCard(
 function renderHeroMetrics(data) {
   const root = byId("hero-metrics");
   root.textContent = "";
+  root.removeAttribute("aria-busy");
 
   const rows = data.latest_tests || [];
   const latest = rows[0];
@@ -924,22 +912,47 @@ function renderHeroMetrics(data) {
 
   const prevAvg = data.previous_averages || {};
   const curAvg = data.averages || {};
+  const hasPeriodBaseline = prevAvg.total_tests > 0;
+  const comparisonLabel = hasPeriodBaseline ? "previous period" : "previous scan";
 
   const downloadTrend =
-    prevAvg.total_tests > 0
-      ? trendSummary(curAvg.download_mbps, prevAvg.download_mbps, true)
-      : trendSummary(latest.download_mbps, previous?.download_mbps, true);
+    hasPeriodBaseline
+      ? trendSummary(
+          curAvg.download_mbps,
+          prevAvg.download_mbps,
+          true,
+          comparisonLabel,
+        )
+      : trendSummary(
+          latest.download_mbps,
+          previous?.download_mbps,
+          true,
+          comparisonLabel,
+        );
   const uploadTrend =
-    prevAvg.total_tests > 0
-      ? trendSummary(curAvg.upload_mbps, prevAvg.upload_mbps, true)
-      : trendSummary(latest.upload_mbps, previous?.upload_mbps, true);
+    hasPeriodBaseline
+      ? trendSummary(
+          curAvg.upload_mbps,
+          prevAvg.upload_mbps,
+          true,
+          comparisonLabel,
+        )
+      : trendSummary(
+          latest.upload_mbps,
+          previous?.upload_mbps,
+          true,
+          comparisonLabel,
+        );
   const pingTrend =
-    prevAvg.total_tests > 0
-      ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false)
-      : trendSummary(latest.ping_ms, previous?.ping_ms, false);
-  const periodLabel = prevAvg.total_tests > 0 ? " vs prev period" : "";
-  const scheduledToday =
-    data.today_scheduled_tests ?? data.today_tests ?? 0;
+    hasPeriodBaseline
+      ? trendSummary(curAvg.ping_ms, prevAvg.ping_ms, false, comparisonLabel)
+      : trendSummary(
+          latest.ping_ms,
+          previous?.ping_ms,
+          false,
+          comparisonLabel,
+        );
+  const scheduledToday = data.today_scheduled_tests ?? data.today_tests ?? 0;
   const manualToday = data.today_manual_tests || 0;
   const todayTrend = scanSummary(
     scheduledToday,
@@ -947,44 +960,31 @@ function renderHeroMetrics(data) {
   );
   const manualTrend = manualScanSummary(manualToday);
 
-  const ts = data.timeseries || [];
-  const trendDownload = buildTrendSteps(
-    ts.map((point) => point.download_mbps),
-    true,
-    5,
-  );
-  const trendUpload = buildTrendSteps(
-    ts.map((point) => point.upload_mbps),
-    true,
-    5,
-  );
-  const trendPing = buildTrendSteps(ts.map((point) => point.ping_ms), false, 5);
-
   root.appendChild(
     metricCard(
       "Latest download",
       `${safeFixed(latest.download_mbps)} Mbps`,
-      downloadTrend.label + periodLabel,
+      downloadTrend.note || downloadTrend.label,
       downloadTrend.tone,
-      { trendSteps: trendDownload },
+      { deltaChip: downloadTrend.chip },
     ),
   );
   root.appendChild(
     metricCard(
       "Latest upload",
       `${safeFixed(latest.upload_mbps)} Mbps`,
-      uploadTrend.label + periodLabel,
+      uploadTrend.note || uploadTrend.label,
       uploadTrend.tone,
-      { trendSteps: trendUpload },
+      { deltaChip: uploadTrend.chip },
     ),
   );
   root.appendChild(
     metricCard(
       "Latest ping",
       `${safeFixed(latest.ping_ms)} ms`,
-      pingTrend.label + periodLabel,
+      pingTrend.note || pingTrend.label,
       pingTrend.tone,
-      { trendSteps: trendPing },
+      { deltaChip: pingTrend.chip },
     ),
   );
   root.appendChild(
@@ -1005,6 +1005,38 @@ function renderHeroMetrics(data) {
       { compact: true },
     ),
   );
+}
+
+function renderHeroMetricsSkeleton(cardCount = 5) {
+  const root = byId("hero-metrics");
+  if (!root) return;
+
+  root.textContent = "";
+  root.setAttribute("aria-busy", "true");
+
+  for (let index = 0; index < cardCount; index += 1) {
+    const card = document.createElement("article");
+    card.className = "metric-card metric-card-skeleton";
+    if (index >= 3) {
+      card.classList.add("metric-card-compact");
+    }
+    card.setAttribute("aria-hidden", "true");
+
+    const title = document.createElement("span");
+    title.className = "skeleton-line skeleton-line-title";
+    const value = document.createElement("span");
+    value.className = "skeleton-line skeleton-line-value";
+    const chip = document.createElement("span");
+    chip.className = "skeleton-line skeleton-line-chip";
+    const note = document.createElement("span");
+    note.className = "skeleton-line skeleton-line-note";
+
+    card.appendChild(title);
+    card.appendChild(value);
+    card.appendChild(chip);
+    card.appendChild(note);
+    root.appendChild(card);
+  }
 }
 
 function renderSlaPanel(data) {
@@ -1898,6 +1930,60 @@ function visibleRows() {
   return sortRows(filterRows(latestRows));
 }
 
+function renderResultsSkeleton(rowCount = 5) {
+  const tbody = document.querySelector("#latest-table tbody");
+  if (!tbody) return;
+
+  tbody.textContent = "";
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = document.createElement("tr");
+    row.className = "skeleton-row";
+    row.setAttribute("aria-hidden", "true");
+
+    for (let colIndex = 0; colIndex < 9; colIndex += 1) {
+      const cell = document.createElement("td");
+      const line = document.createElement("span");
+
+      if (colIndex === 0) {
+        line.className = "skeleton-line skeleton-line-id";
+      } else if (colIndex === 1 || colIndex === 7) {
+        line.className = "skeleton-line skeleton-line-chip";
+      } else {
+        line.className = "skeleton-line skeleton-line-cell";
+      }
+
+      cell.appendChild(line);
+      row.appendChild(cell);
+    }
+
+    tbody.appendChild(row);
+  }
+
+  byId("results-count").textContent = "Loading results...";
+  byId("page-indicator").textContent = "Page --";
+  byId("page-prev").disabled = true;
+  byId("page-next").disabled = true;
+}
+
+function setDashboardLoadingState(isLoading, isInitial = false) {
+  if (isInitial) {
+    if (isLoading) {
+      renderHeroMetricsSkeleton();
+      renderResultsSkeleton();
+    }
+
+    byId("latest-results")?.classList.toggle("panel-loading", isLoading);
+    document.querySelectorAll("#charts .panel").forEach((panel) => {
+      panel.classList.toggle("panel-loading", isLoading);
+    });
+    byId("heatmap-section")?.classList.toggle("panel-loading", isLoading);
+    byId("notification-history")?.classList.toggle("panel-loading", isLoading);
+  }
+
+  byId("hero-metrics")?.classList.toggle("hero-metrics-loading", isLoading);
+}
+
 function renderTable() {
   const tbody = document.querySelector("#latest-table tbody");
   tbody.textContent = "";
@@ -2005,6 +2091,8 @@ function metricsUrl() {
 
 async function loadMetrics() {
   setStatus("Loading metrics...");
+  const isInitialLoad = !initialMetricsLoaded;
+  setDashboardLoadingState(true, isInitialLoad);
 
   try {
     const response = await fetch(metricsUrl());
@@ -2034,6 +2122,8 @@ async function loadMetrics() {
     renderIncidentHistory(data);
     renderCharts(data);
     renderTable();
+    initialMetricsLoaded = true;
+    setDashboardLoadingState(false, isInitialLoad);
 
     setStatus(
       data.last_test_at
@@ -2046,6 +2136,8 @@ async function loadMetrics() {
       "error",
     );
     setStatus("Connection error — click Refresh to retry");
+  } finally {
+    setDashboardLoadingState(false, isInitialLoad);
   }
 }
 
@@ -2320,20 +2412,59 @@ function bindSectionNavHighlight() {
   if (sectionLinks.length === 0) return;
 
   const scrollAnchorOffset = 18;
-  const probeOffset = () => Math.min(mainShell.clientHeight * 0.4, 260);
+  const switchHysteresis = 86;
+  const probeOffset = () => Math.min(mainShell.clientHeight * 0.34, 220);
+  const sectionTop = (entry) =>
+    Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
+  const sectionById = new Map(
+    sectionLinks.map((entry) => [entry.sectionId, entry]),
+  );
 
-  const recalc = () => {
-    const probeY = mainShell.scrollTop + probeOffset();
-    let activeSectionId = sectionLinks[0].sectionId;
+  let activeSectionId = sectionLinks[0].sectionId;
+  let lastProbeY = 0;
 
+  const candidateForProbe = (probeY) => {
+    if (mainShell.scrollTop + mainShell.clientHeight >= mainShell.scrollHeight - 6) {
+      return sectionLinks[sectionLinks.length - 1].sectionId;
+    }
+
+    let candidate = sectionLinks[0].sectionId;
     for (const entry of sectionLinks) {
-      const top = Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
-      if (probeY >= top) {
-        activeSectionId = entry.sectionId;
+      if (probeY >= sectionTop(entry)) {
+        candidate = entry.sectionId;
+      } else {
+        break;
+      }
+    }
+    return candidate;
+  };
+
+  const recalc = (force = false) => {
+    const probeY = mainShell.scrollTop + probeOffset();
+    let candidate = candidateForProbe(probeY);
+
+    if (!force && candidate !== activeSectionId) {
+      const movingDown = probeY >= lastProbeY;
+      const current = sectionById.get(activeSectionId);
+      const next = sectionById.get(candidate);
+
+      if (current && next) {
+        const currentTop = sectionTop(current);
+        const nextTop = sectionTop(next);
+        if (movingDown && probeY < nextTop + switchHysteresis) {
+          candidate = activeSectionId;
+        }
+        if (!movingDown && probeY > currentTop - switchHysteresis) {
+          candidate = activeSectionId;
+        }
       }
     }
 
-    setActiveSectionNav(activeSectionId);
+    if (candidate !== activeSectionId || force) {
+      activeSectionId = candidate;
+      setActiveSectionNav(activeSectionId);
+    }
+    lastProbeY = probeY;
   };
 
   let ticking = false;
@@ -2342,20 +2473,21 @@ function bindSectionNavHighlight() {
     ticking = true;
     window.requestAnimationFrame(() => {
       ticking = false;
-      recalc();
+      recalc(false);
     });
   };
 
   for (const entry of sectionLinks) {
     entry.link.addEventListener("click", (event) => {
       event.preventDefault();
-      setActiveSectionNav(entry.sectionId);
+      activeSectionId = entry.sectionId;
+      setActiveSectionNav(activeSectionId);
       const targetTop = Math.max(0, entry.section.offsetTop - scrollAnchorOffset);
       mainShell.scrollTo({ top: targetTop, behavior: "smooth" });
       if (window.history && typeof window.history.replaceState === "function") {
         window.history.replaceState(null, "", `#${entry.sectionId}`);
       }
-      scheduleRecalc();
+      window.setTimeout(() => recalc(true), 240);
     });
   }
 
@@ -2371,9 +2503,11 @@ function bindSectionNavHighlight() {
       0,
       initialTarget.section.offsetTop - scrollAnchorOffset,
     );
-    setActiveSectionNav(initialTarget.sectionId);
+    activeSectionId = initialTarget.sectionId;
+    setActiveSectionNav(activeSectionId);
+    recalc(true);
   } else {
-    recalc();
+    recalc(true);
   }
 }
 
