@@ -20,6 +20,31 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+function isDialogElement(element) {
+  return (
+    typeof HTMLDialogElement !== "undefined" &&
+    element instanceof HTMLDialogElement
+  );
+}
+
+function modalIsOpen(id) {
+  const modal = byId(id);
+  if (!modal) return false;
+
+  if (isDialogElement(modal)) {
+    return modal.open;
+  }
+
+  return !modal.classList.contains("hidden");
+}
+
+function syncBodyModalState() {
+  document.body.classList.toggle(
+    "modal-open",
+    modalIsOpen("backup-restore-modal"),
+  );
+}
+
 function settingsSaveButtons() {
   return Array.from(document.querySelectorAll("[data-save-settings]"));
 }
@@ -876,11 +901,35 @@ function bindEvents() {
   byId("settings-backup-refresh").addEventListener("click", () => {
     void loadBackupList();
   });
-  byId("settings-restore-preview").addEventListener("click", () => {
-    void previewBackup();
+  byId("settings-restore-file").addEventListener("change", () => {
+    updateRestoreSelectedFileLabel();
   });
   byId("settings-restore-apply").addEventListener("click", () => {
+    openRestoreBackupModal();
+  });
+  byId("backup-restore-modal-confirm").addEventListener("click", () => {
     void restoreBackup();
+  });
+  byId("backup-restore-modal-reload").addEventListener("click", () => {
+    window.location.reload();
+  });
+  byId("backup-restore-modal-cancel").addEventListener(
+    "click",
+    closeRestoreBackupModal,
+  );
+  byId("backup-restore-modal-close").addEventListener(
+    "click",
+    closeRestoreBackupModal,
+  );
+  byId("backup-restore-modal").addEventListener("close", syncBodyModalState);
+  byId("backup-restore-modal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeRestoreBackupModal();
+  });
+  byId("backup-restore-modal").addEventListener("click", (event) => {
+    if (event.target === byId("backup-restore-modal")) {
+      closeRestoreBackupModal();
+    }
   });
 }
 
@@ -1065,94 +1114,156 @@ async function deleteBackupFile(filename) {
   }
 }
 
-async function previewBackup() {
-  const btn = byId("settings-restore-preview");
-  if (btn) btn.disabled = true;
+function selectedRestoreBackupFile() {
+  const fileInput = byId("settings-restore-file");
+  if (!fileInput?.files?.length) return null;
+  return fileInput.files[0];
+}
 
-  const resultEl = byId("restore-preview-result");
-
-  try {
-    const fileInput = byId("settings-restore-file");
-    const password = byId("settings-restore-password").value.trim();
-
-    if (!fileInput.files || !fileInput.files.length) {
-      throw new Error("Select a backup file first.");
-    }
-    if (!password) {
-      throw new Error("Enter the backup password.");
-    }
-
-    const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
-    formData.append("password", password);
-
-    const response = await fetch("/api/backup/preview", {
-      method: "POST",
-      headers: { "X-CSRF-Token": csrfToken },
-      body: formData,
-    });
-
-    if (response.status === 401) {
-      window.location.href = "/login";
-      return;
-    }
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.detail || "Failed to preview backup.");
-    }
-
-    const m = data.manifest || {};
-    const files = (m.files || []).filter((f) => f !== "manifest.json");
-    const logsIncluded = m.include_logs ? "Yes" : "No";
-    resultEl.innerHTML =
-      `<strong>Backup preview</strong><br>` +
-      `Version: ${m.version || "unknown"}<br>` +
-      `Created: ${m.created_at || "unknown"}<br>` +
-      `Logs included: ${logsIncluded}<br>` +
-      `Files: ${files.length} items`;
-    resultEl.classList.remove("hidden");
-    showMessage(
-      "Backup is valid. Review the preview and confirm restore below.",
-      "success",
-    );
-  } catch (error) {
-    resultEl.textContent = "";
-    resultEl.classList.add("hidden");
-    showMessage(error.message || "Failed to preview backup.", "error");
-  } finally {
-    if (btn) btn.disabled = false;
+function updateRestoreSelectedFileLabel() {
+  const selected = selectedRestoreBackupFile();
+  const text = selected
+    ? `${selected.name} (${formatBytes(selected.size)})`
+    : "No backup selected.";
+  const inlineNote = byId("settings-restore-file-note");
+  const modalFile = byId("backup-restore-modal-file");
+  if (inlineNote) {
+    inlineNote.textContent = text;
+  }
+  if (modalFile) {
+    modalFile.textContent = text;
   }
 }
 
-async function restoreBackup() {
-  if (
-    !confirm("This will overwrite all current settings and data. Are you sure?")
-  )
-    return;
+function setRestoreModalStatus(text, kind = "error") {
+  const status = byId("backup-restore-modal-status");
+  if (!status) return;
+  status.textContent = text;
+  status.classList.remove("hidden", "success-banner", "error-banner");
+  status.classList.add(kind === "success" ? "success-banner" : "error-banner");
+}
 
-  const btn = byId("settings-restore-apply");
-  if (btn) btn.disabled = true;
+function clearRestoreModalStatus() {
+  const status = byId("backup-restore-modal-status");
+  if (!status) return;
+  status.textContent = "";
+  status.classList.remove("success-banner", "error-banner");
+  status.classList.add("hidden");
+}
+
+function setRestoreModalFollowup(text) {
+  const followup = byId("backup-restore-modal-followup");
+  if (!followup) return;
+  if (!text) {
+    followup.textContent = "";
+    followup.classList.add("hidden");
+    return;
+  }
+  followup.textContent = text;
+  followup.classList.remove("hidden");
+}
+
+function resetRestoreBackupModal() {
+  clearRestoreModalStatus();
+  setRestoreModalFollowup("");
+
+  const passwordField = byId("backup-restore-modal-password");
+  const confirmButton = byId("backup-restore-modal-confirm");
+  const reloadButton = byId("backup-restore-modal-reload");
+  const cancelButton = byId("backup-restore-modal-cancel");
+  const closeButton = byId("backup-restore-modal-close");
+
+  if (passwordField) {
+    passwordField.value = "";
+    passwordField.disabled = false;
+  }
+  if (confirmButton) {
+    confirmButton.disabled = false;
+    confirmButton.classList.remove("hidden");
+    confirmButton.textContent = "Restore now";
+  }
+  if (reloadButton) {
+    reloadButton.classList.add("hidden");
+  }
+  if (cancelButton) {
+    cancelButton.textContent = "Cancel";
+  }
+  if (closeButton) {
+    closeButton.disabled = false;
+  }
+}
+
+function openRestoreBackupModal() {
+  const selected = selectedRestoreBackupFile();
+  if (!selected) {
+    showMessage("Select a backup file first.", "warning");
+    byId("settings-restore-file")?.focus();
+    return;
+  }
+
+  const modal = byId("backup-restore-modal");
+  if (!modal) return;
+
+  updateRestoreSelectedFileLabel();
+  resetRestoreBackupModal();
+
+  if (isDialogElement(modal) && typeof modal.showModal === "function") {
+    if (!modal.open) {
+      modal.showModal();
+    }
+  } else {
+    modal.classList.remove("hidden");
+  }
+
+  syncBodyModalState();
+  byId("backup-restore-modal-password")?.focus();
+}
+
+function closeRestoreBackupModal() {
+  const modal = byId("backup-restore-modal");
+  if (!modal) return;
+
+  if (isDialogElement(modal) && modal.open) {
+    modal.close();
+  } else {
+    modal.classList.add("hidden");
+  }
+
+  syncBodyModalState();
+}
+
+async function restoreBackup() {
+  const confirmButton = byId("backup-restore-modal-confirm");
+  const cancelButton = byId("backup-restore-modal-cancel");
+  const reloadButton = byId("backup-restore-modal-reload");
+  const closeButton = byId("backup-restore-modal-close");
+  const passwordField = byId("backup-restore-modal-password");
 
   try {
-    const fileInput = byId("settings-restore-file");
-    const password = byId("settings-restore-password").value.trim();
-    const currentPassword = byId("settings-restore-confirm-password").value;
+    const selected = selectedRestoreBackupFile();
+    const password = passwordField?.value.trim() || "";
 
-    if (!fileInput.files || !fileInput.files.length) {
+    if (!selected) {
       throw new Error("Select a backup file first.");
     }
     if (!password) {
       throw new Error("Enter the backup password.");
     }
-    if (!currentPassword) {
-      throw new Error("Enter your current dashboard password to confirm.");
+
+    if (confirmButton) {
+      confirmButton.disabled = true;
+      confirmButton.textContent = "Restoring...";
     }
+    if (cancelButton) cancelButton.disabled = true;
+    if (reloadButton) reloadButton.disabled = true;
+    if (closeButton) closeButton.disabled = true;
+    if (passwordField) passwordField.disabled = true;
+    clearRestoreModalStatus();
+    setRestoreModalFollowup("");
 
     const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
+    formData.append("file", selected);
     formData.append("password", password);
-    formData.append("current_password", currentPassword);
 
     const response = await fetch("/api/backup/restore", {
       method: "POST",
@@ -1172,21 +1283,58 @@ async function restoreBackup() {
 
     const restored = (data.restored || []).join(", ") || "nothing";
     const warnings = data.warnings || [];
-    let msg = data.message || "Backup restored successfully.";
-    msg += ` Restored: ${restored}.`;
+    let successText = data.message || "Backup restored successfully.";
+    successText += ` Restored: ${restored}.`;
+    setRestoreModalStatus(successText, "success");
+
+    let followup =
+      "If you run SpeedPulse with Docker Compose, restart the dashboard and scheduler containers, then refresh this page.";
     if (warnings.length) {
-      msg += ` Warnings: ${warnings.join("; ")}`;
+      followup = `Warnings: ${warnings.join("; ")}\n${followup}`;
+    }
+    setRestoreModalFollowup(followup);
+
+    byId("settings-restore-file").value = "";
+    const inlineNote = byId("settings-restore-file-note");
+    if (inlineNote) {
+      inlineNote.textContent = "No backup selected.";
     }
 
-    byId("settings-restore-password").value = "";
-    byId("settings-restore-confirm-password").value = "";
-    byId("restore-preview-result").classList.add("hidden");
+    if (confirmButton) confirmButton.classList.add("hidden");
+    if (reloadButton) {
+      reloadButton.disabled = false;
+      reloadButton.classList.remove("hidden");
+    }
+    if (cancelButton) {
+      cancelButton.disabled = false;
+      cancelButton.textContent = "Close";
+    }
+    if (closeButton) {
+      closeButton.disabled = false;
+    }
 
-    showMessage(msg, "success");
+    showMessage(successText, "success");
   } catch (error) {
+    setRestoreModalStatus(
+      error.message || "Failed to restore backup.",
+      "error",
+    );
+    setRestoreModalFollowup("");
     showMessage(error.message || "Failed to restore backup.", "error");
   } finally {
-    if (btn) btn.disabled = false;
+    if (confirmButton && !confirmButton.classList.contains("hidden")) {
+      confirmButton.disabled = false;
+      confirmButton.textContent = "Restore now";
+    }
+    if (cancelButton && cancelButton.textContent !== "Close") {
+      cancelButton.disabled = false;
+    }
+    if (closeButton) {
+      closeButton.disabled = false;
+    }
+    if (passwordField && confirmButton?.classList.contains("hidden") !== true) {
+      passwordField.disabled = false;
+    }
   }
 }
 
@@ -1233,6 +1381,7 @@ function bindMobileNav() {
 
 initializeTheme();
 bindEvents();
+updateRestoreSelectedFileLabel();
 void loadNotificationSettings();
 void loadScheduledServerOptions();
 void loadBackupList();

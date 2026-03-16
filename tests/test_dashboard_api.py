@@ -344,3 +344,39 @@ def test_manual_backup_requires_password_when_no_saved_password(api_client):
 
     assert response.status_code == 400
     assert "save one first" in response.json()["detail"]
+
+
+def test_backup_restore_returns_restart_required(api_client, monkeypatch: pytest.MonkeyPatch):
+    client, webapp, _, _, csrf_token = api_client
+
+    monkeypatch.setattr(
+        webapp,
+        "restore_backup",
+        lambda data, password: {"restored": ["config.json"], "warnings": []},
+    )
+
+    response = client.post(
+        "/api/backup/restore",
+        headers={"X-CSRF-Token": csrf_token},
+        files={"file": ("restore.speedpulse-backup", b"backup-bytes", "application/octet-stream")},
+        data={"password": "restorepass123"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"] == "Backup restored successfully."
+    assert payload["restart_required"] is True
+    assert payload["restored"] == ["config.json"]
+
+
+def test_backup_restore_requires_backup_password(api_client):
+    client, _, _, _, csrf_token = api_client
+    response = client.post(
+        "/api/backup/restore",
+        headers={"X-CSRF-Token": csrf_token},
+        files={"file": ("restore.speedpulse-backup", b"backup-bytes", "application/octet-stream")},
+        data={"password": ""},
+    )
+
+    assert response.status_code == 400
+    assert "required" in response.json()["detail"]

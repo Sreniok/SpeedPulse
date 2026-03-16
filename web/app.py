@@ -2503,18 +2503,10 @@ async def api_backup_restore(request: Request):
 
     form = await request.form()
     password = str(form.get("password", "")).strip()
-    current_password = str(form.get("current_password", "")).strip()
     upload = form.get("file")
 
     if not password:
         raise HTTPException(status_code=400, detail="Backup password is required.")
-    if not current_password:
-        raise HTTPException(status_code=400, detail="Current dashboard password is required to confirm restore.")
-
-    # Verify the user's current dashboard password
-    stored_hash = os.getenv("DASHBOARD_PASSWORD_HASH", "").strip()
-    if not stored_hash or not verify_password(current_password, stored_hash):
-        raise HTTPException(status_code=403, detail="Current dashboard password is incorrect.")
 
     if upload is None or not hasattr(upload, "read"):
         raise HTTPException(status_code=400, detail="No backup file uploaded.")
@@ -2530,9 +2522,10 @@ async def api_backup_restore(request: Request):
 
     LOGGER.info("Backup restored: %s", summary.get("restored", []))
     return JSONResponse({
-        "message": "Backup restored successfully. Restart the application to apply all changes.",
+        "message": "Backup restored successfully.",
         "restored": summary.get("restored", []),
         "warnings": summary.get("warnings", []),
+        "restart_required": True,
     })
 
 

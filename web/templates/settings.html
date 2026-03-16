@@ -874,43 +874,9 @@
                       type="file"
                       accept=".speedpulse-backup"
                     />
-                  </div>
-                  <div class="settings-field-group">
-                    <label for="settings-restore-password"
-                      >Backup password</label
-                    >
-                    <input
-                      id="settings-restore-password"
-                      type="password"
-                      autocomplete="off"
-                      placeholder="Password used when creating the backup"
-                    />
-                  </div>
-                </div>
-                <div class="settings-actions">
-                  <button
-                    id="settings-restore-preview"
-                    class="btn-muted"
-                    type="button"
-                  >
-                    Preview backup
-                  </button>
-                </div>
-                <div
-                  id="restore-preview-result"
-                  class="hidden panel-subtext"
-                ></div>
-                <div class="settings-fields settings-fields-single">
-                  <div class="settings-field-group">
-                    <label for="settings-restore-confirm-password"
-                      >Current dashboard password (to confirm)</label
-                    >
-                    <input
-                      id="settings-restore-confirm-password"
-                      type="password"
-                      autocomplete="current-password"
-                      placeholder="Your current dashboard password"
-                    />
+                    <p id="settings-restore-file-note" class="panel-subtext">
+                      No backup selected.
+                    </p>
                   </div>
                 </div>
                 <div class="settings-actions">
@@ -926,6 +892,84 @@
             </div>
           </article>
         </section>
+
+        <dialog
+          id="backup-restore-modal"
+          class="dialog-modal"
+          aria-labelledby="backup-restore-modal-title"
+          aria-describedby="backup-restore-modal-copy"
+        >
+          <div class="dialog-card dialog-card-compact">
+            <div class="dialog-head">
+              <div>
+                <p class="eyebrow">Backup</p>
+                <h2 id="backup-restore-modal-title">Restore backup</h2>
+              </div>
+              <button
+                id="backup-restore-modal-close"
+                class="icon-button"
+                type="button"
+                aria-label="Close restore backup dialog"
+              >
+                ×
+              </button>
+            </div>
+            <p id="backup-restore-modal-copy" class="dialog-copy">
+              Restoring a backup will overwrite the current settings, logs, and
+              database.
+            </p>
+            <p class="dialog-label">Selected file</p>
+            <p id="backup-restore-modal-file" class="restore-file-name">
+              No backup selected.
+            </p>
+            <div
+              id="backup-restore-modal-status"
+              class="dialog-status hidden"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            ></div>
+            <p
+              id="backup-restore-modal-followup"
+              class="dialog-help restore-followup hidden"
+            ></p>
+            <label class="dialog-label" for="backup-restore-modal-password">
+              Backup password
+            </label>
+            <input
+              id="backup-restore-modal-password"
+              type="password"
+              autocomplete="off"
+              placeholder="Password used when creating the backup"
+            />
+            <p class="dialog-help">
+              Enter the password used to create this backup file.
+            </p>
+            <div class="dialog-actions">
+              <button
+                id="backup-restore-modal-confirm"
+                class="btn-primary"
+                type="button"
+              >
+                Restore now
+              </button>
+              <button
+                id="backup-restore-modal-reload"
+                class="btn-muted hidden"
+                type="button"
+              >
+                Refresh page
+              </button>
+              <button
+                id="backup-restore-modal-cancel"
+                class="btn-ghost"
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </dialog>
       </main>
     </div>
   </body>
