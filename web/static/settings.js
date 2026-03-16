@@ -15,6 +15,7 @@ const broadbandProviders = new Set([
 let settingsServerSelectionId = "";
 let savedBackupPasswordAvailable = false;
 let messageTimeoutId = 0;
+let confirmDialogResolver = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -41,7 +42,8 @@ function modalIsOpen(id) {
 function syncBodyModalState() {
   document.body.classList.toggle(
     "modal-open",
-    modalIsOpen("backup-restore-modal"),
+    modalIsOpen("backup-restore-modal") ||
+      modalIsOpen("settings-confirm-modal"),
   );
 }
 
@@ -807,9 +809,13 @@ async function endCurrentContract() {
   const endButton = byId("settings-end-contract");
   if (endButton) endButton.disabled = true;
 
-  if (
-    !confirm("End the current contract and archive it? This cannot be undone.")
-  ) {
+  const confirmed = await openConfirmDialog({
+    eyebrow: "Contract",
+    title: "End current contract?",
+    copy: "This will archive the current contract and cannot be undone.",
+    confirmLabel: "End contract",
+  });
+  if (!confirmed) {
     if (endButton) endButton.disabled = false;
     return;
   }
@@ -929,6 +935,25 @@ function bindEvents() {
   byId("backup-restore-modal").addEventListener("click", (event) => {
     if (event.target === byId("backup-restore-modal")) {
       closeRestoreBackupModal();
+    }
+  });
+  byId("settings-confirm-modal-confirm").addEventListener("click", () => {
+    closeConfirmDialog(true);
+  });
+  byId("settings-confirm-modal-cancel").addEventListener("click", () => {
+    closeConfirmDialog(false);
+  });
+  byId("settings-confirm-modal-close").addEventListener("click", () => {
+    closeConfirmDialog(false);
+  });
+  byId("settings-confirm-modal").addEventListener("close", syncBodyModalState);
+  byId("settings-confirm-modal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeConfirmDialog(false);
+  });
+  byId("settings-confirm-modal").addEventListener("click", (event) => {
+    if (event.target === byId("settings-confirm-modal")) {
+      closeConfirmDialog(false);
     }
   });
 }
@@ -1086,7 +1111,13 @@ async function createBackup({ download = false } = {}) {
 }
 
 async function deleteBackupFile(filename) {
-  if (!confirm(`Delete backup "${filename}"? This cannot be undone.`)) return;
+  const confirmed = await openConfirmDialog({
+    eyebrow: "Backup",
+    title: "Delete backup?",
+    copy: `Delete "${filename}"? This cannot be undone.`,
+    confirmLabel: "Delete backup",
+  });
+  if (!confirmed) return;
 
   try {
     const response = await fetch(
@@ -1111,6 +1142,53 @@ async function deleteBackupFile(filename) {
     void loadBackupList();
   } catch (error) {
     showMessage(error.message || "Failed to delete backup.", "error");
+  }
+}
+
+function openConfirmDialog({
+  eyebrow = "Confirm",
+  title = "Please confirm",
+  copy = "",
+  confirmLabel = "Continue",
+} = {}) {
+  const modal = byId("settings-confirm-modal");
+  if (!modal) return Promise.resolve(false);
+
+  byId("settings-confirm-modal-eyebrow").textContent = eyebrow;
+  byId("settings-confirm-modal-title").textContent = title;
+  byId("settings-confirm-modal-copy").textContent = copy;
+  byId("settings-confirm-modal-confirm").textContent = confirmLabel;
+
+  return new Promise((resolve) => {
+    confirmDialogResolver = resolve;
+
+    if (isDialogElement(modal) && typeof modal.showModal === "function") {
+      if (!modal.open) {
+        modal.showModal();
+      }
+    } else {
+      modal.classList.remove("hidden");
+    }
+
+    syncBodyModalState();
+    byId("settings-confirm-modal-confirm")?.focus();
+  });
+}
+
+function closeConfirmDialog(confirmed) {
+  const modal = byId("settings-confirm-modal");
+  const resolve = confirmDialogResolver;
+  confirmDialogResolver = null;
+
+  if (isDialogElement(modal) && modal?.open) {
+    modal.close();
+  } else {
+    modal?.classList.add("hidden");
+  }
+
+  syncBodyModalState();
+  if (resolve) {
+    resolve(Boolean(confirmed));
   }
 }
 
@@ -1288,7 +1366,7 @@ async function restoreBackup() {
     setRestoreModalStatus(successText, "success");
 
     let followup =
-      "If you run SpeedPulse with Docker Compose, restart the dashboard and scheduler containers, then refresh this page.";
+      "Normal settings apply automatically within about 10 seconds. Restored backups replace app files and environment values, so restart the dashboard and scheduler containers, then refresh this page.";
     if (warnings.length) {
       followup = `Warnings: ${warnings.join("; ")}\n${followup}`;
     }
