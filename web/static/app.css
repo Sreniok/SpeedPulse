@@ -1,5 +1,6 @@
 :root,
 [data-theme="default-dark"] {
+  --ui-scale: 0.8;
   --theme-bg: #090b11;
   --theme-bg-alt: #11151f;
   --theme-accent: #ffb224;
@@ -290,6 +291,7 @@
 }
 
 html {
+  font-size: calc(16px * var(--ui-scale));
   scroll-behavior: smooth;
   overflow: hidden;
   height: 100%;
@@ -339,7 +341,7 @@ select {
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: calc(280px * var(--ui-scale)) 1fr;
   width: 100%;
   overflow: hidden;
 }
@@ -411,7 +413,7 @@ select {
 .brand-wordmark-speed,
 .brand-wordmark-pulse {
   font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
-  font-size: 66px;
+  font-size: calc(66px * var(--ui-scale));
   font-style: italic;
   font-weight: 800;
   letter-spacing: -1.2px;

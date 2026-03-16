@@ -62,10 +62,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 ENV_PATH = SCRIPT_DIR / ".env"
 LOGO_PATH = Path(__file__).parent / "static" / "logo2.svg"
+APP_CSS_PATH = Path(__file__).parent / "static" / "app.css"
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 TEMPLATES.env.globals["app_version"] = __version__
 _LOGO_VERSION = str(int(LOGO_PATH.stat().st_mtime_ns)) if LOGO_PATH.is_file() else __version__
 TEMPLATES.env.globals["logo_version"] = _LOGO_VERSION
+_STATIC_VERSION = str(int(APP_CSS_PATH.stat().st_mtime_ns)) if APP_CSS_PATH.is_file() else __version__
+TEMPLATES.env.globals["static_version"] = _STATIC_VERSION
 
 LOGGER = logging.getLogger("speedpulse.web")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
