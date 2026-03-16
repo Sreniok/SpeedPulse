@@ -14,6 +14,13 @@
     { id: "liquid-glass-light", name: "Liquid Glass", mode: "light" },
     { id: "neumorphism-light", name: "Neumorphism", mode: "light" },
     { id: "retrofuturism-light", name: "Retrofuturism", mode: "light" },
+    { id: "nordic-frost-light", name: "Nordic Frost", mode: "light" },
+    { id: "desert-bloom-light", name: "Desert Bloom", mode: "light" },
+    { id: "ocean-notebook-light", name: "Ocean Notebook", mode: "light" },
+    { id: "citrus-print-light", name: "Citrus Print", mode: "light" },
+    { id: "alpine-ink-light", name: "Alpine Ink", mode: "light" },
+    { id: "rose-paper-light", name: "Rose Paper", mode: "light" },
+    { id: "copper-haze-light", name: "Copper Haze", mode: "light" },
   ];
   const darkThemes = [
     { id: "default-dark", name: "Default Dark", mode: "dark" },
@@ -24,6 +31,13 @@
     { id: "liquid-glass-dark", name: "Liquid Glass", mode: "dark" },
     { id: "neumorphism-dark", name: "Neumorphism", mode: "dark" },
     { id: "retrofuturism-dark", name: "Retrofuturism", mode: "dark" },
+    { id: "midnight-terminal-dark", name: "Midnight Terminal", mode: "dark" },
+    { id: "ember-forge-dark", name: "Ember Forge", mode: "dark" },
+    { id: "abyss-current-dark", name: "Abyss Current", mode: "dark" },
+    { id: "jade-circuit-dark", name: "Jade Circuit", mode: "dark" },
+    { id: "noir-slate-dark", name: "Noir Slate", mode: "dark" },
+    { id: "crimson-radar-dark", name: "Crimson Radar", mode: "dark" },
+    { id: "lunar-vault-dark", name: "Lunar Vault", mode: "dark" },
   ];
 
   const themeMap = Object.fromEntries(

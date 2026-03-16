@@ -6,6 +6,8 @@
   --theme-accent: #ffb224;
   --theme-secondary: #18b6ff;
   --theme-text: #f3f5fa;
+  --theme-font-body: "Avenir Next", "Trebuchet MS", "Gill Sans", sans-serif;
+  --theme-font-brand: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
 [data-theme="default-light"] {
@@ -72,6 +74,76 @@
   --theme-text: #311a4e;
 }
 
+[data-theme="nordic-frost-light"] {
+  --theme-bg: #eef6ff;
+  --theme-bg-alt: #dfeafb;
+  --theme-accent: #1f6feb;
+  --theme-secondary: #2db3c7;
+  --theme-text: #14233b;
+  --theme-font-body: "Segoe UI", "Calibri", "Helvetica Neue", sans-serif;
+  --theme-font-brand: "Segoe UI", "Trebuchet MS", "Gill Sans", sans-serif;
+}
+
+[data-theme="desert-bloom-light"] {
+  --theme-bg: #fff3e8;
+  --theme-bg-alt: #ffe6d1;
+  --theme-accent: #c2410c;
+  --theme-secondary: #f59e0b;
+  --theme-text: #3a2114;
+  --theme-font-body: "Trebuchet MS", "Verdana", "Segoe UI", sans-serif;
+  --theme-font-brand: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+}
+
+[data-theme="ocean-notebook-light"] {
+  --theme-bg: #edf8f7;
+  --theme-bg-alt: #d7efec;
+  --theme-accent: #006d77;
+  --theme-secondary: #0ea5a8;
+  --theme-text: #15363a;
+  --theme-font-body: "Lucida Sans", "Lucida Grande", "Segoe UI", sans-serif;
+  --theme-font-brand: "Lucida Sans", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="citrus-print-light"] {
+  --theme-bg: #fffde8;
+  --theme-bg-alt: #fff6c6;
+  --theme-accent: #ca8a04;
+  --theme-secondary: #65a30d;
+  --theme-text: #2f2a12;
+  --theme-font-body: "Gill Sans", "Trebuchet MS", "Segoe UI", sans-serif;
+  --theme-font-brand: "Gill Sans", "Trebuchet MS", "Avenir Next", sans-serif;
+}
+
+[data-theme="alpine-ink-light"] {
+  --theme-bg: #f2f5f8;
+  --theme-bg-alt: #e3e8ef;
+  --theme-accent: #334155;
+  --theme-secondary: #0ea5e9;
+  --theme-text: #111827;
+  --theme-font-body: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --theme-font-brand: "Palatino Linotype", "Book Antiqua", "Trebuchet MS", serif;
+}
+
+[data-theme="rose-paper-light"] {
+  --theme-bg: #fff4f7;
+  --theme-bg-alt: #ffe8f0;
+  --theme-accent: #be185d;
+  --theme-secondary: #fb7185;
+  --theme-text: #3f1d2e;
+  --theme-font-body: Georgia, "Times New Roman", serif;
+  --theme-font-brand: Georgia, "Trebuchet MS", "Gill Sans", serif;
+}
+
+[data-theme="copper-haze-light"] {
+  --theme-bg: #f7f2ee;
+  --theme-bg-alt: #ece0d6;
+  --theme-accent: #b45309;
+  --theme-secondary: #0f766e;
+  --theme-text: #2b1e16;
+  --theme-font-body: Tahoma, "Segoe UI", "Helvetica Neue", sans-serif;
+  --theme-font-brand: Tahoma, "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
 [data-theme="cyber-matrix"] {
   --theme-bg: #0d1117;
   --theme-bg-alt: #141b23;
@@ -128,6 +200,76 @@
   --theme-text: #f8ecff;
 }
 
+[data-theme="midnight-terminal-dark"] {
+  --theme-bg: #0a0f1d;
+  --theme-bg-alt: #111a2f;
+  --theme-accent: #4f8cff;
+  --theme-secondary: #00d1ff;
+  --theme-text: #d7e4ff;
+  --theme-font-body: Consolas, "Monaco", "Lucida Console", monospace;
+  --theme-font-brand: "Segoe UI", "Trebuchet MS", "Gill Sans", sans-serif;
+}
+
+[data-theme="ember-forge-dark"] {
+  --theme-bg: #1a1210;
+  --theme-bg-alt: #271b17;
+  --theme-accent: #f97316;
+  --theme-secondary: #facc15;
+  --theme-text: #fff2e8;
+  --theme-font-body: "Segoe UI", "Trebuchet MS", "Helvetica Neue", sans-serif;
+  --theme-font-brand: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+}
+
+[data-theme="abyss-current-dark"] {
+  --theme-bg: #071a24;
+  --theme-bg-alt: #0c2733;
+  --theme-accent: #06b6d4;
+  --theme-secondary: #22d3ee;
+  --theme-text: #d7f7ff;
+  --theme-font-body: Verdana, Geneva, "Segoe UI", sans-serif;
+  --theme-font-brand: Verdana, "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="jade-circuit-dark"] {
+  --theme-bg: #0d1b16;
+  --theme-bg-alt: #132821;
+  --theme-accent: #22c55e;
+  --theme-secondary: #84cc16;
+  --theme-text: #e7f9ee;
+  --theme-font-body: "Arial Narrow", Arial, "Helvetica Neue", sans-serif;
+  --theme-font-brand: "Arial Narrow", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="noir-slate-dark"] {
+  --theme-bg: #111111;
+  --theme-bg-alt: #1a1a1a;
+  --theme-accent: #a855f7;
+  --theme-secondary: #64748b;
+  --theme-text: #f3f4f6;
+  --theme-font-body: "Helvetica Neue", Arial, "Segoe UI", sans-serif;
+  --theme-font-brand: "Helvetica Neue", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="crimson-radar-dark"] {
+  --theme-bg: #1b0a12;
+  --theme-bg-alt: #2a101b;
+  --theme-accent: #f43f5e;
+  --theme-secondary: #fb7185;
+  --theme-text: #ffe7ef;
+  --theme-font-body: "Lucida Sans", "Lucida Grande", "Segoe UI", sans-serif;
+  --theme-font-brand: "Lucida Sans", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="lunar-vault-dark"] {
+  --theme-bg: #101622;
+  --theme-bg-alt: #182033;
+  --theme-accent: #93c5fd;
+  --theme-secondary: #c4b5fd;
+  --theme-text: #ecf2ff;
+  --theme-font-body: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --theme-font-brand: "Palatino Linotype", "Book Antiqua", "Trebuchet MS", serif;
+}
+
 :root,
 [data-theme="default-dark"],
 [data-theme="cyber-matrix"],
@@ -136,7 +278,14 @@
 [data-theme="night-orchid"],
 [data-theme="liquid-glass-dark"],
 [data-theme="neumorphism-dark"],
-[data-theme="retrofuturism-dark"] {
+[data-theme="retrofuturism-dark"],
+[data-theme="midnight-terminal-dark"],
+[data-theme="ember-forge-dark"],
+[data-theme="abyss-current-dark"],
+[data-theme="jade-circuit-dark"],
+[data-theme="noir-slate-dark"],
+[data-theme="crimson-radar-dark"],
+[data-theme="lunar-vault-dark"] {
   --bg: var(--theme-bg);
   --bg-alt: var(--theme-bg-alt);
   --surface: color-mix(in srgb, var(--theme-bg) 82%, white 18%);
@@ -175,7 +324,14 @@
 [data-theme="mist-violet"],
 [data-theme="liquid-glass-light"],
 [data-theme="neumorphism-light"],
-[data-theme="retrofuturism-light"] {
+[data-theme="retrofuturism-light"],
+[data-theme="nordic-frost-light"],
+[data-theme="desert-bloom-light"],
+[data-theme="ocean-notebook-light"],
+[data-theme="citrus-print-light"],
+[data-theme="alpine-ink-light"],
+[data-theme="rose-paper-light"],
+[data-theme="copper-haze-light"] {
   --bg: var(--theme-bg);
   --bg-alt: var(--theme-bg-alt);
   --surface: color-mix(in srgb, white 90%, var(--theme-bg) 10%);
@@ -314,7 +470,13 @@ body {
       transparent 40%
     ),
     linear-gradient(180deg, var(--bg), var(--bg-alt));
-  font-family: "Avenir Next", "Trebuchet MS", "Gill Sans", sans-serif;
+  font-family: var(
+    --theme-font-body,
+    "Avenir Next",
+    "Trebuchet MS",
+    "Gill Sans",
+    sans-serif
+  );
 }
 
 .hidden {
@@ -412,7 +574,13 @@ select {
 
 .brand-wordmark-speed,
 .brand-wordmark-pulse {
-  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: var(
+    --theme-font-brand,
+    "Avenir Next",
+    "Trebuchet MS",
+    "Segoe UI",
+    sans-serif
+  );
   font-size: calc(66px * var(--ui-scale));
   font-style: italic;
   font-weight: 800;
@@ -428,6 +596,7 @@ select {
 
 .brand-wordmark-pulse {
   fill: color-mix(in srgb, var(--chart-download) 86%, var(--text) 14%);
+  stroke: none;
 }
 
 .brand-wordmark-line-base,
@@ -533,7 +702,7 @@ select {
 }
 
 .brand-mark-shell-large {
-  width: min(18rem, 100%);
+  width: min(24rem, 100%);
   min-width: 0;
   margin-inline: auto;
   padding: 0.62rem 0.92rem;
@@ -2092,6 +2261,7 @@ tbody tr:hover td {
 .login-shell {
   width: 100%;
   max-width: 430px;
+  margin-inline: auto;
 }
 
 .login-card {

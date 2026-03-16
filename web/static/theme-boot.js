@@ -12,6 +12,13 @@
     "liquid-glass-light",
     "neumorphism-light",
     "retrofuturism-light",
+    "nordic-frost-light",
+    "desert-bloom-light",
+    "ocean-notebook-light",
+    "citrus-print-light",
+    "alpine-ink-light",
+    "rose-paper-light",
+    "copper-haze-light",
   ]);
   const darkThemes = new Set([
     "default-dark",
@@ -22,6 +29,13 @@
     "liquid-glass-dark",
     "neumorphism-dark",
     "retrofuturism-dark",
+    "midnight-terminal-dark",
+    "ember-forge-dark",
+    "abyss-current-dark",
+    "jade-circuit-dark",
+    "noir-slate-dark",
+    "crimson-radar-dark",
+    "lunar-vault-dark",
   ]);
   const removedLightThemes = new Set([
     "kinetic-circuit",
