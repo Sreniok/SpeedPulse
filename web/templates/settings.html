@@ -101,24 +101,55 @@
         </nav>
 
         <section class="sidebar-footer" aria-label="Application version">
-          <p class="sidebar-footer-label">Version</p>
-          <p class="sidebar-footer-value">v{{ app_version }}</p>
-          <div class="sidebar-footer-actions">
-            <a
-              class="btn-muted btn-small sidebar-footer-action"
-              href="{{ github_url }}"
-              target="_blank"
-              rel="noopener noreferrer"
-              >GitHub</a
-            >
-            <button
-              id="settings-sidebar-like-button"
-              class="btn-muted btn-small sidebar-footer-action"
-              type="button"
-              aria-pressed="false"
-            >
-              Like <span id="settings-sidebar-like-count">0</span>
-            </button>
+          <div class="sidebar-footer-card">
+            <div class="sidebar-footer-copy">
+              <p class="sidebar-footer-label">Version</p>
+              <p class="sidebar-footer-value">v{{ app_version }}</p>
+              <p class="sidebar-footer-note">Follow releases and place a star on GitHub.</p>
+            </div>
+            <div class="sidebar-footer-actions">
+              <a
+                class="btn-muted btn-small sidebar-footer-action sidebar-footer-link sidebar-github-link"
+                href="{{ github_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open SpeedPulse on GitHub"
+                title="Open the repo on GitHub so you can place a star there"
+              >
+                <span class="sidebar-footer-link-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    role="presentation"
+                    focusable="false"
+                  >
+                    <path
+                      d="M12 .297C5.373.297 0 5.67 0 12.297c0 5.297 3.438 9.79 8.205 11.387.6.113.82-.263.82-.583 0-.287-.01-1.046-.015-2.054-3.338.726-4.042-1.61-4.042-1.61-.546-1.383-1.333-1.75-1.333-1.75-1.09-.745.083-.73.083-.73 1.205.085 1.839 1.237 1.839 1.237 1.07 1.835 2.807 1.305 3.492.998.108-.775.418-1.305.76-1.605-2.666-.303-5.466-1.332-5.466-5.931 0-1.31.467-2.381 1.235-3.221-.124-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.3 1.23a11.484 11.484 0 0 1 3-.404c1.019.005 2.042.138 3 .404 2.289-1.552 3.295-1.23 3.295-1.23.654 1.653.243 2.873.12 3.176.77.84 1.234 1.911 1.234 3.221 0 4.61-2.804 5.624-5.476 5.92.43.37.815 1.102.815 2.222 0 1.605-.015 2.897-.015 3.293 0 .322.216.699.825.583C20.565 22.083 24 17.594 24 12.297 24 5.67 18.627.297 12 .297z"
+                      fill="currentColor"
+                      fill-rule="evenodd"
+                    />
+                  </svg>
+                </span>
+                <span class="sidebar-footer-link-title">GitHub</span>
+              </a>
+              <a
+                class="btn-muted btn-small sidebar-footer-action sidebar-footer-link sidebar-donate-link"
+                href="{{ github_sponsors_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open SpeedPulse GitHub Sponsors"
+                title="Open GitHub Sponsors to support this project"
+              >
+                <span class="sidebar-footer-link-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path
+                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A5.98 5.98 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </span>
+                <span class="sidebar-footer-link-title">Donate</span>
+              </a>
+            </div>
           </div>
         </section>
       </aside>

@@ -1926,54 +1926,9 @@ function bindMobileNav() {
   });
 }
 
-function initSidebarLikeButton() {
-  const button = byId("settings-sidebar-like-button");
-  const count = byId("settings-sidebar-like-count");
-  if (!button || !count) return;
-
-  const key = "speedpulse-sidebar-like";
-  const countKey = "speedpulse-sidebar-like-count";
-  const read = (storageKey, fallback = "") => {
-    try {
-      return window.localStorage.getItem(storageKey) || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-  const write = (storageKey, value) => {
-    try {
-      window.localStorage.setItem(storageKey, value);
-    } catch {
-      // Ignore storage failures.
-    }
-  };
-
-  const liked = read(key) === "1";
-  let total = Number(read(countKey, "0"));
-  if (!Number.isFinite(total) || total < 0) total = 0;
-
-  const render = (active) => {
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-    button.firstChild.textContent = active ? "Liked " : "Like ";
-    count.textContent = String(total);
-  };
-
-  render(liked);
-
-  button.addEventListener("click", () => {
-    const active = button.getAttribute("aria-pressed") === "true";
-    const next = !active;
-    total = next ? total + 1 : Math.max(0, total - 1);
-    write(key, next ? "1" : "0");
-    write(countKey, String(total));
-    render(next);
-  });
-}
-
 initializeTheme();
 bindEvents();
 initMotionReveals();
-initSidebarLikeButton();
 updateRestoreSelectedFileLabel();
 void loadNotificationSettings();
 void loadScheduledServerOptions();

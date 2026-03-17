@@ -1386,9 +1386,9 @@ function renderScheduleNote(data) {
   const scheduledToday =
     data.today_scheduled_tests ?? data.today_tests ?? 0;
   byId("scan-plan").textContent =
-    `${scheduledToday} / ${data.scheduled_tests_per_day || 0} scheduled scans today`;
-  byId("schedule-server").textContent = `Server: ${selectedServer}`;
-  byId("schedule-weekly").textContent = `Weekly report: ${weekly}`;
+    `${scheduledToday} / ${data.scheduled_tests_per_day || 0} scans today`;
+  byId("schedule-server").textContent = selectedServer;
+  byId("schedule-weekly").textContent = weekly;
 
   if (timesHost) {
     timesHost.textContent = "";
@@ -1444,8 +1444,24 @@ function renderSidebarContract() {
       section.classList.remove("hidden");
       byId("sidebar-contract-period").textContent =
         `${current.start_date || "?"} — ${current.end_date || "?"}`;
-      byId("sidebar-contract-speeds").textContent =
-        `${current.download_mbps || 0} / ${current.upload_mbps || 0} Mbps (DL / UL)`;
+      const speeds = byId("sidebar-contract-speeds");
+      if (speeds) {
+        const download = Number(current.download_mbps || 0);
+        const upload = Number(current.upload_mbps || 0);
+        speeds.textContent = "";
+        speeds.append(`${download}`);
+        const downIcon = document.createElement("span");
+        downIcon.className = "contract-speed-icon";
+        downIcon.setAttribute("aria-hidden", "true");
+        downIcon.textContent = "↓";
+        speeds.appendChild(downIcon);
+        speeds.append(` / ${upload} Mbps`);
+        const upIcon = document.createElement("span");
+        upIcon.className = "contract-speed-icon";
+        upIcon.setAttribute("aria-hidden", "true");
+        upIcon.textContent = "↑";
+        speeds.appendChild(upIcon);
+      }
 
       const remaining = byId("sidebar-contract-remaining");
       if (current.end_date) {
@@ -2894,53 +2910,6 @@ function bindMobileNav() {
   });
 }
 
-function initSidebarLikeButton() {
-  const button = byId("sidebar-like-button");
-  const count = byId("sidebar-like-count");
-  if (!button || !count) return;
-
-  const key = "speedpulse-sidebar-like";
-  const countKey = "speedpulse-sidebar-like-count";
-  const read = (storageKey, fallback = "") => {
-    try {
-      return window.localStorage.getItem(storageKey) || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-  const write = (storageKey, value) => {
-    try {
-      window.localStorage.setItem(storageKey, value);
-    } catch {
-      // Ignore storage failures.
-    }
-  };
-
-  const liked = read(key) === "1";
-  let total = Number(read(countKey, "0"));
-  if (!Number.isFinite(total) || total < 0) total = 0;
-
-  const render = (active) => {
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-    const prefixNode = button.childNodes[0];
-    if (prefixNode && prefixNode.nodeType === Node.TEXT_NODE) {
-      prefixNode.textContent = active ? "Liked " : "Like ";
-    }
-    count.textContent = String(total);
-  };
-
-  render(liked);
-
-  button.addEventListener("click", () => {
-    const active = button.getAttribute("aria-pressed") === "true";
-    const next = !active;
-    total = next ? total + 1 : Math.max(0, total - 1);
-    write(key, next ? "1" : "0");
-    write(countKey, String(total));
-    render(next);
-  });
-}
-
 function notificationChannelIcon(channel) {
   if (channel === "email") return "📧";
   if (channel === "webhook") return "🔗";
@@ -3032,7 +3001,6 @@ initializeTheme();
 bindSorting();
 bindEvents();
 initMotionReveals();
-initSidebarLikeButton();
 void loadServerSettings();
 void syncRunStatus(false);
 loadMetrics();

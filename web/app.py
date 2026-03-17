@@ -736,7 +736,17 @@ def _github_project_url(config: dict | None = None) -> str:
         configured = str(source.get("app", {}).get("github_url", "")).strip()
     if configured.startswith("http://") or configured.startswith("https://"):
         return configured
-    return "https://github.com/"
+    return "https://github.com/Sreniok/SpeedPulse"
+
+
+def _github_sponsors_url(config: dict | None = None) -> str:
+    project_url = _github_project_url(config)
+    parsed = urlparse(project_url)
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if len(path_parts) >= 1 and parsed.netloc:
+        return f"https://github.com/sponsors/{path_parts[0]}"
+    return "https://github.com/sponsors/Sreniok"
+
 
 
 def _normalize_test_times(values: object) -> list[str]:
@@ -1971,6 +1981,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
             "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
             "github_url": _github_project_url(config),
+            "github_sponsors_url": _github_sponsors_url(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -2001,6 +2012,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
             "github_url": _github_project_url(config),
+            "github_sponsors_url": _github_sponsors_url(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
