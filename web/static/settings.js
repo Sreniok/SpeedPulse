@@ -190,6 +190,24 @@ function currentThemeId() {
   return String(prefs.activeTheme || "default-dark");
 }
 
+function currentUiThemePreferences() {
+  const fallback = {
+    mode: "system",
+    light: "default-light",
+    dark: "default-dark",
+  };
+  const themeApi = window.SpeedPulseTheme;
+  if (!themeApi || typeof themeApi.currentPreferences !== "function") {
+    return fallback;
+  }
+  const prefs = themeApi.currentPreferences();
+  return {
+    mode: String(prefs.mode || fallback.mode),
+    light: String(prefs.lightTheme || fallback.light),
+    dark: String(prefs.darkTheme || fallback.dark),
+  };
+}
+
 function toggleNotificationFieldState() {
   const webhookEnabled = byId("settings-webhook-enabled")?.checked;
   const ntfyEnabled = byId("settings-ntfy-enabled")?.checked;
@@ -223,6 +241,7 @@ function renderAccountSummary(account) {
 function syncDailyScanRowState() {
   const rows = Array.from(document.querySelectorAll("[data-scan-time-row]"));
   const countBadge = byId("settings-scan-count");
+  const scanEnabled = byId("settings-scan-enabled")?.checked !== false;
 
   rows.forEach((row, index) => {
     const label = row.querySelector("[data-scan-time-label]");
@@ -233,7 +252,7 @@ function syncDailyScanRowState() {
     }
 
     if (removeButton) {
-      removeButton.disabled = rows.length <= 1;
+      removeButton.disabled = !scanEnabled || rows.length <= 1;
     }
   });
 
@@ -244,6 +263,8 @@ function syncDailyScanRowState() {
 
 function addDailyScanTimeRow(value = "08:00") {
   const container = byId("settings-scan-times");
+  if (!container) return;
+  const scanEnabled = byId("settings-scan-enabled")?.checked !== false;
   const row = document.createElement("div");
   row.className = "settings-time-row";
   row.dataset.scanTimeRow = "true";
@@ -257,12 +278,14 @@ function addDailyScanTimeRow(value = "08:00") {
   input.type = "time";
   input.step = "60";
   input.value = value;
+  input.disabled = !scanEnabled;
   input.dataset.scanTime = "true";
 
   const removeButton = document.createElement("button");
   removeButton.type = "button";
   removeButton.className = "btn-muted btn-small";
   removeButton.textContent = "Remove";
+  removeButton.disabled = !scanEnabled;
   removeButton.dataset.removeScanTime = "true";
   removeButton.addEventListener("click", () => {
     row.remove();
@@ -276,6 +299,7 @@ function addDailyScanTimeRow(value = "08:00") {
 
 function renderDailyScanTimes(values) {
   const container = byId("settings-scan-times");
+  if (!container) return;
   container.textContent = "";
 
   const times = Array.isArray(values) && values.length > 0 ? values : ["08:00"];
@@ -288,6 +312,63 @@ function collectDailyScanTimes() {
   return Array.from(document.querySelectorAll("[data-scan-time]")).map(
     (input) => input.value.trim(),
   );
+}
+
+function syncScanFrequencySummary() {
+  const frequency = String(byId("settings-scan-frequency")?.value || "daily")
+    .trim()
+    .toLowerCase();
+  const title = byId("settings-scan-frequency-title");
+  const note = byId("settings-scan-frequency-note");
+  const weeklyOptions = byId("settings-scan-weekly-options");
+  const monthlyOptions = byId("settings-scan-monthly-options");
+
+  const copy = {
+    daily: {
+      title: "Daily scans",
+      note: "These run every day at the times below.",
+    },
+    weekly: {
+      title: "Weekly scans",
+      note: "These run once per selected weekday at the times below.",
+    },
+    monthly: {
+      title: "Monthly scans",
+      note: "These run on the selected day of month at the times below.",
+    },
+    custom: {
+      title: "Custom scans",
+      note: "Custom keeps the explicit scan times below.",
+    },
+  };
+  const selected = copy[frequency] || copy.daily;
+
+  if (title) title.textContent = selected.title;
+  if (note) note.textContent = selected.note;
+  if (weeklyOptions) weeklyOptions.classList.toggle("hidden", frequency !== "weekly");
+  if (monthlyOptions) monthlyOptions.classList.toggle("hidden", frequency !== "monthly");
+}
+
+function syncScanScheduleState() {
+  const scanEnabled = byId("settings-scan-enabled")?.checked !== false;
+  const frequencySelect = byId("settings-scan-frequency");
+  const weeklyDay = byId("settings-scan-weekly-day");
+  const monthlyDay = byId("settings-scan-monthly-day");
+  const addButton = byId("settings-add-scan-time");
+  const times = Array.from(document.querySelectorAll("[data-scan-time]"));
+  const removeButtons = Array.from(document.querySelectorAll("[data-remove-scan-time]"));
+
+  if (frequencySelect) frequencySelect.disabled = !scanEnabled;
+  if (weeklyDay) weeklyDay.disabled = !scanEnabled;
+  if (monthlyDay) monthlyDay.disabled = !scanEnabled;
+  if (addButton) addButton.disabled = !scanEnabled;
+  times.forEach((input) => {
+    input.disabled = !scanEnabled;
+  });
+  removeButtons.forEach((button) => {
+    button.disabled = !scanEnabled || removeButtons.length <= 1;
+  });
+  syncDailyScanRowState();
 }
 
 function parseWeeklySchedule(value) {
@@ -385,6 +466,16 @@ function populateSettingsForm(payload) {
   byId("settings-monthly-time").value =
     notifications.monthly_report_time || "08:00";
   renderDailyScanTimes(notifications.test_times || []);
+  byId("settings-scan-enabled").checked =
+    notifications.scan_enabled !== false;
+  byId("settings-scan-frequency").value =
+    String(notifications.scan_frequency || "daily");
+  byId("settings-scan-weekly-day").value =
+    String(notifications.scan_weekly_day || "Monday");
+  byId("settings-scan-monthly-day").value =
+    String(Number(notifications.scan_monthly_day || 1));
+  syncScanFrequencySummary();
+  syncScanScheduleState();
   byId("settings-webhook-enabled").checked = Boolean(
     notifications.webhook_enabled,
   );
@@ -445,6 +536,7 @@ function populateSettingsForm(payload) {
 }
 
 function collectSettingsPayload() {
+  const uiTheme = currentUiThemePreferences();
   return {
     account_name: byId("settings-account-name").value.trim(),
     broadband_provider: byId("settings-provider-detected").value.trim(),
@@ -459,6 +551,11 @@ function collectSettingsPayload() {
     weekly_report_time: buildWeeklySchedule(),
     monthly_report_enabled: byId("settings-monthly-enabled").checked,
     monthly_report_time: byId("settings-monthly-time").value || "08:00",
+    scan_enabled: byId("settings-scan-enabled").checked,
+    scan_frequency:
+      String(byId("settings-scan-frequency").value || "daily").trim().toLowerCase(),
+    scan_weekly_day: String(byId("settings-scan-weekly-day").value || "Monday"),
+    scan_monthly_day: Number(byId("settings-scan-monthly-day").value || "1"),
     test_times: collectDailyScanTimes(),
     server_id: byId("settings-schedule-server").value,
     push_events: {
@@ -467,6 +564,10 @@ function collectSettingsPayload() {
       monthly_report: byId("settings-push-event-monthly").checked,
       health_check: byId("settings-push-event-health").checked,
     },
+    ui_theme: uiTheme,
+    ui_theme_mode: uiTheme.mode,
+    ui_theme_light: uiTheme.light,
+    ui_theme_dark: uiTheme.dark,
     report_theme_id: currentThemeId(),
     webhook_enabled: byId("settings-webhook-enabled").checked,
     webhook_url: byId("settings-webhook-url").value.trim(),
@@ -1134,6 +1235,13 @@ function bindCollapsiblePanels() {
       const targetId = String(toggle.dataset.collapseTarget || "");
       const body = byId(targetId);
       if (!body) return;
+      const panel = toggle.closest(".panel");
+      const panelHead = panel ? panel.querySelector(".panel-head") : null;
+      const triggerToggle = () => {
+        if (body.dataset.animating === "true") return;
+        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+        setPanelCollapsedState(toggle, body, isExpanded);
+      };
 
       const initiallyCollapsed =
         body.hasAttribute("hidden") ||
@@ -1143,11 +1251,20 @@ function bindCollapsiblePanels() {
         silent: true,
       });
 
-      toggle.addEventListener("click", () => {
-        if (body.dataset.animating === "true") return;
-        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
-        setPanelCollapsedState(toggle, body, isExpanded);
-      });
+      toggle.addEventListener("click", triggerToggle);
+
+      if (panelHead instanceof HTMLElement) {
+        panelHead.classList.add("panel-head-clickable");
+        panelHead.addEventListener("click", (event) => {
+          if (!(event.target instanceof HTMLElement)) {
+            triggerToggle();
+            return;
+          }
+          if (event.target.closest(".panel-collapse-toggle")) return;
+          if (event.target.closest("a, button, input, select, textarea, label")) return;
+          triggerToggle();
+        });
+      }
     });
 }
 
@@ -1358,6 +1475,13 @@ function bindEvents() {
     "change",
     toggleNotificationFieldState,
   );
+  byId("settings-scan-enabled").addEventListener("change", () => {
+    syncScanScheduleState();
+  });
+  byId("settings-scan-frequency").addEventListener("change", () => {
+    syncScanFrequencySummary();
+    syncScanScheduleState();
+  });
   byId("settings-add-scan-time").addEventListener("click", () => {
     addDailyScanTimeRow();
   });

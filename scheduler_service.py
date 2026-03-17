@@ -85,21 +85,46 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     scheduling = config.get("scheduling", {})
     notifications = config.get("notifications", {})
 
+    for job in scheduler.get_jobs():
+        if str(job.id).startswith("speedtest_"):
+            scheduler.remove_job(job.id)
+
+    scan_enabled = bool(scheduling.get("scan_enabled", True))
+    scan_frequency = str(scheduling.get("scan_frequency", "daily") or "daily").strip().lower()
+    if scan_frequency not in {"daily", "weekly", "monthly", "custom"}:
+        scan_frequency = "daily"
+
     # Run speed tests at configured times.
     test_times = scheduling.get("test_times", ["08:00", "16:00", "22:00"])
-    for index, test_time in enumerate(test_times, start=1):
-        hour, minute = parse_hhmm(test_time, "08:00")
-        scheduler.add_job(
-            run_script,
-            trigger=CronTrigger(hour=hour, minute=minute),
-            args=["CheckSpeed.py"],
-            id=f"speedtest_{index}",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-            misfire_grace_time=300,
-        )
-        log(f"Scheduled speed test #{index} at {hour:02d}:{minute:02d}")
+    if scan_enabled:
+        for index, test_time in enumerate(test_times, start=1):
+            hour, minute = parse_hhmm(test_time, "08:00")
+            trigger_kwargs: dict[str, object] = {"hour": hour, "minute": minute}
+            if scan_frequency == "weekly":
+                weekday = str(scheduling.get("scan_weekly_day", "Monday") or "Monday").strip().lower()[:3]
+                trigger_kwargs["day_of_week"] = weekday
+            elif scan_frequency == "monthly":
+                day_of_month = int(scheduling.get("scan_monthly_day", 1) or 1)
+                day_of_month = max(1, min(28, day_of_month))
+                trigger_kwargs["day"] = day_of_month
+            scheduler.add_job(
+                run_script,
+                trigger=CronTrigger(**trigger_kwargs),
+                args=["CheckSpeed.py"],
+                id=f"speedtest_{index}",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=300,
+            )
+            if scan_frequency == "weekly":
+                log(f"Scheduled weekly speed test #{index} at {hour:02d}:{minute:02d} ({weekday})")
+            elif scan_frequency == "monthly":
+                log(f"Scheduled monthly speed test #{index} at {hour:02d}:{minute:02d} (day {day_of_month})")
+            else:
+                log(f"Scheduled speed test #{index} at {hour:02d}:{minute:02d}")
+    else:
+        log("Scheduled scans are disabled in settings")
 
     # Weekly report schedule.
     if notifications.get("weekly_report_enabled", True):

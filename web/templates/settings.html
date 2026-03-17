@@ -6,6 +6,18 @@
     <meta name="csrf-token" content="{{ csrf_token }}" />
     <link rel="icon" href="/logo.svg?v={{ logo_version }}" type="image/svg+xml" />
     <title>SpeedPulse Settings</title>
+    <script>
+      (() => {
+        const theme = {{ ui_theme | tojson }};
+        try {
+          window.localStorage.setItem("speedpulse-theme-mode", String(theme.mode || "system"));
+          window.localStorage.setItem("speedpulse-theme-light", String(theme.light || "default-light"));
+          window.localStorage.setItem("speedpulse-theme-dark", String(theme.dark || "default-dark"));
+        } catch (error) {
+          // Ignore storage access failures before theme boot.
+        }
+      })();
+    </script>
     <script src="/static/theme-boot.js"></script>
     <link rel="stylesheet" href="/static/app.css?v={{ static_version }}" />
     <script src="/static/theme.js" defer></script>
@@ -95,6 +107,7 @@
           <a class="nav-link-section" data-settings-section-link href="#section-appearance">Appearance</a>
           <a class="nav-link-section" data-settings-section-link href="#section-user">User account</a>
           <a class="nav-link-section" data-settings-section-link href="#section-broadband">Broadband</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-schedule">Schedule</a>
           <a class="nav-link-section" data-settings-section-link href="#section-email">Email (SMTP)</a>
           <a class="nav-link-section" data-settings-section-link href="#section-push">Push alerts</a>
           <a class="nav-link-section" data-settings-section-link href="#section-backup">Backup</a>
@@ -205,6 +218,12 @@
             <a
               class="nav-link nav-link-inline settings-jump-link"
               data-settings-section-link
+              href="#section-schedule"
+              >Schedule</a
+            >
+            <a
+              class="nav-link nav-link-inline settings-jump-link"
+              data-settings-section-link
               href="#section-email"
               >Email</a
             >
@@ -224,55 +243,75 @@
         </section>
 
         <section class="settings-grid settings-grid-stack">
-          <article id="section-appearance" class="panel settings-card">
-            <div class="panel-head">
-              <p class="eyebrow">Appearance</p>
-              <h2>Theme</h2>
-              <p class="panel-subtext">
-                Choose whether SpeedPulse follows your device theme or always
-                uses a fixed light or dark palette. This preference is saved on
-                this browser only.
+          <article
+            id="section-appearance"
+            class="panel settings-card panel-collapsible"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Appearance</p>
+                <h2>Theme</h2>
+                <p class="panel-subtext">
+                  Choose whether SpeedPulse follows your device theme or always
+                  uses a fixed light or dark palette. This preference is saved on
+                  this browser only.
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="true"
+                aria-controls="section-appearance-body"
+                data-collapse-target="section-appearance-body"
+                data-collapse-name="Appearance section"
+                aria-label="Collapse Appearance section"
+                title="Collapse Appearance section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+
+            <div id="section-appearance-body" class="panel-collapse-body">
+              <div class="settings-fields settings-fields-split">
+                <div class="settings-field-group">
+                  <label for="settings-theme-mode">Mode</label>
+                  <select id="settings-theme-mode">
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                  <p class="panel-subtext">
+                    System mode switches automatically with your device
+                    preference.
+                  </p>
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-theme-light">Light palette</label>
+                  <select
+                    id="settings-theme-light"
+                    aria-describedby="settings-theme-light-note"
+                  ></select>
+                  <p id="settings-theme-light-note" class="panel-subtext">
+                    Used in Light mode and when System mode detects a light
+                    preference.
+                  </p>
+                </div>
+                <div class="settings-field-group">
+                  <label for="settings-theme-dark">Dark palette</label>
+                  <select
+                    id="settings-theme-dark"
+                    aria-describedby="settings-theme-dark-note"
+                  ></select>
+                  <p id="settings-theme-dark-note" class="panel-subtext">
+                    Used in Dark mode and when System mode detects a dark
+                    preference.
+                  </p>
+                </div>
+              </div>
+              <p id="settings-theme-summary" class="settings-theme-summary">
+                Loading theme settings...
               </p>
             </div>
-            <div class="settings-fields settings-fields-split">
-              <div class="settings-field-group">
-                <label for="settings-theme-mode">Mode</label>
-                <select id="settings-theme-mode">
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-                <p class="panel-subtext">
-                  System mode switches automatically with your device
-                  preference.
-                </p>
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-theme-light">Light palette</label>
-                <select
-                  id="settings-theme-light"
-                  aria-describedby="settings-theme-light-note"
-                ></select>
-                <p id="settings-theme-light-note" class="panel-subtext">
-                  Used in Light mode and when System mode detects a light
-                  preference.
-                </p>
-              </div>
-              <div class="settings-field-group">
-                <label for="settings-theme-dark">Dark palette</label>
-                <select
-                  id="settings-theme-dark"
-                  aria-describedby="settings-theme-dark-note"
-                ></select>
-                <p id="settings-theme-dark-note" class="panel-subtext">
-                  Used in Dark mode and when System mode detects a dark
-                  preference.
-                </p>
-              </div>
-            </div>
-            <p id="settings-theme-summary" class="settings-theme-summary">
-              Loading theme settings...
-            </p>
           </article>
         </section>
 
@@ -631,21 +670,89 @@
           </article>
 
           <!-- ── Schedule ──────────────────────────────────── -->
-          <article id="section-schedule" class="panel settings-card hidden" hidden>
-            <div class="panel-head">
-              <p class="eyebrow">Schedule</p>
-              <h2>Automation schedule</h2>
-              <p class="panel-subtext">
-                Choose how many daily scans run and set the exact times for each
-                one.
-              </p>
+          <article
+            id="section-schedule"
+            class="panel settings-card panel-collapsible is-collapsed"
+          >
+            <div class="panel-head panel-head-row">
+              <div>
+                <p class="eyebrow">Schedule</p>
+                <h2>Automation schedule</h2>
+                <p class="panel-subtext">
+                  Control whether scheduled scans run, choose frequency, and
+                  set exact scan times.
+                </p>
+              </div>
+              <button
+                class="btn-icon panel-collapse-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="section-schedule-body"
+                data-collapse-target="section-schedule-body"
+                data-collapse-name="Schedule section"
+                aria-label="Expand Schedule section"
+                title="Expand Schedule section"
+              >
+                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
+              </button>
             </div>
-            <div class="settings-schedule-shell">
+            <div id="section-schedule-body" class="panel-collapse-body" hidden>
+              <div class="toggle-grid">
+                <label class="toggle-row" for="settings-scan-enabled">
+                  <input id="settings-scan-enabled" type="checkbox" />
+                  <span>Enable scheduled scans</span>
+                </label>
+              </div>
+              <div class="settings-field-group settings-field-inline">
+                <label for="settings-scan-frequency">Scheduled scan frequency</label>
+                <select id="settings-scan-frequency">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div
+                id="settings-scan-weekly-options"
+                class="settings-fields settings-fields-schedule hidden"
+              >
+                <div class="settings-field-group">
+                  <label for="settings-scan-weekly-day">Scan day (weekly)</label>
+                  <select id="settings-scan-weekly-day">
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                  </select>
+                </div>
+              </div>
+              <div
+                id="settings-scan-monthly-options"
+                class="settings-fields settings-fields-schedule hidden"
+              >
+                <div class="settings-field-group">
+                  <label for="settings-scan-monthly-day"
+                    >Scan day of month (monthly)</label
+                  >
+                  <input
+                    id="settings-scan-monthly-day"
+                    type="number"
+                    min="1"
+                    max="28"
+                    step="1"
+                    value="1"
+                  />
+                </div>
+              </div>
+              <div class="settings-schedule-shell">
               <section class="settings-schedule-block">
                 <div class="settings-section-head">
                   <div>
-                    <h3>Daily scans</h3>
-                    <p class="panel-subtext">
+                    <h3 id="settings-scan-frequency-title">Daily scans</h3>
+                    <p id="settings-scan-frequency-note" class="panel-subtext">
                       These run every day at the times below.
                     </p>
                   </div>
@@ -716,16 +823,17 @@
                   </div>
                 </div>
               </section>
-            </div>
-            <div class="settings-actions">
-              <button
-                id="settings-save-schedule"
-                class="btn-primary"
-                type="button"
-                data-save-settings
-              >
-                Save schedule
-              </button>
+              </div>
+              <div class="settings-actions">
+                <button
+                  id="settings-save-schedule"
+                  class="btn-primary"
+                  type="button"
+                  data-save-settings
+                >
+                  Save schedule
+                </button>
+              </div>
             </div>
           </article>
 

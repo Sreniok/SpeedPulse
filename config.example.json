@@ -5,6 +5,12 @@
     "ip_address": "",
     "number": ""
   },
+  "app": {
+    "github_url": "https://github.com/Sreniok/SpeedPulse",
+    "ui_theme_mode": "system",
+    "ui_theme_light": "default-light",
+    "ui_theme_dark": "default-dark"
+  },
   "paths": {
     "speedtest_exe": "speedtest",
     "log_directory": "Log",
@@ -44,6 +50,10 @@
     "archive_older_than_weeks": 26
   },
   "scheduling": {
+    "scan_enabled": true,
+    "scan_frequency": "daily",
+    "scan_weekly_day": "Monday",
+    "scan_monthly_day": 1,
     "test_times": ["08:00", "16:00", "22:00"],
     "weekly_report_time": "Monday 08:00",
     "monthly_report_time": "08:00"

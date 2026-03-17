@@ -608,6 +608,11 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     detected_identity = _detected_account_network_identity(loaded)
     push_events = _normalize_push_events(notifications_cfg.get("push_events", {}))
     report_theme_id = _clean_theme_id(notifications_cfg.get("report_theme_id", "default-dark"))
+    ui_theme = _ui_theme_preferences(loaded)
+    scan_enabled = bool(scheduling_cfg.get("scan_enabled", True))
+    scan_frequency = _clean_scan_frequency(scheduling_cfg.get("scan_frequency", "daily"), "daily")
+    scan_weekly_day = _clean_weekday_name(scheduling_cfg.get("scan_weekly_day", "Monday"), "Monday")
+    scan_monthly_day = max(1, min(28, _safe_int(scheduling_cfg.get("scan_monthly_day", 1), 1)))
 
     return {
         "login_email": login_email,
@@ -636,6 +641,10 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "monthly_report_enabled": bool(notifications_cfg.get("monthly_report_enabled", False)),
             "monthly_report_time": scheduling_cfg.get("monthly_report_time", "08:00"),
             "test_times": scheduling_cfg.get("test_times", ["08:00", "16:00", "22:00"]),
+            "scan_enabled": scan_enabled,
+            "scan_frequency": scan_frequency,
+            "scan_weekly_day": scan_weekly_day,
+            "scan_monthly_day": scan_monthly_day,
             "push_events": push_events,
             "report_theme_id": report_theme_id,
             "webhook_enabled": bool(notifications_cfg.get("webhook_enabled", False)),
@@ -644,6 +653,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "ntfy_server": str(notifications_cfg.get("ntfy_server", "https://ntfy.sh")),
             "ntfy_topic": str(notifications_cfg.get("ntfy_topic", "")),
         },
+        "ui_theme": ui_theme,
         "thresholds": {
             "download_mbps": _safe_float(thresholds_cfg.get("download_mbps", 0), 0.0),
             "upload_mbps": _safe_float(thresholds_cfg.get("upload_mbps", 0), 0.0),
@@ -720,6 +730,17 @@ def _normalize_push_events(payload: object) -> dict[str, bool]:
     return normalized
 
 
+_WEEKDAY_NAMES = {
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+}
+
+
 def _clean_theme_id(raw_value: object, fallback: str = "default-dark") -> str:
     theme_id = str(raw_value or "").strip().lower()
     if not theme_id:
@@ -727,6 +748,40 @@ def _clean_theme_id(raw_value: object, fallback: str = "default-dark") -> str:
     if not re.fullmatch(r"[a-z0-9-]{3,64}", theme_id):
         return fallback
     return theme_id
+
+
+def _clean_theme_mode(raw_value: object, fallback: str = "system") -> str:
+    mode = str(raw_value or "").strip().lower()
+    if mode in {"system", "light", "dark"}:
+        return mode
+    return fallback
+
+
+def _clean_scan_frequency(raw_value: object, fallback: str = "daily") -> str:
+    frequency = str(raw_value or "").strip().lower()
+    if frequency in {"daily", "weekly", "monthly", "custom"}:
+        return frequency
+    return fallback
+
+
+def _clean_weekday_name(raw_value: object, fallback: str = "Monday") -> str:
+    raw = str(raw_value or "").strip().lower()
+    if raw not in _WEEKDAY_NAMES:
+        return fallback
+    return raw.capitalize()
+
+
+def _ui_theme_preferences(config: dict | None = None) -> dict[str, str]:
+    loaded = config or load_config()
+    app_cfg = loaded.get("app", {})
+    mode = _clean_theme_mode(app_cfg.get("ui_theme_mode", "system"), "system")
+    light_theme = _clean_theme_id(app_cfg.get("ui_theme_light", "default-light"), "default-light")
+    dark_theme = _clean_theme_id(app_cfg.get("ui_theme_dark", "default-dark"), "default-dark")
+    return {
+        "mode": mode,
+        "light": light_theme,
+        "dark": dark_theme,
+    }
 
 
 def _github_project_url(config: dict | None = None) -> str:
@@ -1468,7 +1523,9 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
     entries = load_all_log_entries(log_dir)
     detected_identity = _detected_account_network_identity(config, entries=entries)
     now = datetime.now()
-    scheduled_tests_per_day = len(scheduling.get("test_times", []))
+    scan_enabled = bool(scheduling.get("scan_enabled", True))
+    scan_frequency = _clean_scan_frequency(scheduling.get("scan_frequency", "daily"), "daily")
+    scheduled_tests_per_day = len(scheduling.get("test_times", [])) if scan_enabled else 0
     today_entries = [entry for entry in entries if entry["timestamp"].date() == now.date()]
     today_manual_entries = [entry for entry in today_entries if str(entry.get("source", "")).lower() == "manual"]
     today_scheduled_entries = [entry for entry in today_entries if str(entry.get("source", "")).lower() != "manual"]
@@ -1581,6 +1638,10 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
             "test_times": scheduling.get("test_times", []),
             "weekly_report_time": scheduling.get("weekly_report_time", ""),
             "monthly_report_time": scheduling.get("monthly_report_time", ""),
+            "scan_enabled": scan_enabled,
+            "scan_frequency": scan_frequency,
+            "scan_weekly_day": _clean_weekday_name(scheduling.get("scan_weekly_day", "Monday"), "Monday"),
+            "scan_monthly_day": max(1, min(28, _safe_int(scheduling.get("scan_monthly_day", 1), 1))),
         },
         "timeseries": timeseries,
         "latest_tests": latest_entries,
@@ -1982,6 +2043,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
             "csrf_token": session["csrf"],
             "github_url": _github_project_url(config),
             "github_sponsors_url": _github_sponsors_url(config),
+            "ui_theme": _ui_theme_preferences(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -2013,6 +2075,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "csrf_token": session["csrf"],
             "github_url": _github_project_url(config),
             "github_sponsors_url": _github_sponsors_url(config),
+            "ui_theme": _ui_theme_preferences(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -2141,10 +2204,27 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     email_from = _clean_env_value(payload.get("email_from", ""))
     weekly_report_time = _clean_env_value(payload.get("weekly_report_time", "Monday 08:00"))
     monthly_report_time = _clean_env_value(payload.get("monthly_report_time", "08:00"))
+    scan_enabled = bool(payload.get("scan_enabled", True))
+    scan_frequency = _clean_scan_frequency(payload.get("scan_frequency", "daily"), "daily")
+    scan_weekly_day = _clean_weekday_name(payload.get("scan_weekly_day", "Monday"), "Monday")
+    scan_monthly_day = _safe_int(payload.get("scan_monthly_day", 1), 1)
     test_times = _normalize_test_times(payload.get("test_times", ["08:00", "16:00", "22:00"]))
     selected_server_id = _clean_env_value(payload.get("server_id", ""))
     push_events = _normalize_push_events(payload.get("push_events", {}))
     report_theme_id = _clean_theme_id(payload.get("report_theme_id", "default-dark"))
+    ui_theme_payload = payload.get("ui_theme", {})
+    ui_theme_mode = _clean_theme_mode(
+        ui_theme_payload.get("mode", payload.get("ui_theme_mode", "system")),
+        "system",
+    )
+    ui_theme_light = _clean_theme_id(
+        ui_theme_payload.get("light", payload.get("ui_theme_light", "default-light")),
+        "default-light",
+    )
+    ui_theme_dark = _clean_theme_id(
+        ui_theme_payload.get("dark", payload.get("ui_theme_dark", "default-dark")),
+        "default-dark",
+    )
 
     try:
         smtp_port = int(payload.get("smtp_port", 465))
@@ -2164,6 +2244,8 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
     if not _validate_hhmm(monthly_report_time):
         raise HTTPException(status_code=400, detail="Monthly report time must use HH:MM format")
+    if scan_monthly_day < 1 or scan_monthly_day > 28:
+        raise HTTPException(status_code=400, detail="Monthly scan day must be between 1 and 28")
 
     config = load_config()
     account_cfg = config.setdefault("account", {})
@@ -2171,6 +2253,7 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     scheduling_cfg = config.setdefault("scheduling", {})
     notifications_cfg = config.setdefault("notifications", {})
     speedtest_cfg = config.setdefault("speedtest", {})
+    app_cfg = config.setdefault("app", {})
 
     detected_identity = _detected_account_network_identity(config)
     effective_provider = detected_identity["provider"] or broadband_provider
@@ -2188,6 +2271,10 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     scheduling_cfg["test_times"] = test_times
     scheduling_cfg["weekly_report_time"] = weekly_report_time
     scheduling_cfg["monthly_report_time"] = monthly_report_time
+    scheduling_cfg["scan_enabled"] = scan_enabled
+    scheduling_cfg["scan_frequency"] = scan_frequency
+    scheduling_cfg["scan_weekly_day"] = scan_weekly_day
+    scheduling_cfg["scan_monthly_day"] = scan_monthly_day
     speedtest_cfg["server_id"] = selected_server_id
 
     notifications_cfg["weekly_report_enabled"] = bool(payload.get("weekly_report_enabled", True))
@@ -2199,6 +2286,9 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     notifications_cfg["ntfy_enabled"] = bool(payload.get("ntfy_enabled", False))
     notifications_cfg["ntfy_server"] = _clean_env_value(payload.get("ntfy_server", "https://ntfy.sh")) or "https://ntfy.sh"
     notifications_cfg["ntfy_topic"] = _clean_env_value(payload.get("ntfy_topic", ""))
+    app_cfg["ui_theme_mode"] = ui_theme_mode
+    app_cfg["ui_theme_light"] = ui_theme_light
+    app_cfg["ui_theme_dark"] = ui_theme_dark
 
     contract_payload = payload.get("contract", {})
     if contract_payload:

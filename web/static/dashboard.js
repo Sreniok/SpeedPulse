@@ -2602,6 +2602,13 @@ function bindCollapsiblePanels() {
       const targetId = String(toggle.dataset.collapseTarget || "");
       const body = byId(targetId);
       if (!body) return;
+      const panel = toggle.closest(".panel");
+      const panelHead = panel ? panel.querySelector(".panel-head") : null;
+      const triggerToggle = () => {
+        if (body.dataset.animating === "true") return;
+        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+        setPanelCollapsedState(toggle, body, isExpanded);
+      };
 
       const initiallyCollapsed =
         body.hasAttribute("hidden") ||
@@ -2610,11 +2617,20 @@ function bindCollapsiblePanels() {
         instant: true,
       });
 
-      toggle.addEventListener("click", () => {
-        if (body.dataset.animating === "true") return;
-        const isExpanded = toggle.getAttribute("aria-expanded") === "true";
-        setPanelCollapsedState(toggle, body, isExpanded);
-      });
+      toggle.addEventListener("click", triggerToggle);
+
+      if (panelHead instanceof HTMLElement) {
+        panelHead.classList.add("panel-head-clickable");
+        panelHead.addEventListener("click", (event) => {
+          if (!(event.target instanceof HTMLElement)) {
+            triggerToggle();
+            return;
+          }
+          if (event.target.closest(".panel-collapse-toggle")) return;
+          if (event.target.closest("a, button, input, select, textarea, label")) return;
+          triggerToggle();
+        });
+      }
     });
 }
 
