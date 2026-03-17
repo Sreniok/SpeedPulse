@@ -5,38 +5,19 @@ Sends email alerts when speed test results fall below thresholds
 Uses SMTP credentials from environment variables (.env in Docker)
 """
 
-import json
 import smtplib
 import sys
-import urllib.request
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from urllib.parse import quote, urlparse
 
 from config_loader import load_json_config
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
-from version import USER_AGENT
+from push_notifications import send_ntfy_event, send_webhook_event
 
 log = get_logger("SendAlert")
-
-_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"}
-
-
-def _validate_outbound_url(url: str) -> None:
-    """Reject URLs targeting localhost, link-local, or non-HTTP schemes (SSRF prevention)."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError("URL must use http or https scheme")
-    hostname = (parsed.hostname or "").lower()
-    if not hostname:
-        raise ValueError("URL has no hostname")
-    if hostname in _BLOCKED_HOSTS:
-        raise ValueError("URL must not target localhost")
-    if hostname.startswith("169.254.") or hostname.startswith("fe80:"):
-        raise ValueError("URL must not target link-local addresses")
 
 
 def load_config():
@@ -192,65 +173,27 @@ def send_alert_email(config, subject, body):
 
 
 def send_webhook_alert(config, violations, download, upload, ping, packet_loss):
-    """Send webhook notification when enabled."""
-    notifications = config.get("notifications", {})
-    if not notifications.get("webhook_enabled", False):
-        return False
-
-    webhook_url = str(notifications.get("webhook_url", "")).strip()
-    if not webhook_url:
-        log.warning("Webhook enabled but URL is empty")
-        return False
-
-    payload = {
-        "title": "SpeedPulse Alert",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "violations": violations,
-        "metrics": {
-            "download_mbps": download,
-            "upload_mbps": upload,
-            "ping_ms": ping,
-            "packet_loss_percent": packet_loss,
+    """Send webhook alert when channel and event preference are enabled."""
+    return send_webhook_event(
+        config,
+        "alert",
+        "SpeedPulse Alert",
+        f"Violations: {', '.join(violations)}",
+        payload_extra={
+            "violations": violations,
+            "metrics": {
+                "download_mbps": download,
+                "upload_mbps": upload,
+                "ping_ms": ping,
+                "packet_loss_percent": packet_loss,
+            },
         },
-    }
-
-    try:
-        _validate_outbound_url(webhook_url)
-        request = urllib.request.Request(
-            webhook_url,
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
-        )
-        with urllib.request.urlopen(request, timeout=12) as response:
-            if int(response.status) >= 300:
-                log.error("Webhook returned HTTP %s", response.status)
-                return False
-        log.info("Webhook alert sent")
-        return True
-    except Exception as e:
-        log.error("Failed to send webhook alert: %s", e)
-        return False
+        logger=log,
+    )
 
 
 def send_ntfy_alert(config, violations, download, upload, ping, packet_loss):
-    """Send ntfy notification when enabled."""
-    notifications = config.get("notifications", {})
-    if not notifications.get("ntfy_enabled", False):
-        return False
-
-    topic = str(notifications.get("ntfy_topic", "")).strip()
-    if not topic:
-        log.warning("ntfy enabled but topic is empty")
-        return False
-
-    base_url = str(notifications.get("ntfy_server", "https://ntfy.sh")).strip() or "https://ntfy.sh"
-    url = f"{base_url.rstrip('/')}/{quote(topic, safe='')}"
-    try:
-        _validate_outbound_url(url)
-    except ValueError as e:
-        log.error("Invalid ntfy URL: %s", e)
-        return False
+    """Send ntfy alert when channel and event preference are enabled."""
     message = (
         "SpeedPulse alert\n"
         f"Download: {download} Mbps\n"
@@ -259,28 +202,15 @@ def send_ntfy_alert(config, violations, download, upload, ping, packet_loss):
         f"Packet loss: {packet_loss}%\n"
         f"Violations: {', '.join(violations)}"
     )
-
-    try:
-        request = urllib.request.Request(
-            url,
-            data=message.encode("utf-8"),
-            method="POST",
-            headers={
-                "Title": "Speed Alert",
-                "Priority": "4",
-                "Tags": "warning,satellite",
-                "User-Agent": USER_AGENT,
-            },
-        )
-        with urllib.request.urlopen(request, timeout=12) as response:
-            if int(response.status) >= 300:
-                log.error("ntfy returned HTTP %s", response.status)
-                return False
-        log.info("ntfy alert sent")
-        return True
-    except Exception as e:
-        log.error("Failed to send ntfy alert: %s", e)
-        return False
+    return send_ntfy_event(
+        config,
+        "alert",
+        "Speed Alert",
+        message,
+        priority="4",
+        tags="warning,satellite",
+        logger=log,
+    )
 
 
 def main():

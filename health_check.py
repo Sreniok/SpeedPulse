@@ -14,6 +14,7 @@ from pathlib import Path
 
 from config_loader import load_json_config_or_exit
 from mail_settings import load_mail_settings
+from push_notifications import send_ntfy_event, send_webhook_event
 
 
 def load_config():
@@ -465,7 +466,28 @@ def send_health_alert(config, health_data):
         try:
             from state_store import log_notification
             issues = sum(1 for k in ("disk","logs","speedtest","errors","config","credentials") if not health_data.get(k, {}).get("healthy", True))
-            log_notification("email", "health_check", f"{issues} issue(s) found" if issues else "All checks passed")
+            summary = f"{issues} issue(s) found" if issues else "All checks passed"
+            log_notification("email", "health_check", summary)
+
+            webhook_success = send_webhook_event(
+                config,
+                "health_check",
+                "SpeedPulse health check",
+                summary,
+                payload_extra={"issues": issues},
+            )
+            ntfy_success = send_ntfy_event(
+                config,
+                "health_check",
+                "Health check",
+                summary,
+                priority="3" if issues == 0 else "4",
+                tags="wrench,monitoring" if issues else "monitoring",
+            )
+            if webhook_success:
+                log_notification("webhook", "health_check", summary)
+            if ntfy_success:
+                log_notification("ntfy", "health_check", summary)
         except Exception:
             pass
         return True

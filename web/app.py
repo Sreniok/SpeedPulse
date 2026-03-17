@@ -44,6 +44,7 @@ from backup_manager import (
 )
 from log_parser import load_all_log_entries
 from mail_settings import load_mail_settings
+from reporting import build_report_html, resolve_report_theme_id
 from version import USER_AGENT, __version__
 from state_store import (
     blocked_seconds as state_blocked_seconds,
@@ -121,6 +122,12 @@ MANUAL_RUN_STATE = dict(DEFAULT_MANUAL_RUN_STATE)
 SERVER_OPTIONS_CACHE_TTL_SECONDS = 600
 SERVER_OPTIONS_CACHE = {"fetched_at": 0.0, "options": []}
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PUSH_EVENT_DEFAULTS = {
+    "alert": True,
+    "weekly_report": True,
+    "monthly_report": True,
+    "health_check": True,
+}
 
 
 def _resolve_runtime_path(default_path: Path, env_name: str) -> Path:
@@ -599,6 +606,8 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     login_email = _resolve_login_email(loaded)
     notification_email = _resolve_notification_email(loaded)
     detected_identity = _detected_account_network_identity(loaded)
+    push_events = _normalize_push_events(notifications_cfg.get("push_events", {}))
+    report_theme_id = _clean_theme_id(notifications_cfg.get("report_theme_id", "default-dark"))
 
     return {
         "login_email": login_email,
@@ -624,7 +633,11 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
         "notifications": {
             "weekly_report_enabled": bool(notifications_cfg.get("weekly_report_enabled", True)),
             "weekly_report_time": scheduling_cfg.get("weekly_report_time", "Monday 08:00"),
+            "monthly_report_enabled": bool(notifications_cfg.get("monthly_report_enabled", False)),
+            "monthly_report_time": scheduling_cfg.get("monthly_report_time", "08:00"),
             "test_times": scheduling_cfg.get("test_times", ["08:00", "16:00", "22:00"]),
+            "push_events": push_events,
+            "report_theme_id": report_theme_id,
             "webhook_enabled": bool(notifications_cfg.get("webhook_enabled", False)),
             "webhook_url": str(notifications_cfg.get("webhook_url", "")),
             "ntfy_enabled": bool(notifications_cfg.get("ntfy_enabled", False)),
@@ -653,6 +666,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "scheduled_backup_time": str(backup_cfg.get("scheduled_backup_time", "03:00")),
             "scheduled_backup_frequency": str(backup_cfg.get("scheduled_backup_frequency", "daily")),
             "scheduled_backup_include_logs": bool(backup_cfg.get("scheduled_backup_include_logs", True)),
+            "max_backups": max(1, _safe_int(backup_cfg.get("max_backups", 10), 10)),
             "backup_password_set": bool(os.getenv("BACKUP_PASSWORD", "").strip()),
         },
     }
@@ -686,6 +700,43 @@ def _safe_float(value: object, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_push_events(payload: object) -> dict[str, bool]:
+    normalized = dict(_PUSH_EVENT_DEFAULTS)
+    if not isinstance(payload, dict):
+        return normalized
+
+    for event_name in _PUSH_EVENT_DEFAULTS:
+        if event_name in payload:
+            normalized[event_name] = bool(payload.get(event_name))
+    return normalized
+
+
+def _clean_theme_id(raw_value: object, fallback: str = "default-dark") -> str:
+    theme_id = str(raw_value or "").strip().lower()
+    if not theme_id:
+        return fallback
+    if not re.fullmatch(r"[a-z0-9-]{3,64}", theme_id):
+        return fallback
+    return theme_id
+
+
+def _github_project_url(config: dict | None = None) -> str:
+    configured = str(os.getenv("GITHUB_REPO_URL", "")).strip()
+    if not configured:
+        source = config or load_config()
+        configured = str(source.get("app", {}).get("github_url", "")).strip()
+    if configured.startswith("http://") or configured.startswith("https://"):
+        return configured
+    return "https://github.com/"
 
 
 def _normalize_test_times(values: object) -> list[str]:
@@ -1519,6 +1570,7 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
         "scheduling": {
             "test_times": scheduling.get("test_times", []),
             "weekly_report_time": scheduling.get("weekly_report_time", ""),
+            "monthly_report_time": scheduling.get("monthly_report_time", ""),
         },
         "timeseries": timeseries,
         "latest_tests": latest_entries,
@@ -1918,6 +1970,7 @@ def dashboard_page(request: Request) -> HTMLResponse:
             "account_provider": detected_identity["provider"],
             "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
+            "github_url": _github_project_url(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1947,6 +2000,7 @@ def settings_page(request: Request) -> HTMLResponse:
             "account_provider": detected_identity["provider"],
             "account_ip_address": detected_identity["ip_address"],
             "csrf_token": session["csrf"],
+            "github_url": _github_project_url(config),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1965,6 +2019,63 @@ def metrics(request: Request, days: int = 30, mode: str = "days") -> JSONRespons
 
     payload = build_dashboard_payload(days, mode=mode)
     return JSONResponse(payload)
+
+
+@APP.get("/api/reports/download")
+def download_range_report(
+    request: Request,
+    mode: str = "today",
+    days: int = 30,
+    format: str = "html",
+    theme_id: str = "",
+) -> Response:
+    require_session(request)
+
+    report_format = str(format or "html").strip().lower()
+    if report_format != "html":
+        raise HTTPException(status_code=400, detail="Only HTML export is enabled right now.")
+
+    if mode not in {"days", "today"}:
+        raise HTTPException(status_code=400, detail="mode must be 'days' or 'today'")
+    if mode == "days" and (days < 1 or days > 365):
+        raise HTTPException(status_code=400, detail="days must be between 1 and 365")
+
+    config = load_config()
+    now = datetime.now()
+    log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
+    all_entries = load_all_log_entries(log_dir)
+    selected_entries = _filter_entries_for_mode(all_entries, now, days, mode)
+
+    if mode == "today":
+        yesterday = now - timedelta(days=1)
+        previous_entries = [entry for entry in all_entries if entry["timestamp"].date() == yesterday.date()]
+        range_label = "Today"
+        range_slug = "today"
+    else:
+        previous_start = now - timedelta(days=days * 2)
+        previous_end = now - timedelta(days=days)
+        previous_entries = [
+            entry for entry in all_entries if previous_start <= entry["timestamp"] < previous_end
+        ]
+        range_label = f"Last {days} days"
+        range_slug = f"{days}d"
+
+    resolved_theme = _clean_theme_id(theme_id, resolve_report_theme_id(config))
+    report_html = build_report_html(
+        config,
+        selected_entries,
+        report_title="SpeedPulse Performance Report",
+        range_label=range_label,
+        theme_id=resolved_theme,
+        previous_entries=previous_entries,
+    )
+    filename = f"speedpulse-report-{range_slug}-{now.strftime('%Y%m%d-%H%M')}.html"
+
+    return Response(
+        content=report_html,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @APP.get("/api/settings/server")
@@ -2017,8 +2128,11 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     smtp_password = str(payload.get("smtp_password", "") or "")
     email_from = _clean_env_value(payload.get("email_from", ""))
     weekly_report_time = _clean_env_value(payload.get("weekly_report_time", "Monday 08:00"))
+    monthly_report_time = _clean_env_value(payload.get("monthly_report_time", "08:00"))
     test_times = _normalize_test_times(payload.get("test_times", ["08:00", "16:00", "22:00"]))
     selected_server_id = _clean_env_value(payload.get("server_id", ""))
+    push_events = _normalize_push_events(payload.get("push_events", {}))
+    report_theme_id = _clean_theme_id(payload.get("report_theme_id", "default-dark"))
 
     try:
         smtp_port = int(payload.get("smtp_port", 465))
@@ -2036,6 +2150,8 @@ async def update_notification_settings(request: Request) -> JSONResponse:
 
     if not _validate_weekly_schedule(weekly_report_time):
         raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
+    if not _validate_hhmm(monthly_report_time):
+        raise HTTPException(status_code=400, detail="Monthly report time must use HH:MM format")
 
     config = load_config()
     account_cfg = config.setdefault("account", {})
@@ -2059,9 +2175,13 @@ async def update_notification_settings(request: Request) -> JSONResponse:
 
     scheduling_cfg["test_times"] = test_times
     scheduling_cfg["weekly_report_time"] = weekly_report_time
+    scheduling_cfg["monthly_report_time"] = monthly_report_time
     speedtest_cfg["server_id"] = selected_server_id
 
     notifications_cfg["weekly_report_enabled"] = bool(payload.get("weekly_report_enabled", True))
+    notifications_cfg["monthly_report_enabled"] = bool(payload.get("monthly_report_enabled", False))
+    notifications_cfg["push_events"] = push_events
+    notifications_cfg["report_theme_id"] = report_theme_id
     notifications_cfg["webhook_enabled"] = bool(payload.get("webhook_enabled", False))
     notifications_cfg["webhook_url"] = _clean_env_value(payload.get("webhook_url", ""))
     notifications_cfg["ntfy_enabled"] = bool(payload.get("ntfy_enabled", False))
@@ -2117,6 +2237,13 @@ async def update_notification_settings(request: Request) -> JSONResponse:
             raise HTTPException(status_code=400, detail="Backup frequency must be daily, weekly, or monthly")
         backup_cfg["scheduled_backup_frequency"] = freq
         backup_cfg["scheduled_backup_include_logs"] = bool(backup_payload.get("scheduled_backup_include_logs", True))
+        try:
+            max_backups = int(backup_payload.get("max_backups", backup_cfg.get("max_backups", 10)) or 10)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Backup retention must be numeric") from None
+        if max_backups < 1 or max_backups > 365:
+            raise HTTPException(status_code=400, detail="Backup retention must be between 1 and 365")
+        backup_cfg["max_backups"] = max_backups
 
     backup_password = str(payload.get("backup_password", "") or "")
     if backup_password.strip() and len(backup_password.strip()) < 6:

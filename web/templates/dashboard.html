@@ -21,9 +21,22 @@
         aria-label="Toggle navigation"
         aria-expanded="false"
       >
-        <span class="hamburger-line"></span>
-        <span class="hamburger-line"></span>
-        <span class="hamburger-line"></span>
+        <svg
+          class="hamburger-svg"
+          viewBox="0 0 100 100"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            class="hamburger-path line--1"
+            d="M0 40h62c13 0 6 28-4 18L35 35"
+          />
+          <path class="hamburger-path line--2" d="M0 50h70" />
+          <path
+            class="hamburger-path line--3"
+            d="M0 60h62c13 0 6-28-4-18L35 65"
+          />
+        </svg>
       </button>
       <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
       <aside id="sidebar" class="sidebar">
@@ -111,6 +124,23 @@
         <section class="sidebar-footer" aria-label="Application version">
           <p class="sidebar-footer-label">Version</p>
           <p class="sidebar-footer-value">v{{ app_version }}</p>
+          <div class="sidebar-footer-actions">
+            <a
+              class="btn-muted btn-small sidebar-footer-action"
+              href="{{ github_url }}"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GitHub</a
+            >
+            <button
+              id="sidebar-like-button"
+              class="btn-muted btn-small sidebar-footer-action"
+              type="button"
+              aria-pressed="false"
+            >
+              Like <span id="sidebar-like-count">0</span>
+            </button>
+          </div>
         </section>
       </aside>
 
@@ -135,6 +165,9 @@
                 <option value="365">Last 365 days</option>
               </select>
             </div>
+            <button id="generate-report" class="btn-muted" type="button">
+              Generate report
+            </button>
             <button id="run-test" class="btn-primary" type="button">
               Manual speed test
             </button>
@@ -583,7 +616,8 @@
               <p class="eyebrow">Activity</p>
               <h2>Notification history</h2>
               <p class="panel-subtext">
-                Recent alerts, weekly reports, and health checks that were sent.
+                Recent alerts, weekly/monthly reports, and health checks that were
+                sent.
               </p>
             </div>
             <button

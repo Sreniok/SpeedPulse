@@ -119,6 +119,24 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     else:
         log("Weekly report schedule is disabled in settings")
 
+    # Monthly report schedule (runs on day 1 at configured time).
+    if notifications.get("monthly_report_enabled", False):
+        monthly_time = scheduling.get("monthly_report_time", "08:00")
+        hour, minute = parse_hhmm(monthly_time, "08:00")
+        scheduler.add_job(
+            run_script,
+            trigger=CronTrigger(day=1, hour=hour, minute=minute),
+            args=["SendMonthlyReport.py"],
+            id="monthly_report",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=21600,
+        )
+        log(f"Scheduled monthly report on day 1 at {hour:02d}:{minute:02d}")
+    else:
+        log("Monthly report schedule is disabled in settings")
+
     # Daily health check.
     health_time = os.getenv("HEALTH_CHECK_TIME", "07:00")
     health_hour, health_minute = parse_hhmm(health_time, "07:00")

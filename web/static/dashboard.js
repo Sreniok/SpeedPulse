@@ -2126,13 +2126,77 @@ function bindSorting() {
   updateSortIndicators();
 }
 
-function metricsUrl() {
+function currentRangeSelection() {
   const value = byId("range").value;
   if (value === "today") {
+    return { mode: "today", days: null };
+  }
+  return { mode: "days", days: Number(value || "30") };
+}
+
+function metricsUrl() {
+  const selection = currentRangeSelection();
+  if (selection.mode === "today") {
     return "/api/metrics?mode=today";
   }
+  return `/api/metrics?mode=days&days=${encodeURIComponent(selection.days)}`;
+}
 
-  return `/api/metrics?mode=days&days=${encodeURIComponent(value)}`;
+function reportDownloadUrl() {
+  const selection = currentRangeSelection();
+  const themeApi = window.SpeedPulseTheme;
+  const activeTheme =
+    themeApi && typeof themeApi.currentPreferences === "function"
+      ? String(themeApi.currentPreferences().activeTheme || "default-dark")
+      : "default-dark";
+
+  const params = new URLSearchParams({ mode: selection.mode, format: "html" });
+  if (selection.mode === "days") {
+    params.set("days", String(selection.days || 30));
+  }
+  params.set("theme_id", activeTheme);
+  return `/api/reports/download?${params.toString()}`;
+}
+
+function attachmentFilenameFromResponse(response, fallbackName) {
+  const disposition = String(response.headers.get("Content-Disposition") || "");
+  const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+  return match ? match[1] : fallbackName;
+}
+
+async function generateRangeReport() {
+  const button = byId("generate-report");
+  if (!button) return;
+  button.disabled = true;
+
+  try {
+    const response = await fetch(reportDownloadUrl());
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || payload.message || "Unable to generate report.");
+    }
+
+    const blob = await response.blob();
+    const fallbackName = `speedpulse-report-${new Date().toISOString().slice(0, 10)}.html`;
+    const filename = attachmentFilenameFromResponse(response, fallbackName);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showMessage("Report generated and downloaded.", "success");
+  } catch (error) {
+    showMessage(error.message || "Unable to generate report.", "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function loadMetrics() {
@@ -2196,9 +2260,27 @@ function saveChartAsPng(chartId) {
   };
   const chart = chartMap[chartId];
   if (!chart) return;
+  const filename = `${chartId}-${new Date().toISOString().slice(0, 10)}.png`;
+  const canvas = chart.canvas;
+
+  if (canvas instanceof HTMLCanvasElement && typeof canvas.toBlob === "function") {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    }, "image/png");
+    return;
+  }
+
   const link = document.createElement("a");
   link.href = chart.toBase64Image();
-  link.download = `${chartId}-${new Date().toISOString().slice(0, 10)}.png`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2340,6 +2422,69 @@ function prefersReducedMotion() {
   );
 }
 
+function collectMotionTargets(selectors) {
+  const unique = new Set();
+  const targets = [];
+
+  selectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((element) => {
+      if (!(element instanceof HTMLElement) || unique.has(element)) return;
+      unique.add(element);
+      targets.push(element);
+    });
+  });
+
+  return targets;
+}
+
+function initMotionReveals() {
+  const targets = collectMotionTargets([
+    ".dashboard-page .topbar",
+    ".dashboard-page .status-line",
+    ".dashboard-page .section-jumpbar-wrap",
+    ".dashboard-page #hero-metrics",
+    ".dashboard-page #charts .panel",
+    ".dashboard-page #latest-results",
+    ".dashboard-page #heatmap-section",
+    ".dashboard-page #reliability .panel",
+    ".dashboard-page #notification-history",
+    ".dashboard-page .sidebar .brand-lockup",
+    ".dashboard-page .sidebar .sidebar-card",
+    ".dashboard-page .sidebar .nav-block",
+    ".dashboard-page .sidebar .sidebar-footer",
+  ]);
+
+  if (targets.length === 0) return;
+
+  targets.forEach((element, index) => {
+    element.classList.add("motion-reveal");
+    element.style.setProperty(
+      "--motion-reveal-delay",
+      `${Math.min(index, 10) * 52}ms`,
+    );
+  });
+
+  if (prefersReducedMotion() || typeof IntersectionObserver !== "function") {
+    targets.forEach((element) => element.classList.add("is-visible"));
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries, obs) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        if (entry.target instanceof HTMLElement) {
+          entry.target.classList.add("is-visible");
+        }
+        obs.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.08, rootMargin: "0px 0px -8% 0px" },
+  );
+
+  targets.forEach((element) => observer.observe(element));
+}
+
 function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
   const instant = Boolean(options.instant) || prefersReducedMotion();
   const panel = toggle.closest(".panel-collapsible");
@@ -2375,7 +2520,8 @@ function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
     body.style.overflow = "hidden";
     body.style.height = `${startHeight}px`;
     body.style.opacity = "1";
-    body.style.transition = "height 240ms ease, opacity 180ms ease";
+    body.style.transition =
+      "height 340ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1)";
 
     window.requestAnimationFrame(() => {
       body.style.height = "0px";
@@ -2402,9 +2548,19 @@ function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
   body.style.overflow = "hidden";
   body.style.height = "0px";
   body.style.opacity = "0";
-  body.style.transition = "height 260ms ease, opacity 200ms ease";
+  body.style.transition =
+    "height 340ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1)";
 
   const targetHeight = body.scrollHeight;
+  if (targetHeight <= 0) {
+    body.dataset.animating = "false";
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    return;
+  }
+
   window.requestAnimationFrame(() => {
     body.style.height = `${targetHeight}px`;
     body.style.opacity = "1";
@@ -2451,6 +2607,9 @@ function bindEvents() {
   bindSectionNavHighlight();
   bindMobileNav();
   byId("range").addEventListener("change", loadMetrics);
+  byId("generate-report").addEventListener("click", () => {
+    void generateRangeReport();
+  });
   const defaultServerSelect = byId("server-select");
   if (defaultServerSelect) {
     defaultServerSelect.addEventListener("change", updateServerSettings);
@@ -2735,6 +2894,53 @@ function bindMobileNav() {
   });
 }
 
+function initSidebarLikeButton() {
+  const button = byId("sidebar-like-button");
+  const count = byId("sidebar-like-count");
+  if (!button || !count) return;
+
+  const key = "speedpulse-sidebar-like";
+  const countKey = "speedpulse-sidebar-like-count";
+  const read = (storageKey, fallback = "") => {
+    try {
+      return window.localStorage.getItem(storageKey) || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const write = (storageKey, value) => {
+    try {
+      window.localStorage.setItem(storageKey, value);
+    } catch {
+      // Ignore storage failures.
+    }
+  };
+
+  const liked = read(key) === "1";
+  let total = Number(read(countKey, "0"));
+  if (!Number.isFinite(total) || total < 0) total = 0;
+
+  const render = (active) => {
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    const prefixNode = button.childNodes[0];
+    if (prefixNode && prefixNode.nodeType === Node.TEXT_NODE) {
+      prefixNode.textContent = active ? "Liked " : "Like ";
+    }
+    count.textContent = String(total);
+  };
+
+  render(liked);
+
+  button.addEventListener("click", () => {
+    const active = button.getAttribute("aria-pressed") === "true";
+    const next = !active;
+    total = next ? total + 1 : Math.max(0, total - 1);
+    write(key, next ? "1" : "0");
+    write(countKey, String(total));
+    render(next);
+  });
+}
+
 function notificationChannelIcon(channel) {
   if (channel === "email") return "📧";
   if (channel === "webhook") return "🔗";
@@ -2745,6 +2951,7 @@ function notificationChannelIcon(channel) {
 function notificationEventLabel(eventType) {
   if (eventType === "alert") return "Speed Alert";
   if (eventType === "weekly_report") return "Weekly Report";
+  if (eventType === "monthly_report") return "Monthly Report";
   if (eventType === "health_check") return "Health Check";
   return eventType;
 }
@@ -2824,6 +3031,8 @@ document.addEventListener("speedpulse:themechange", () => {
 initializeTheme();
 bindSorting();
 bindEvents();
+initMotionReveals();
+initSidebarLikeButton();
 void loadServerSettings();
 void syncRunStatus(false);
 loadMetrics();

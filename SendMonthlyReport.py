@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send weekly SpeedPulse report email."""
+"""Send monthly SpeedPulse report email (previous calendar month)."""
 
 from __future__ import annotations
 
@@ -11,38 +11,35 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 from config_loader import load_json_config
-from log_parser import parse_weekly_log_file
+from log_parser import load_all_log_entries
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
 from push_notifications import send_ntfy_event, send_webhook_event
 from reporting import build_report_html, resolve_report_theme_id
 
-log = get_logger("SendWeeklyReport")
-
-
-def get_iso_week(reference: datetime | None = None) -> int:
-    if reference is None:
-        reference = datetime.now() - timedelta(days=1)
-    return reference.isocalendar()[1]
+log = get_logger("SendMonthlyReport")
 
 
 def load_config() -> dict:
     return load_json_config(__file__)
 
 
-def _load_previous_week_entries(log_dir: Path, current_week: int) -> list[dict]:
-    candidates: list[int]
-    if current_week <= 1:
-        candidates = [53, 52]
-    else:
-        candidates = [current_week - 1]
+def _month_window(reference: datetime | None = None) -> tuple[datetime, datetime]:
+    now = reference or datetime.now()
+    first_current = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_end = first_current - timedelta(seconds=1)
+    month_start = month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return month_start, month_end
 
-    for week in candidates:
-        path = log_dir / f"speed_log_week_{week}.txt"
-        entries = parse_weekly_log_file(path)
-        if entries:
-            return entries
-    return []
+
+def _previous_month_window(month_start: datetime) -> tuple[datetime, datetime]:
+    previous_end = month_start - timedelta(seconds=1)
+    previous_start = previous_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return previous_start, previous_end
+
+
+def _entries_in_range(entries: list[dict], start: datetime, end: datetime) -> list[dict]:
+    return [entry for entry in entries if start <= entry.get("timestamp", datetime.min) <= end]
 
 
 def send_email(config: dict, subject: str, body_html: str) -> bool:
@@ -69,13 +66,13 @@ def send_email(config: dict, subject: str, body_html: str) -> bool:
             server.login(mail.smtp_username, mail.smtp_password)
             server.send_message(message)
 
-        log.info("Weekly report email sent")
+        log.info("Monthly report email sent")
         return True
     except smtplib.SMTPException as exc:
-        log.error("SMTP error while sending weekly report: %s", exc)
+        log.error("SMTP error while sending monthly report: %s", exc)
         return False
     except Exception as exc:
-        log.error("Failed to send weekly report: %s", exc)
+        log.error("Failed to send monthly report: %s", exc)
         return False
 
 
@@ -84,61 +81,61 @@ def main() -> int:
     script_dir = Path(__file__).parent
     log_dir = script_dir / config.get("paths", {}).get("log_directory", "Log")
 
-    week_num = get_iso_week()
-    entries = parse_weekly_log_file(log_dir / f"speed_log_week_{week_num}.txt")
+    all_entries = load_all_log_entries(log_dir)
+    month_start, month_end = _month_window()
+    previous_start, previous_end = _previous_month_window(month_start)
+
+    entries = _entries_in_range(all_entries, month_start, month_end)
+    previous_entries = _entries_in_range(all_entries, previous_start, previous_end)
     if not entries:
-        log.warning("No speed test data found for week %s", week_num)
+        log.warning("No speed test data found for %s", month_start.strftime("%B %Y"))
         return 1
 
-    previous_entries = _load_previous_week_entries(log_dir, week_num)
+    month_label = month_start.strftime("%B %Y")
     theme_id = resolve_report_theme_id(config)
 
-    report_title = f"Weekly Speed Report - Week {week_num}"
-    range_label = f"ISO week {week_num}"
     body = build_report_html(
         config,
         entries,
-        report_title=report_title,
-        range_label=range_label,
+        report_title=f"Monthly Speed Report - {month_label}",
+        range_label=month_label,
         theme_id=theme_id,
         previous_entries=previous_entries,
     )
 
-    subject = f"SpeedPulse Weekly Report - Week {week_num}"
+    subject = f"SpeedPulse Monthly Report - {month_label}"
     email_success = send_email(config, subject, body)
-
     if not email_success:
         return 1
 
-    summary = f"Week {week_num} report sent ({len(entries)} tests)"
-
+    summary = f"{month_label} report sent ({len(entries)} tests)"
     try:
         from state_store import log_notification
 
-        log_notification("email", "weekly_report", summary)
+        log_notification("email", "monthly_report", summary)
 
         webhook_success = send_webhook_event(
             config,
-            "weekly_report",
-            "SpeedPulse weekly report",
+            "monthly_report",
+            "SpeedPulse monthly report",
             summary,
-            payload_extra={"week": week_num, "tests": len(entries), "theme": theme_id},
+            payload_extra={"month": month_label, "tests": len(entries), "theme": theme_id},
             logger=log,
         )
         ntfy_success = send_ntfy_event(
             config,
-            "weekly_report",
-            "Weekly report",
+            "monthly_report",
+            "Monthly report",
             summary,
             priority="3",
-            tags="email,chart_with_upwards_trend",
+            tags="email,calendar",
             logger=log,
         )
 
         if webhook_success:
-            log_notification("webhook", "weekly_report", summary)
+            log_notification("webhook", "monthly_report", summary)
         if ntfy_success:
-            log_notification("ntfy", "weekly_report", summary)
+            log_notification("ntfy", "monthly_report", summary)
     except Exception:
         pass
 

@@ -181,16 +181,27 @@ function initializeTheme() {
   });
 }
 
+function currentThemeId() {
+  const themeApi = window.SpeedPulseTheme;
+  if (!themeApi || typeof themeApi.currentPreferences !== "function") {
+    return "default-dark";
+  }
+  const prefs = themeApi.currentPreferences();
+  return String(prefs.activeTheme || "default-dark");
+}
+
 function toggleNotificationFieldState() {
   const webhookEnabled = byId("settings-webhook-enabled")?.checked;
   const ntfyEnabled = byId("settings-ntfy-enabled")?.checked;
   const weeklyEnabled = byId("settings-weekly-enabled")?.checked;
+  const monthlyEnabled = byId("settings-monthly-enabled")?.checked;
 
   byId("settings-webhook-url").disabled = !webhookEnabled;
   byId("settings-ntfy-server").disabled = !ntfyEnabled;
   byId("settings-ntfy-topic").disabled = !ntfyEnabled;
   byId("settings-weekly-day").disabled = !weeklyEnabled;
   byId("settings-weekly-time").disabled = !weeklyEnabled;
+  byId("settings-monthly-time").disabled = !monthlyEnabled;
 }
 
 function renderAccountSummary(account) {
@@ -368,6 +379,11 @@ function populateSettingsForm(payload) {
   );
   byId("settings-weekly-day").value = weeklySchedule.day;
   byId("settings-weekly-time").value = weeklySchedule.time;
+  byId("settings-monthly-enabled").checked = Boolean(
+    notifications.monthly_report_enabled,
+  );
+  byId("settings-monthly-time").value =
+    notifications.monthly_report_time || "08:00";
   renderDailyScanTimes(notifications.test_times || []);
   byId("settings-webhook-enabled").checked = Boolean(
     notifications.webhook_enabled,
@@ -377,6 +393,14 @@ function populateSettingsForm(payload) {
   byId("settings-ntfy-server").value =
     notifications.ntfy_server || "https://ntfy.sh";
   byId("settings-ntfy-topic").value = notifications.ntfy_topic || "";
+  const pushEvents = notifications.push_events || {};
+  byId("settings-push-event-alert").checked = pushEvents.alert !== false;
+  byId("settings-push-event-weekly").checked =
+    pushEvents.weekly_report !== false;
+  byId("settings-push-event-monthly").checked =
+    pushEvents.monthly_report !== false;
+  byId("settings-push-event-health").checked =
+    pushEvents.health_check !== false;
 
   renderSettingsHero(payload);
   renderAccountSummary(account);
@@ -395,6 +419,9 @@ function populateSettingsForm(payload) {
     backup.scheduled_backup_time || "03:00";
   byId("settings-scheduled-backup-include-logs").checked =
     backup.scheduled_backup_include_logs !== false;
+  byId("settings-scheduled-backup-max").value = String(
+    backup.max_backups || 10,
+  );
   const bpField = byId("settings-scheduled-backup-password");
   if (bpField) {
     bpField.value = "";
@@ -430,8 +457,17 @@ function collectSettingsPayload() {
     send_realtime_alerts: byId("settings-realtime-alerts").checked,
     weekly_report_enabled: byId("settings-weekly-enabled").checked,
     weekly_report_time: buildWeeklySchedule(),
+    monthly_report_enabled: byId("settings-monthly-enabled").checked,
+    monthly_report_time: byId("settings-monthly-time").value || "08:00",
     test_times: collectDailyScanTimes(),
     server_id: byId("settings-schedule-server").value,
+    push_events: {
+      alert: byId("settings-push-event-alert").checked,
+      weekly_report: byId("settings-push-event-weekly").checked,
+      monthly_report: byId("settings-push-event-monthly").checked,
+      health_check: byId("settings-push-event-health").checked,
+    },
+    report_theme_id: currentThemeId(),
     webhook_enabled: byId("settings-webhook-enabled").checked,
     webhook_url: byId("settings-webhook-url").value.trim(),
     ntfy_enabled: byId("settings-ntfy-enabled").checked,
@@ -462,6 +498,7 @@ function collectSettingsPayload() {
       scheduled_backup_include_logs: byId(
         "settings-scheduled-backup-include-logs",
       ).checked,
+      max_backups: Number(byId("settings-scheduled-backup-max").value) || 10,
     },
     backup_password: byId("settings-scheduled-backup-password").value,
   };
@@ -928,6 +965,64 @@ function prefersReducedMotion() {
   );
 }
 
+function collectMotionTargets(selectors) {
+  const unique = new Set();
+  const targets = [];
+
+  selectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((element) => {
+      if (!(element instanceof HTMLElement) || unique.has(element)) return;
+      unique.add(element);
+      targets.push(element);
+    });
+  });
+
+  return targets;
+}
+
+function initMotionReveals() {
+  const targets = collectMotionTargets([
+    ".settings-page .topbar",
+    ".settings-page .section-jumpbar-wrap",
+    ".settings-page .settings-grid > .panel",
+    ".settings-page .sidebar .brand-lockup",
+    ".settings-page .sidebar .sidebar-card",
+    ".settings-page .sidebar .nav-block",
+    ".settings-page .sidebar .nav-block-sections",
+    ".settings-page .sidebar .sidebar-footer",
+  ]);
+
+  if (targets.length === 0) return;
+
+  targets.forEach((element, index) => {
+    element.classList.add("motion-reveal");
+    element.style.setProperty(
+      "--motion-reveal-delay",
+      `${Math.min(index, 10) * 52}ms`,
+    );
+  });
+
+  if (prefersReducedMotion() || typeof IntersectionObserver !== "function") {
+    targets.forEach((element) => element.classList.add("is-visible"));
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries, obs) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        if (entry.target instanceof HTMLElement) {
+          entry.target.classList.add("is-visible");
+        }
+        obs.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.08, rootMargin: "0px 0px -8% 0px" },
+  );
+
+  targets.forEach((element) => observer.observe(element));
+}
+
 function notifySettingsLayoutChanged() {
   window.dispatchEvent(new Event("settings:layoutchanged"));
 }
@@ -970,7 +1065,8 @@ function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
     body.style.overflow = "hidden";
     body.style.height = `${startHeight}px`;
     body.style.opacity = "1";
-    body.style.transition = "height 240ms ease, opacity 180ms ease";
+    body.style.transition =
+      "height 340ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1)";
 
     window.requestAnimationFrame(() => {
       body.style.height = "0px";
@@ -998,9 +1094,20 @@ function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
   body.style.overflow = "hidden";
   body.style.height = "0px";
   body.style.opacity = "0";
-  body.style.transition = "height 260ms ease, opacity 200ms ease";
+  body.style.transition =
+    "height 340ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1)";
 
   const targetHeight = body.scrollHeight;
+  if (targetHeight <= 0) {
+    body.dataset.animating = "false";
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.overflow = "";
+    body.style.transition = "";
+    if (!silent) notifySettingsLayoutChanged();
+    return;
+  }
+
   window.requestAnimationFrame(() => {
     body.style.height = `${targetHeight}px`;
     body.style.opacity = "1";
@@ -1244,6 +1351,10 @@ function bindEvents() {
     toggleNotificationFieldState,
   );
   byId("settings-weekly-enabled").addEventListener(
+    "change",
+    toggleNotificationFieldState,
+  );
+  byId("settings-monthly-enabled").addEventListener(
     "change",
     toggleNotificationFieldState,
   );
@@ -1815,8 +1926,54 @@ function bindMobileNav() {
   });
 }
 
+function initSidebarLikeButton() {
+  const button = byId("settings-sidebar-like-button");
+  const count = byId("settings-sidebar-like-count");
+  if (!button || !count) return;
+
+  const key = "speedpulse-sidebar-like";
+  const countKey = "speedpulse-sidebar-like-count";
+  const read = (storageKey, fallback = "") => {
+    try {
+      return window.localStorage.getItem(storageKey) || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const write = (storageKey, value) => {
+    try {
+      window.localStorage.setItem(storageKey, value);
+    } catch {
+      // Ignore storage failures.
+    }
+  };
+
+  const liked = read(key) === "1";
+  let total = Number(read(countKey, "0"));
+  if (!Number.isFinite(total) || total < 0) total = 0;
+
+  const render = (active) => {
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.firstChild.textContent = active ? "Liked " : "Like ";
+    count.textContent = String(total);
+  };
+
+  render(liked);
+
+  button.addEventListener("click", () => {
+    const active = button.getAttribute("aria-pressed") === "true";
+    const next = !active;
+    total = next ? total + 1 : Math.max(0, total - 1);
+    write(key, next ? "1" : "0");
+    write(countKey, String(total));
+    render(next);
+  });
+}
+
 initializeTheme();
 bindEvents();
+initMotionReveals();
+initSidebarLikeButton();
 updateRestoreSelectedFileLabel();
 void loadNotificationSettings();
 void loadScheduledServerOptions();

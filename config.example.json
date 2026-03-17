@@ -45,10 +45,19 @@
   },
   "scheduling": {
     "test_times": ["08:00", "16:00", "22:00"],
-    "weekly_report_time": "Monday 08:00"
+    "weekly_report_time": "Monday 08:00",
+    "monthly_report_time": "08:00"
   },
   "notifications": {
     "weekly_report_enabled": true,
+    "monthly_report_enabled": false,
+    "report_theme_id": "default-dark",
+    "push_events": {
+      "alert": true,
+      "weekly_report": true,
+      "monthly_report": true,
+      "health_check": true
+    },
     "webhook_enabled": false,
     "webhook_url": "",
     "ntfy_enabled": false,
