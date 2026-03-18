@@ -106,18 +106,10 @@
         </section>
 
         <nav class="nav-block">
-          <a class="nav-link active" href="#overview"
-            ><span class="nav-link-icon" aria-hidden="true">O</span>Overview</a
-          >
-          <a class="nav-link" href="#charts"
-            ><span class="nav-link-icon" aria-hidden="true">C</span>Charts</a
-          >
-          <a class="nav-link" href="#latest-results"
-            ><span class="nav-link-icon" aria-hidden="true">R</span>Results</a
-          >
-          <a class="nav-link" href="/settings"
-            ><span class="nav-link-icon" aria-hidden="true">S</span>Settings</a
-          >
+          <a class="nav-link active" href="#overview">Overview</a>
+          <a class="nav-link" href="#charts">Charts</a>
+          <a class="nav-link" href="#latest-results">Results</a>
+          <a class="nav-link" href="/settings">Settings</a>
         </nav>
 
         <section class="sidebar-card sidebar-card-schedule">
@@ -230,6 +222,11 @@
               </select>
             </div>
             <button id="generate-report" class="btn-muted" type="button">
+              <svg class="utility-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M6 2.8h5.6L15.2 6v11.2H6z"></path>
+                <path d="M11.6 2.8V6h3.6"></path>
+                <path d="M8 10.2h5.2M8 13h5.2"></path>
+              </svg>
               Generate report <span class="shortcut-hint" aria-hidden="true">G</span>
             </button>
             <button id="run-test" class="btn-primary" type="button">
@@ -429,8 +426,7 @@
                 title="Save as PNG"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  class="utility-icon"
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
@@ -474,8 +470,7 @@
                 title="Save as PNG"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  class="utility-icon"
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
@@ -522,8 +517,7 @@
                 title="Save as PNG"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  class="utility-icon"
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
@@ -553,6 +547,11 @@
 
             <div class="results-actions">
               <button id="export-results" class="btn-muted" type="button">
+                <svg class="utility-icon" viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M10 3.2v8.4"></path>
+                  <path d="M6.8 8.6 10 11.8l3.2-3.2"></path>
+                  <path d="M4 13.6v2.8h12v-2.8"></path>
+                </svg>
                 Export Results
               </button>
               <input

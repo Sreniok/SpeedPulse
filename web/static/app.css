@@ -1157,21 +1157,6 @@ select {
     transform var(--motion-duration-base) var(--motion-ease-standard);
 }
 
-.nav-link-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.04rem;
-  height: 1.04rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 68%, transparent);
-  background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
-  color: color-mix(in srgb, var(--accent) 68%, var(--text) 32%);
-  font-size: 0.58rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .nav-link:hover,
 .nav-link:focus-visible {
   color: var(--text);
@@ -1493,12 +1478,23 @@ select {
   overflow: hidden;
 }
 
+.utility-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
 .theme-mode-toggle-icon {
   width: 16px;
   height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
 }

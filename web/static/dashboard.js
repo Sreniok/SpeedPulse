@@ -22,6 +22,7 @@ let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
 let serverOptions = [];
+const heroMetricLastValues = new Map();
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
@@ -971,6 +972,51 @@ function createMetricSparkline(values, colorToken) {
   return wrapper;
 }
 
+function formatMetricValue(value, unit = "", digits = 2) {
+  const safeUnit = String(unit || "").trim();
+  const formatted = safeFixed(Number(value || 0), digits);
+  return safeUnit ? `${formatted} ${safeUnit}` : formatted;
+}
+
+function animateMetricValue(element, config = {}) {
+  if (!(element instanceof HTMLElement)) return;
+
+  const to = Number(config.to);
+  const from = Number(config.from);
+  const unit = String(config.unit || "");
+  const digits = Number.isFinite(config.digits) ? Number(config.digits) : 2;
+  const duration = Number.isFinite(config.duration)
+    ? Math.max(220, Number(config.duration))
+    : 560;
+
+  if (!Number.isFinite(to)) {
+    element.textContent = String(config.fallbackText || "");
+    return;
+  }
+
+  if (!Number.isFinite(from) || prefersReducedMotion()) {
+    element.textContent = formatMetricValue(to, unit, digits);
+    return;
+  }
+
+  const startTime = performance.now();
+  const delta = to - from;
+  const easeOut = (progress) => 1 - (1 - progress) ** 3;
+
+  const tick = (now) => {
+    const progress = Math.min(1, (now - startTime) / duration);
+    const eased = easeOut(progress);
+    const current = from + delta * eased;
+    element.textContent = formatMetricValue(current, unit, digits);
+
+    if (progress < 1) {
+      window.requestAnimationFrame(tick);
+    }
+  };
+
+  window.requestAnimationFrame(tick);
+}
+
 function metricCard(
   title,
   valueText,
@@ -989,6 +1035,7 @@ function metricCard(
     ? options.sparklineValues
     : null;
   const sparklineColorToken = String(options.sparklineColorToken || "--accent");
+  const valueAnimation = options.valueAnimation || null;
   const card = document.createElement("article");
   card.className = "metric-card";
   if (compact) {
@@ -1028,7 +1075,14 @@ function metricCard(
 
   const valueEl = document.createElement("p");
   valueEl.className = "metric-value";
-  valueEl.textContent = valueText;
+  if (valueAnimation) {
+    animateMetricValue(valueEl, {
+      ...valueAnimation,
+      fallbackText: valueText,
+    });
+  } else {
+    valueEl.textContent = valueText;
+  }
 
   const noteEl = document.createElement("p");
   noteEl.className = `metric-note ${toneClass}`;
@@ -1103,6 +1157,7 @@ function renderHeroMetrics(data) {
   const previous = rows[1];
 
   if (!latest) {
+    heroMetricLastValues.clear();
     const empty = createEmptyStateCard(
       "No scan data yet",
       "Run a manual test or wait for the next scheduled scan to populate this range.",
@@ -1165,42 +1220,66 @@ function renderHeroMetrics(data) {
   const downloadSeries = recentMetricSeries(data.timeseries, "download_mbps");
   const uploadSeries = recentMetricSeries(data.timeseries, "upload_mbps");
   const pingSeries = recentMetricSeries(data.timeseries, "ping_ms");
+  const latestDownloadValue = Number(latest.download_mbps || 0);
+  const latestUploadValue = Number(latest.upload_mbps || 0);
+  const latestPingValue = Number(latest.ping_ms || 0);
 
   const cards = [
     metricCard(
       "Latest download",
-      `${safeFixed(latest.download_mbps)} Mbps`,
+      `${safeFixed(latestDownloadValue)} Mbps`,
       downloadTrend.note || downloadTrend.label,
       downloadTrend.tone,
       {
         deltaChip: downloadTrend.chip,
         sparklineValues: downloadSeries,
         sparklineColorToken: "--chart-download",
-        contextText: metricContextText(latest.download_mbps, downloadSeries, true),
+        contextText: metricContextText(latestDownloadValue, downloadSeries, true),
+        valueAnimation: {
+          from: heroMetricLastValues.get("latest_download"),
+          to: latestDownloadValue,
+          unit: "Mbps",
+          digits: 2,
+          duration: 560,
+        },
       },
     ),
     metricCard(
       "Latest upload",
-      `${safeFixed(latest.upload_mbps)} Mbps`,
+      `${safeFixed(latestUploadValue)} Mbps`,
       uploadTrend.note || uploadTrend.label,
       uploadTrend.tone,
       {
         deltaChip: uploadTrend.chip,
         sparklineValues: uploadSeries,
         sparklineColorToken: "--chart-upload",
-        contextText: metricContextText(latest.upload_mbps, uploadSeries, true),
+        contextText: metricContextText(latestUploadValue, uploadSeries, true),
+        valueAnimation: {
+          from: heroMetricLastValues.get("latest_upload"),
+          to: latestUploadValue,
+          unit: "Mbps",
+          digits: 2,
+          duration: 560,
+        },
       },
     ),
     metricCard(
       "Latest ping",
-      `${safeFixed(latest.ping_ms)} ms`,
+      `${safeFixed(latestPingValue)} ms`,
       pingTrend.note || pingTrend.label,
       pingTrend.tone,
       {
         deltaChip: pingTrend.chip,
         sparklineValues: pingSeries,
         sparklineColorToken: "--chart-ping",
-        contextText: metricContextText(latest.ping_ms, pingSeries, false),
+        contextText: metricContextText(latestPingValue, pingSeries, false),
+        valueAnimation: {
+          from: heroMetricLastValues.get("latest_ping"),
+          to: latestPingValue,
+          unit: "ms",
+          digits: 2,
+          duration: 560,
+        },
       },
     ),
     metricCard(
@@ -1230,6 +1309,10 @@ function renderHeroMetrics(data) {
       card.classList.add("is-visible");
     });
   });
+
+  heroMetricLastValues.set("latest_download", latestDownloadValue);
+  heroMetricLastValues.set("latest_upload", latestUploadValue);
+  heroMetricLastValues.set("latest_ping", latestPingValue);
 }
 
 function renderHeroMetricsSkeleton(cardCount = 5) {
@@ -1350,6 +1433,7 @@ function slaBreakdownChartOptions() {
     },
     plugins: {
       speedpulseHoverGuide: { enabled: false },
+      speedpulseLegendFocus: { enabled: false },
       legend: { display: false },
       tooltip: {
         backgroundColor: cssAlpha("--bg", 88),
@@ -1719,29 +1803,60 @@ function ensureHoverGuidePlugin() {
     return;
   }
 
-  Chart.register({
-    id: "speedpulseHoverGuide",
-    afterDatasetsDraw(chart, _args, options) {
-      if (!options?.enabled) return;
-      const activeElements = chart?.tooltip?.getActiveElements?.() || [];
-      if (activeElements.length === 0) return;
-      const x = activeElements[0]?.element?.x;
-      if (!Number.isFinite(x)) return;
-      const area = chart?.chartArea;
-      if (!area) return;
+  Chart.register(
+    {
+      id: "speedpulseHoverGuide",
+      afterDatasetsDraw(chart, _args, options) {
+        if (!options?.enabled) return;
+        const activeElements = chart?.tooltip?.getActiveElements?.() || [];
+        if (activeElements.length === 0) return;
+        const x = activeElements[0]?.element?.x;
+        if (!Number.isFinite(x)) return;
+        const area = chart?.chartArea;
+        if (!area) return;
 
-      const ctx = chart.ctx;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x, area.top + 2);
-      ctx.lineTo(x, area.bottom - 2);
-      ctx.lineWidth = Number(options.width || 1);
-      ctx.setLineDash(Array.isArray(options.dash) ? options.dash : [4, 4]);
-      ctx.strokeStyle = String(options.color || "rgba(255,255,255,0.15)");
-      ctx.stroke();
-      ctx.restore();
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x, area.top + 2);
+        ctx.lineTo(x, area.bottom - 2);
+        ctx.lineWidth = Number(options.width || 1);
+        ctx.setLineDash(Array.isArray(options.dash) ? options.dash : [4, 4]);
+        ctx.strokeStyle = String(options.color || "rgba(255,255,255,0.15)");
+        ctx.stroke();
+        ctx.restore();
+      },
     },
-  });
+    {
+      id: "speedpulseLegendFocus",
+      afterDatasetsDraw(chart, _args, options) {
+        if (!options?.enabled) return;
+        const activeIndex = Number(chart.$legendActiveDatasetIndex);
+        if (!Number.isInteger(activeIndex) || activeIndex < 0) return;
+        const area = chart?.chartArea;
+        if (!area) return;
+        const activeMeta = chart.getDatasetMeta(activeIndex);
+        if (!activeMeta || activeMeta.hidden) return;
+
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.fillStyle = String(options.overlayColor || "rgba(0, 0, 0, 0.45)");
+        ctx.fillRect(
+          area.left,
+          area.top,
+          area.right - area.left,
+          area.bottom - area.top,
+        );
+        ctx.restore();
+
+        ctx.save();
+        if (activeMeta.controller && typeof activeMeta.controller.draw === "function") {
+          activeMeta.controller.draw();
+        }
+        ctx.restore();
+      },
+    },
+  );
 
   hoverGuidePluginRegistered = true;
 }
@@ -1774,10 +1889,27 @@ function chartOptions() {
         width: 1,
         dash: [4, 4],
       },
+      speedpulseLegendFocus: {
+        enabled: true,
+        overlayColor: cssAlpha("--bg", 54),
+      },
       legend: {
         position: "bottom",
         align: "start",
         maxHeight: 84,
+        onHover: (_event, item, legend) => {
+          if (!legend?.chart || !item || typeof item.datasetIndex !== "number")
+            return;
+          const chart = legend.chart;
+          chart.$legendActiveDatasetIndex = item.datasetIndex;
+          chart.draw();
+        },
+        onLeave: (_event, _item, legend) => {
+          if (!legend?.chart) return;
+          const chart = legend.chart;
+          chart.$legendActiveDatasetIndex = null;
+          chart.draw();
+        },
         labels: {
           color: cssVar("--chart-label-strong"),
           boxWidth: 12,
@@ -1890,6 +2022,7 @@ function latencyChartOptions() {
 function thresholdChartOptions() {
   const options = chartOptions();
   options.plugins.speedpulseHoverGuide.enabled = false;
+  options.plugins.speedpulseLegendFocus.enabled = false;
   options.plugins.legend.display = false;
   options.scales.y = {
     beginAtZero: true,
