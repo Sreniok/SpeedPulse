@@ -60,10 +60,16 @@ def report_palette(theme_id: str) -> dict[str, str]:
         "cyber-matrix": {"accent": "#58a6ff", "good": "#2ea44f"},
         "carbon-amber": {"accent": "#f59e0b", "warn": "#fbbf24"},
         "noir-slate-dark": {"accent": "#a855f7", "bad": "#fb7185"},
+        "github-dark": {"accent": "#58a6ff", "good": "#3fb950"},
+        "atom-dark": {"accent": "#61afef", "good": "#98c379"},
+        "monokai-dark": {"accent": "#f92672", "good": "#a6e22e"},
         "default-light": {"accent": "#1f6feb", "warn": "#d97706"},
         "paper-slate": {"accent": "#5b8def"},
         "linen-sage": {"accent": "#0f766e"},
         "soft-coral": {"accent": "#e76f51"},
+        "github-light": {"accent": "#0969da", "good": "#1f883d"},
+        "atom-light": {"accent": "#4078f2", "good": "#50a14f"},
+        "monokai-light": {"accent": "#f92672", "good": "#66d9ef"},
     }
     palette.update(overrides.get(normalized, {}))
     return palette

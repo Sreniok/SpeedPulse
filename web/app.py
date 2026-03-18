@@ -785,8 +785,8 @@ def _ui_theme_preferences(config: dict | None = None) -> dict[str, str]:
     loaded = config or load_config()
     app_cfg = loaded.get("app", {})
     mode = _clean_theme_mode(app_cfg.get("ui_theme_mode", "system"), "system")
-    light_theme = _clean_theme_id(app_cfg.get("ui_theme_light", "default-light"), "default-light")
-    dark_theme = _clean_theme_id(app_cfg.get("ui_theme_dark", "default-dark"), "default-dark")
+    light_theme = _clean_theme_id(app_cfg.get("ui_theme_light", "github-light"), "github-light")
+    dark_theme = _clean_theme_id(app_cfg.get("ui_theme_dark", "github-dark"), "github-dark")
     return {
         "mode": mode,
         "light": light_theme,
@@ -2254,12 +2254,12 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         "system",
     )
     ui_theme_light = _clean_theme_id(
-        ui_theme_payload.get("light", payload.get("ui_theme_light", "default-light")),
-        "default-light",
+        ui_theme_payload.get("light", payload.get("ui_theme_light", "github-light")),
+        "github-light",
     )
     ui_theme_dark = _clean_theme_id(
-        ui_theme_payload.get("dark", payload.get("ui_theme_dark", "default-dark")),
-        "default-dark",
+        ui_theme_payload.get("dark", payload.get("ui_theme_dark", "github-dark")),
+        "github-dark",
     )
 
     try:

@@ -167,6 +167,36 @@
   --theme-font-brand: Tahoma, "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
+[data-theme="github-light"] {
+  --theme-bg: #f6f8fa;
+  --theme-bg-alt: #eaeef2;
+  --theme-accent: #0969da;
+  --theme-secondary: #1f883d;
+  --theme-text: #1f2328;
+  --theme-font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --theme-font-brand: "Segoe UI", "Trebuchet MS", "Gill Sans", sans-serif;
+}
+
+[data-theme="atom-light"] {
+  --theme-bg: #fafafa;
+  --theme-bg-alt: #f0f0f0;
+  --theme-accent: #4078f2;
+  --theme-secondary: #50a14f;
+  --theme-text: #383a42;
+  --theme-font-body: "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  --theme-font-brand: "Helvetica Neue", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="monokai-light"] {
+  --theme-bg: #f8f7f2;
+  --theme-bg-alt: #efede6;
+  --theme-accent: #f92672;
+  --theme-secondary: #66d9ef;
+  --theme-text: #272822;
+  --theme-font-body: "Trebuchet MS", "Segoe UI", "Helvetica Neue", sans-serif;
+  --theme-font-brand: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+}
+
 [data-theme="cyber-matrix"] {
   --theme-bg: #0d1117;
   --theme-bg-alt: #141b23;
@@ -294,6 +324,36 @@
     "Palatino Linotype", "Book Antiqua", "Trebuchet MS", serif;
 }
 
+[data-theme="github-dark"] {
+  --theme-bg: #0d1117;
+  --theme-bg-alt: #161b22;
+  --theme-accent: #58a6ff;
+  --theme-secondary: #3fb950;
+  --theme-text: #c9d1d9;
+  --theme-font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --theme-font-brand: "Segoe UI", "Trebuchet MS", "Gill Sans", sans-serif;
+}
+
+[data-theme="atom-dark"] {
+  --theme-bg: #282c34;
+  --theme-bg-alt: #21252b;
+  --theme-accent: #61afef;
+  --theme-secondary: #98c379;
+  --theme-text: #abb2bf;
+  --theme-font-body: "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  --theme-font-brand: "Helvetica Neue", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+[data-theme="monokai-dark"] {
+  --theme-bg: #272822;
+  --theme-bg-alt: #1f201c;
+  --theme-accent: #f92672;
+  --theme-secondary: #a6e22e;
+  --theme-text: #f8f8f2;
+  --theme-font-body: Consolas, "Monaco", "Lucida Console", monospace;
+  --theme-font-brand: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+}
+
 :root,
 [data-theme="default-dark"],
 [data-theme="cyber-matrix"],
@@ -309,7 +369,10 @@
 [data-theme="jade-circuit-dark"],
 [data-theme="noir-slate-dark"],
 [data-theme="crimson-radar-dark"],
-[data-theme="lunar-vault-dark"] {
+[data-theme="lunar-vault-dark"],
+[data-theme="github-dark"],
+[data-theme="atom-dark"],
+[data-theme="monokai-dark"] {
   --bg: var(--theme-bg);
   --bg-alt: var(--theme-bg-alt);
   --surface: color-mix(in srgb, var(--theme-bg) 90%, white 10%);
@@ -373,7 +436,10 @@
 [data-theme="citrus-print-light"],
 [data-theme="alpine-ink-light"],
 [data-theme="rose-paper-light"],
-[data-theme="copper-haze-light"] {
+[data-theme="copper-haze-light"],
+[data-theme="github-light"],
+[data-theme="atom-light"],
+[data-theme="monokai-light"] {
   --bg: var(--theme-bg);
   --bg-alt: var(--theme-bg-alt);
   --surface: color-mix(in srgb, white 90%, var(--theme-bg) 10%);
@@ -586,6 +652,23 @@
   --premium-sheen-strength: 0%;
 }
 
+[data-theme="github-dark"] {
+  --premium-glow-strength: 0%;
+  --premium-glow-soft: 0%;
+}
+
+[data-theme="atom-dark"] {
+  --premium-glow-strength: 4%;
+  --premium-glow-soft: 4%;
+  --premium-border-strong-mix: 78%;
+}
+
+[data-theme="monokai-dark"] {
+  --premium-glow-strength: 0%;
+  --premium-glow-soft: 0%;
+  --premium-sheen-strength: 0%;
+}
+
 [data-theme="default-light"] {
   --premium-glow-strength: 9%;
 }
@@ -635,8 +718,60 @@
   --premium-glow-strength: 11%;
 }
 
+[data-theme="github-light"] {
+  --premium-glow-strength: 6%;
+  --premium-border-strong-mix: 82%;
+}
+
+[data-theme="atom-light"] {
+  --premium-glow-strength: 7%;
+}
+
+[data-theme="monokai-light"] {
+  --premium-glow-strength: 9%;
+  --premium-glow-soft: 7%;
+}
+
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color:
+    color-mix(in srgb, var(--accent) 42%, var(--surface-strong))
+    color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 58%, var(--theme-secondary) 42%),
+      color-mix(in srgb, var(--accent) 42%, var(--surface-strong) 58%)
+    );
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 72%, var(--theme-secondary) 28%),
+      color-mix(in srgb, var(--accent) 54%, var(--surface-strong) 46%)
+    );
+}
+
+*::-webkit-scrollbar-corner {
+  background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
 }
 
 html {
@@ -696,7 +831,10 @@ body[data-theme="abyss-current-dark"],
 body[data-theme="jade-circuit-dark"],
 body[data-theme="noir-slate-dark"],
 body[data-theme="crimson-radar-dark"],
-body[data-theme="lunar-vault-dark"] {
+body[data-theme="lunar-vault-dark"],
+body[data-theme="github-dark"],
+body[data-theme="atom-dark"],
+body[data-theme="monokai-dark"] {
   background:
     radial-gradient(
       900px 520px at 0% 0%,
@@ -729,7 +867,10 @@ body[data-theme="abyss-current-dark"] .main-shell,
 body[data-theme="jade-circuit-dark"] .main-shell,
 body[data-theme="noir-slate-dark"] .main-shell,
 body[data-theme="crimson-radar-dark"] .main-shell,
-body[data-theme="lunar-vault-dark"] .main-shell {
+body[data-theme="lunar-vault-dark"] .main-shell,
+body[data-theme="github-dark"] .main-shell,
+body[data-theme="atom-dark"] .main-shell,
+body[data-theme="monokai-dark"] .main-shell {
   background: color-mix(in srgb, var(--theme-bg) 92%, transparent);
 }
 
@@ -1414,18 +1555,29 @@ select {
 .panel-head h2,
 .login-card h1 {
   margin: 0;
+  font-family: var(
+    --theme-font-brand,
+    "Avenir Next",
+    "Trebuchet MS",
+    "Segoe UI",
+    sans-serif
+  );
   letter-spacing: -0.03em;
   font-weight: 780;
   line-height: 1.08;
+  text-wrap: balance;
 }
 
 .topbar-copy h1 {
   font-size: var(--type-display);
+  font-weight: 820;
+  letter-spacing: -0.04em;
 }
 
 .panel-head h2,
 .login-card h1 {
   font-size: var(--type-title);
+  font-weight: 760;
 }
 
 .topbar,
@@ -1660,6 +1812,11 @@ select option {
 .animated-select {
   position: relative;
   isolation: isolate;
+  z-index: 1;
+}
+
+.animated-select.is-open {
+  z-index: 260;
 }
 
 .animated-select-native {
@@ -1752,7 +1909,7 @@ select option {
   position: absolute;
   top: calc(100% + 0.45rem);
   left: 0;
-  right: 0;
+  right: auto;
   z-index: 80;
   padding: 0.38rem;
   border-radius: 14px;
@@ -1766,6 +1923,9 @@ select option {
     inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
     0 16px 32px color-mix(in srgb, var(--bg) 24%, transparent);
   backdrop-filter: blur(14px);
+  min-width: 100%;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 1.5rem));
   max-height: 280px;
   overflow-y: auto;
   opacity: 0;
@@ -1775,6 +1935,12 @@ select option {
   transition:
     opacity var(--motion-duration-base) var(--motion-ease-standard),
     transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.animated-select.is-menu-right .animated-select-menu {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
 }
 
 .animated-select.is-open .animated-select-menu {
@@ -3392,7 +3558,7 @@ button:active,
 }
 
 .settings-page .panel-collapsible.has-open-dropdown {
-  z-index: 70;
+  z-index: 180;
 }
 
 .panel-collapse-body[hidden] {
@@ -3724,7 +3890,29 @@ button:active,
 }
 
 .settings-fields-reminder {
-  align-items: start;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.settings-fields-reminder .settings-field-group {
+  align-content: center;
+}
+
+.settings-fields-reminder .settings-field-group-inline {
+  align-self: center;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.52rem;
+  min-height: 42px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.toggle-label input[type="checkbox"] {
+  margin: 0;
 }
 
 /* ── Sidebar section links ───────────────────────── */
@@ -4364,7 +4552,7 @@ button:active,
   .settings-page .settings-fields-reminder {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
-    align-items: end;
+    align-items: center;
   }
 
   .settings-page #section-backup .settings-row-split .settings-fields-single {
@@ -5242,7 +5430,9 @@ label {
 }
 
 .contract-days-remaining {
+  margin-top: 0.15rem;
   margin-bottom: 0.75rem;
+  line-height: 1.35;
 }
 
 .contract-history-section {

@@ -13,8 +13,12 @@ const animatedSelectSyncMap = new WeakMap();
 const animatedSelectRenderMap = new WeakMap();
 const MAX_SCAN_CUSTOM_DAY = 31;
 let selectedScanCustomDays = [1];
+const uiCore = window.SpeedPulseUiCore || null;
 
 function byId(id) {
+  if (uiCore && typeof uiCore.byId === "function") {
+    return uiCore.byId(id);
+  }
   return document.getElementById(id);
 }
 
@@ -25,6 +29,9 @@ function normalizeEmailAddress(value) {
 }
 
 function isDialogElement(element) {
+  if (uiCore && typeof uiCore.isDialogElement === "function") {
+    return uiCore.isDialogElement(element);
+  }
   return (
     typeof HTMLDialogElement !== "undefined" &&
     element instanceof HTMLDialogElement
@@ -32,22 +39,23 @@ function isDialogElement(element) {
 }
 
 function modalIsOpen(id) {
-  const modal = byId(id);
-  if (!modal) return false;
-
-  if (isDialogElement(modal)) {
-    return modal.open;
+  if (uiCore && typeof uiCore.modalIsOpen === "function") {
+    return uiCore.modalIsOpen(id);
   }
 
+  const modal = byId(id);
+  if (!modal) return false;
+  if (isDialogElement(modal)) return modal.open;
   return !modal.classList.contains("hidden");
 }
 
 function syncBodyModalState() {
-  document.body.classList.toggle(
-    "modal-open",
-    modalIsOpen("backup-restore-modal") ||
-      modalIsOpen("settings-confirm-modal"),
-  );
+  if (uiCore && typeof uiCore.syncBodyModalState === "function") {
+    uiCore.syncBodyModalState(["backup-restore-modal", "settings-confirm-modal"]);
+    return;
+  }
+
+  document.body.classList.toggle("modal-open", modalIsOpen("backup-restore-modal") || modalIsOpen("settings-confirm-modal"));
 }
 
 function settingsSaveButtons() {
@@ -187,15 +195,47 @@ function enhanceAnimatedSelect(select) {
 
   const closeMenu = (restoreFocus = false) => {
     closeAllAnimatedSelects();
+    wrapper.classList.remove("is-menu-right");
     trigger.removeAttribute("aria-activedescendant");
     if (restoreFocus) {
       trigger.focus();
     }
   };
 
+  const syncMenuLayout = () => {
+    const viewportWidth = Math.max(
+      window.innerWidth || document.documentElement.clientWidth || 0,
+      320,
+    );
+    const triggerWidth = Math.ceil(trigger.getBoundingClientRect().width);
+    const wrapperRect = wrapper.getBoundingClientRect();
+
+    const maxToRight = Math.max(
+      triggerWidth,
+      Math.floor(viewportWidth - wrapperRect.left - 12),
+    );
+
+    menu.style.minWidth = `${triggerWidth}px`;
+    menu.style.width = "max-content";
+    menu.style.maxWidth = `${maxToRight}px`;
+
+    const naturalWidth = Math.ceil(menu.scrollWidth + 2);
+    const finalWidth = Math.min(
+      Math.max(triggerWidth, naturalWidth),
+      maxToRight,
+    );
+    menu.style.width = `${finalWidth}px`;
+
+    wrapper.classList.remove("is-menu-right");
+    if (wrapperRect.left + finalWidth > viewportWidth - 12) {
+      wrapper.classList.add("is-menu-right");
+    }
+  };
+
   const openMenu = (focusMode = "selected") => {
     closeAllAnimatedSelects(wrapper);
     wrapper.classList.add("is-open");
+    syncMenuLayout();
     const panel = wrapper.closest(".panel-collapsible");
     if (panel instanceof HTMLElement) {
       panel.classList.add("has-open-dropdown");
@@ -323,6 +363,7 @@ function enhanceAnimatedSelect(select) {
     });
 
     syncFromSelect();
+    syncMenuLayout();
   };
 
   const toggleMenu = () => {
@@ -359,6 +400,16 @@ function enhanceAnimatedSelect(select) {
   select.addEventListener("change", () => {
     syncFromSelect();
   });
+
+  window.addEventListener(
+    "resize",
+    () => {
+      if (wrapper.classList.contains("is-open")) {
+        syncMenuLayout();
+      }
+    },
+    { passive: true },
+  );
 
   if (select.id) {
     document.querySelectorAll(`label[for="${select.id}"]`).forEach((label) => {
@@ -501,6 +552,27 @@ function renderThemeSummary(preferences) {
     `If you switch back to System or Light later, ${lightThemeName} is ready for light mode.`;
 }
 
+function buildThemeOptions(themeApi, mode, selectedThemeId) {
+  const themes =
+    mode === "light"
+      ? themeApi.allLightThemes || themeApi.lightThemes
+      : themeApi.allDarkThemes || themeApi.darkThemes;
+  const options = themes.map((theme) => ({
+    id: theme.id,
+    label: theme.name,
+  }));
+
+  const selectedId = String(selectedThemeId || "");
+  if (selectedId && !options.some((option) => option.id === selectedId)) {
+    options.push({
+      id: selectedId,
+      label: `${themeDisplayName(themeApi, selectedId)} (Legacy)`,
+    });
+  }
+
+  return options;
+}
+
 function initializeTheme() {
   const themeApi = window.SpeedPulseTheme;
   const modeSelect = byId("settings-theme-mode");
@@ -510,18 +582,12 @@ function initializeTheme() {
 
   populateSelectOptions(
     lightSelect,
-    themeApi.lightThemes.map((theme) => ({
-      id: theme.id,
-      label: theme.name,
-    })),
+    buildThemeOptions(themeApi, "light", themeApi.currentPreferences().lightTheme),
     themeApi.currentPreferences().lightTheme,
   );
   populateSelectOptions(
     darkSelect,
-    themeApi.darkThemes.map((theme) => ({
-      id: theme.id,
-      label: theme.name,
-    })),
+    buildThemeOptions(themeApi, "dark", themeApi.currentPreferences().darkTheme),
     themeApi.currentPreferences().darkTheme,
   );
   initializeAnimatedSelects();
@@ -557,17 +623,17 @@ function initializeTheme() {
 function currentThemeId() {
   const themeApi = window.SpeedPulseTheme;
   if (!themeApi || typeof themeApi.currentPreferences !== "function") {
-    return "default-dark";
+    return "github-dark";
   }
   const prefs = themeApi.currentPreferences();
-  return String(prefs.activeTheme || "default-dark");
+  return String(prefs.activeTheme || "github-dark");
 }
 
 function currentUiThemePreferences() {
   const fallback = {
     mode: "system",
-    light: "default-light",
-    dark: "default-dark",
+    light: "github-light",
+    dark: "github-dark",
   };
   const themeApi = window.SpeedPulseTheme;
   if (!themeApi || typeof themeApi.currentPreferences !== "function") {

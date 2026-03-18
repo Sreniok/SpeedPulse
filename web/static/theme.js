@@ -5,56 +5,60 @@
   const darkThemeStorageKey = "speedpulse-theme-dark";
   const systemColorScheme = window.matchMedia("(prefers-color-scheme: light)");
 
-  const lightThemes = [
+  const catalog = window.SpeedPulseThemeCatalog || {};
+
+  const fallbackLightThemes = [
     { id: "default-light", name: "Default Light", mode: "light" },
-    { id: "paper-slate", name: "Paper Slate", mode: "light" },
-    { id: "linen-sage", name: "Linen Sage", mode: "light" },
-    { id: "soft-coral", name: "Soft Coral", mode: "light" },
-    { id: "mist-violet", name: "Mist Violet", mode: "light" },
-    { id: "liquid-glass-light", name: "Liquid Glass", mode: "light" },
-    { id: "neumorphism-light", name: "Neumorphism", mode: "light" },
-    { id: "retrofuturism-light", name: "Retrofuturism", mode: "light" },
-    { id: "nordic-frost-light", name: "Nordic Frost", mode: "light" },
-    { id: "desert-bloom-light", name: "Desert Bloom", mode: "light" },
-    { id: "ocean-notebook-light", name: "Ocean Notebook", mode: "light" },
-    { id: "citrus-print-light", name: "Citrus Print", mode: "light" },
-    { id: "alpine-ink-light", name: "Alpine Ink", mode: "light" },
-    { id: "rose-paper-light", name: "Rose Paper", mode: "light" },
-    { id: "copper-haze-light", name: "Copper Haze", mode: "light" },
   ];
-  const darkThemes = [
+  const fallbackDarkThemes = [
     { id: "default-dark", name: "Default Dark", mode: "dark" },
-    { id: "cyber-matrix", name: "Cyber Matrix", mode: "dark" },
-    { id: "stealth-protocol", name: "Stealth Protocol", mode: "dark" },
-    { id: "carbon-amber", name: "Carbon Amber", mode: "dark" },
-    { id: "night-orchid", name: "Night Orchid", mode: "dark" },
-    { id: "liquid-glass-dark", name: "Liquid Glass", mode: "dark" },
-    { id: "neumorphism-dark", name: "Neumorphism", mode: "dark" },
-    { id: "retrofuturism-dark", name: "Retrofuturism", mode: "dark" },
-    { id: "midnight-terminal-dark", name: "Midnight Terminal", mode: "dark" },
-    { id: "ember-forge-dark", name: "Ember Forge", mode: "dark" },
-    { id: "abyss-current-dark", name: "Abyss Current", mode: "dark" },
-    { id: "jade-circuit-dark", name: "Jade Circuit", mode: "dark" },
-    { id: "noir-slate-dark", name: "Noir Slate", mode: "dark" },
-    { id: "crimson-radar-dark", name: "Crimson Radar", mode: "dark" },
-    { id: "lunar-vault-dark", name: "Lunar Vault", mode: "dark" },
   ];
 
+  const allLightThemes =
+    Array.isArray(catalog.allLightThemes) && catalog.allLightThemes.length
+      ? catalog.allLightThemes
+      : Array.isArray(catalog.lightThemes) && catalog.lightThemes.length
+        ? catalog.lightThemes
+        : fallbackLightThemes;
+  const allDarkThemes =
+    Array.isArray(catalog.allDarkThemes) && catalog.allDarkThemes.length
+      ? catalog.allDarkThemes
+      : Array.isArray(catalog.darkThemes) && catalog.darkThemes.length
+        ? catalog.darkThemes
+        : fallbackDarkThemes;
+
+  const lightThemes =
+    Array.isArray(catalog.lightThemes) && catalog.lightThemes.length
+      ? catalog.lightThemes
+      : allLightThemes;
+  const darkThemes =
+    Array.isArray(catalog.darkThemes) && catalog.darkThemes.length
+      ? catalog.darkThemes
+      : allDarkThemes;
+
   const themeMap = Object.fromEntries(
-    [...lightThemes, ...darkThemes].map((theme) => [theme.id, theme]),
+    [...allLightThemes, ...allDarkThemes].map((theme) => [theme.id, theme]),
   );
-  const removedLightThemes = new Set([
-    "kinetic-circuit",
-    "solar-boost",
-    "arctic-flow",
-    "quantum-edge",
-    "skyline-draft",
-  ]);
-  const removedDarkThemes = new Set([
-    "obsidian-velocity",
-    "nebula-runner",
-    "rogue-signal",
-  ]);
+  const removedLightThemes = new Set(
+    Array.isArray(catalog.removedLightThemes) ? catalog.removedLightThemes : [],
+  );
+  const removedDarkThemes = new Set(
+    Array.isArray(catalog.removedDarkThemes) ? catalog.removedDarkThemes : [],
+  );
+
+  const recommendedLightTheme = String(
+    catalog.recommendedLightTheme || catalog.defaultLightTheme || "default-light",
+  );
+  const recommendedDarkTheme = String(
+    catalog.recommendedDarkTheme || catalog.defaultDarkTheme || "default-dark",
+  );
+
+  function readMetaThemePreference(name, fallback = "") {
+    const value = document
+      .querySelector(`meta[name="${name}"]`)
+      ?.getAttribute("content");
+    return String(value || fallback).trim();
+  }
 
   function normalizeMode(value) {
     const raw = String(value || "").trim().toLowerCase();
@@ -63,20 +67,16 @@
       : "system";
   }
 
-  function defaultThemeId(mode) {
-    return mode === "dark" ? "default-dark" : "default-light";
-  }
-
   function normalizeThemeId(themeId, mode) {
     const raw = String(themeId || "").trim();
-    if (!raw) return defaultThemeId(mode);
-    if (raw === "light") return "default-light";
-    if (raw === "dark") return "default-dark";
+    if (!raw) return mode === "dark" ? recommendedDarkTheme : recommendedLightTheme;
+    if (raw === "light") return recommendedLightTheme;
+    if (raw === "dark") return recommendedDarkTheme;
     const theme = themeMap[raw];
     if (theme && theme.mode === mode) return raw;
-    if (mode === "light" && removedLightThemes.has(raw)) return "default-light";
-    if (mode === "dark" && removedDarkThemes.has(raw)) return "default-dark";
-    return defaultThemeId(mode);
+    if (mode === "light" && removedLightThemes.has(raw)) return recommendedLightTheme;
+    if (mode === "dark" && removedDarkThemes.has(raw)) return recommendedDarkTheme;
+    return mode === "dark" ? recommendedDarkTheme : recommendedLightTheme;
   }
 
   function migratedLegacyPreferences() {
@@ -90,8 +90,8 @@
 
     const preferences = {
       mode: "system",
-      lightTheme: "default-light",
-      darkTheme: "default-dark",
+      lightTheme: recommendedLightTheme,
+      darkTheme: recommendedDarkTheme,
     };
 
     if (legacyTheme === "light") {
@@ -125,11 +125,32 @@
     return preferences;
   }
 
+  function serverDefaults() {
+    const defaultMode = normalizeMode(catalog.defaultMode || "system");
+    const mode = normalizeMode(
+      readMetaThemePreference("speedpulse-theme-mode", String(defaultMode)),
+    );
+
+    return {
+      mode,
+      lightTheme: normalizeThemeId(
+        readMetaThemePreference("speedpulse-theme-light", recommendedLightTheme),
+        "light",
+      ),
+      darkTheme: normalizeThemeId(
+        readMetaThemePreference("speedpulse-theme-dark", recommendedDarkTheme),
+        "dark",
+      ),
+    };
+  }
+
   function loadPreferences() {
+    const defaults = serverDefaults();
     const migrated = migratedLegacyPreferences();
-    let mode = migrated?.mode || "system";
-    let lightTheme = migrated?.lightTheme || "default-light";
-    let darkTheme = migrated?.darkTheme || "default-dark";
+
+    let mode = migrated?.mode || defaults.mode;
+    let lightTheme = migrated?.lightTheme || defaults.lightTheme;
+    let darkTheme = migrated?.darkTheme || defaults.darkTheme;
 
     try {
       mode = normalizeMode(window.localStorage.getItem(themeModeStorageKey) || mode);
@@ -263,7 +284,13 @@
     darkThemeStorageKey,
     lightThemes,
     darkThemes,
+    allLightThemes,
+    allDarkThemes,
     themeMap,
+    recommendedThemes: {
+      light: recommendedLightTheme,
+      dark: recommendedDarkTheme,
+    },
     currentPreferences,
     preferredTheme,
     applyPreferences,

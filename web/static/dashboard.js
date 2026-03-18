@@ -23,15 +23,22 @@ let serverSettingsLoading = false;
 let serverSettingsSaving = false;
 let serverOptions = [];
 const heroMetricLastValues = new Map();
+const uiCore = window.SpeedPulseUiCore || null;
 const csrfToken =
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
   "";
 
 function byId(id) {
+  if (uiCore && typeof uiCore.byId === "function") {
+    return uiCore.byId(id);
+  }
   return document.getElementById(id);
 }
 
 function isDialogElement(element) {
+  if (uiCore && typeof uiCore.isDialogElement === "function") {
+    return uiCore.isDialogElement(element);
+  }
   return (
     typeof HTMLDialogElement !== "undefined" &&
     element instanceof HTMLDialogElement
@@ -39,21 +46,23 @@ function isDialogElement(element) {
 }
 
 function modalIsOpen(id) {
-  const modal = byId(id);
-  if (!modal) return false;
-
-  if (isDialogElement(modal)) {
-    return modal.open;
+  if (uiCore && typeof uiCore.modalIsOpen === "function") {
+    return uiCore.modalIsOpen(id);
   }
 
+  const modal = byId(id);
+  if (!modal) return false;
+  if (isDialogElement(modal)) return modal.open;
   return !modal.classList.contains("hidden");
 }
 
 function syncBodyModalState() {
-  document.body.classList.toggle(
-    "modal-open",
-    modalIsOpen("server-modal") || modalIsOpen("run-modal"),
-  );
+  if (uiCore && typeof uiCore.syncBodyModalState === "function") {
+    uiCore.syncBodyModalState(["server-modal", "run-modal"]);
+    return;
+  }
+
+  document.body.classList.toggle("modal-open", modalIsOpen("server-modal") || modalIsOpen("run-modal"));
 }
 
 function updateServerSelectDisabled() {
