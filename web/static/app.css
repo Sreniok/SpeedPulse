@@ -327,6 +327,10 @@
   --chart-label: var(--muted);
   --chart-grid: color-mix(in srgb, var(--theme-text) 5%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  --hover-accent-strength: 20%;
+  --hover-surface-strength: 72%;
+  --hover-shadow-alpha: 24%;
+  --hover-nav-shadow-alpha: 14%;
 }
 
 [data-theme="default-light"],
@@ -377,6 +381,10 @@
   --chart-label: var(--muted);
   --chart-grid: color-mix(in srgb, var(--theme-text) 6%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  --hover-accent-strength: 14%;
+  --hover-surface-strength: 64%;
+  --hover-shadow-alpha: 16%;
+  --hover-nav-shadow-alpha: 10%;
 }
 
 [data-theme="paper-slate"] {
@@ -495,6 +503,10 @@ body {
     "Gill Sans",
     sans-serif
   );
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .hidden {
@@ -550,13 +562,25 @@ select {
   padding: 1.25rem;
   border-right: 1px solid var(--border);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 28%),
-    var(--surface-soft);
+    radial-gradient(
+      120% 85% at -8% 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 52%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 86%, var(--bg) 14%),
+      color-mix(in srgb, var(--surface-soft) 92%, var(--bg) 8%)
+    );
   backdrop-filter: blur(18px);
   display: flex;
   flex-direction: column;
   gap: 1rem;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, var(--border-strong) 72%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 5%, transparent);
 }
 
 .brand-lockup,
@@ -564,8 +588,13 @@ select {
 .topbar,
 .panel,
 .login-card {
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 95%, white 5%),
+      color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+    );
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
   transition:
@@ -589,7 +618,18 @@ select {
   .brand-lockup:hover,
   .login-card:hover {
     transform: translate3d(0, -1px, 0);
-    border-color: var(--border-strong);
+    border-color: color-mix(
+      in srgb,
+      var(--accent) var(--hover-accent-strength),
+      var(--border-strong)
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+      0 18px 38px color-mix(
+        in srgb,
+        var(--bg) var(--hover-shadow-alpha),
+        transparent
+      );
   }
 
   .btn-primary:hover,
@@ -810,20 +850,35 @@ select {
   padding: 0.78rem 0.9rem;
   text-decoration: none;
   color: var(--muted);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   border-radius: 14px;
   font-weight: 700;
+  background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
   transition:
     color var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    background-color var(--motion-duration-base) var(--motion-ease-standard);
+    background-color var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .nav-link:hover,
 .nav-link:focus-visible {
   color: var(--text);
-  border-color: var(--border);
-  background: var(--surface-soft);
+  border-color: color-mix(
+    in srgb,
+    var(--accent) var(--hover-accent-strength),
+    var(--border-strong)
+  );
+  background: color-mix(
+    in srgb,
+    var(--surface-soft) var(--hover-surface-strength),
+    var(--surface)
+  );
+  box-shadow: 0 8px 18px color-mix(
+    in srgb,
+    var(--bg) var(--hover-nav-shadow-alpha),
+    transparent
+  );
 }
 
 .nav-link.active {
@@ -891,11 +946,15 @@ select {
   padding-bottom: 0.9rem;
   background:
     radial-gradient(
-      120% 140% at 0% 0%,
-      color-mix(in srgb, var(--accent) 12%, transparent),
-      transparent 50%
+      130% 140% at 0% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 56%
     ),
-    var(--surface);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 95%, white 5%),
+      color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+    );
 }
 
 .sidebar-card-account strong {
@@ -995,6 +1054,20 @@ select {
   gap: 1rem;
   align-items: flex-start;
   flex-wrap: wrap;
+  background:
+    radial-gradient(
+      110% 120% at 100% 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 95%, white 5%),
+      color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 16px 34px color-mix(in srgb, var(--bg) 20%, transparent);
 }
 
 .topbar-compact {
@@ -1006,6 +1079,7 @@ select {
 .login-card h1 {
   margin: 0;
   letter-spacing: -0.03em;
+  font-weight: 780;
 }
 
 .topbar-copy h1 {
@@ -1060,9 +1134,9 @@ select {
 .topbar-account-email {
   margin: 0;
   padding: 0.45rem 0.72rem;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: color-mix(in srgb, var(--surface-soft) 72%, var(--surface) 28%);
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
@@ -2278,8 +2352,16 @@ button:active,
 .incident-item {
   padding: 0.95rem 1rem;
   border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--surface-strong);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 84%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-strong) 95%, white 5%),
+      color-mix(in srgb, var(--surface) 94%, var(--bg) 6%)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 10px 22px color-mix(in srgb, var(--bg) 16%, transparent);
 }
 
 .incident-item-empty {
@@ -2364,8 +2446,17 @@ button:active,
   gap: 0.65rem;
   align-items: flex-start;
   padding: 0.55rem 0.7rem;
-  border-radius: 12px;
-  background: var(--surface-soft);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 76%, var(--surface) 24%);
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.notification-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-soft) 64%, var(--surface) 36%);
 }
 .notification-icon {
   font-size: 1.15rem;
@@ -2435,6 +2526,7 @@ button:active,
   margin: 0.35rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .panel-collapsible.is-collapsed {
@@ -2443,6 +2535,20 @@ button:active,
 
 .panel-collapsible.is-collapsed .panel-head {
   margin-bottom: 0;
+}
+
+.panel-collapsible:not(.is-collapsed) {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background:
+    radial-gradient(
+      130% 120% at 100% 0%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 48%
+    ),
+    var(--surface);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 16px 34px color-mix(in srgb, var(--bg) 24%, transparent);
 }
 
 .panel-collapse-toggle {
@@ -2878,15 +2984,34 @@ button:active,
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 600;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
   border-radius: 10px;
-  transition: 0.15s ease;
+  background: color-mix(in srgb, var(--surface-soft) 52%, transparent);
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .nav-link-section:hover,
 .nav-link-section:focus-visible {
   color: var(--text);
-  background: var(--surface-soft);
+  border-color: color-mix(
+    in srgb,
+    var(--accent) var(--hover-accent-strength),
+    var(--border-strong)
+  );
+  background: color-mix(
+    in srgb,
+    var(--surface-soft) var(--hover-surface-strength),
+    var(--surface)
+  );
+  box-shadow: 0 8px 18px color-mix(
+    in srgb,
+    var(--bg) var(--hover-nav-shadow-alpha),
+    transparent
+  );
 }
 
 .nav-link-section.active {
@@ -2907,14 +3032,22 @@ button:active,
   width: 100%;
   box-sizing: border-box;
   padding: 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
   border-radius: 18px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 92%, transparent),
-    color-mix(in srgb, var(--surface-soft) 96%, transparent)
-  );
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+  background:
+    radial-gradient(
+      120% 120% at 0% 0%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-strong) 94%, transparent),
+      color-mix(in srgb, var(--surface-soft) 96%, transparent)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 5%, transparent),
+    0 10px 22px color-mix(in srgb, var(--bg) 14%, transparent);
 }
 
 .sidebar-footer-copy {
@@ -3545,9 +3678,17 @@ button:active,
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background: var(--surface-strong);
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-strong) 96%, white 4%),
+      color-mix(in srgb, var(--surface) 96%, var(--bg) 4%)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 14px 30px color-mix(in srgb, var(--bg) 18%, transparent);
 }
 
 table {
@@ -3561,13 +3702,14 @@ td {
   padding: 1rem 0.9rem;
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
 }
 
 th {
   font-size: 0.9rem;
-  color: var(--text);
+  color: color-mix(in srgb, var(--text) 92%, white 8%);
   background: var(--thead);
+  letter-spacing: 0.02em;
 }
 
 th.sortable {
@@ -3588,10 +3730,15 @@ th.sortable.sort-desc::after {
 td {
   font-size: 0.94rem;
   color: var(--text);
+  transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 tbody tr:hover td {
-  background: var(--surface-soft);
+  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .table-id {
