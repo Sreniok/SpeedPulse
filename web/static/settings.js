@@ -9,6 +9,10 @@ let originalUserAccount = {
   loginEmail: "",
   notificationEmail: "",
 };
+const animatedSelectSyncMap = new WeakMap();
+const animatedSelectRenderMap = new WeakMap();
+const MAX_SCAN_CUSTOM_DAY = 31;
+let selectedScanCustomDays = [1];
 
 function byId(id) {
   return document.getElementById(id);
@@ -63,6 +67,203 @@ function populateSelectOptions(select, options, selectedId) {
     }
     select.appendChild(element);
   }
+
+  refreshAnimatedSelectOptions(select);
+}
+
+function closeAllAnimatedSelects(exceptWrapper = null) {
+  document.querySelectorAll(".animated-select.is-open").forEach((wrapper) => {
+    if (exceptWrapper && wrapper === exceptWrapper) return;
+    wrapper.classList.remove("is-open");
+    const panel = wrapper.closest(".panel-collapsible");
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("has-open-dropdown");
+    }
+    const trigger = wrapper.querySelector(".animated-select-trigger");
+    if (trigger instanceof HTMLElement) {
+      trigger.setAttribute("aria-expanded", "false");
+    }
+  });
+}
+
+function enhanceAnimatedSelect(select) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  if (select.dataset.animatedSelectBound === "true") return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "animated-select";
+  select.parentNode.insertBefore(wrapper, select);
+  wrapper.appendChild(select);
+
+  select.classList.add("animated-select-native");
+  select.tabIndex = -1;
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "animated-select-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+
+  const triggerLabel = document.createElement("span");
+  triggerLabel.className = "animated-select-trigger-label";
+  trigger.appendChild(triggerLabel);
+
+  const triggerChevron = document.createElement("span");
+  triggerChevron.className = "animated-select-trigger-chevron";
+  triggerChevron.setAttribute("aria-hidden", "true");
+  trigger.appendChild(triggerChevron);
+
+  const menu = document.createElement("div");
+  menu.className = "animated-select-menu";
+  menu.setAttribute("role", "listbox");
+
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(menu);
+
+  const syncFromSelect = () => {
+    const selectedOption = select.options[select.selectedIndex];
+    triggerLabel.textContent = selectedOption
+      ? selectedOption.textContent || ""
+      : "";
+    trigger.disabled = select.disabled;
+
+    menu.querySelectorAll(".animated-select-option").forEach((optionNode) => {
+      const node = optionNode;
+      const selected = node.dataset.value === String(select.value);
+      node.classList.toggle("is-selected", selected);
+      node.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+  };
+
+  const renderOptions = () => {
+    menu.textContent = "";
+
+    Array.from(select.options).forEach((option) => {
+      const optionButton = document.createElement("button");
+      optionButton.type = "button";
+      optionButton.className = "animated-select-option";
+      optionButton.dataset.value = option.value;
+      optionButton.setAttribute("role", "option");
+      optionButton.setAttribute(
+        "aria-selected",
+        option.value === select.value ? "true" : "false",
+      );
+      optionButton.textContent = option.textContent || "";
+      optionButton.disabled = option.disabled;
+
+      if (option.value === select.value) {
+        optionButton.classList.add("is-selected");
+      }
+
+      optionButton.addEventListener("click", () => {
+        if (option.disabled) return;
+        select.value = option.value;
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        closeAllAnimatedSelects();
+        syncFromSelect();
+      });
+
+      menu.appendChild(optionButton);
+    });
+  };
+
+  const toggleMenu = () => {
+    const isOpen = wrapper.classList.contains("is-open");
+    if (isOpen) {
+      closeAllAnimatedSelects();
+      return;
+    }
+    closeAllAnimatedSelects(wrapper);
+    wrapper.classList.add("is-open");
+    const panel = wrapper.closest(".panel-collapsible");
+    if (panel instanceof HTMLElement) {
+      panel.classList.add("has-open-dropdown");
+    }
+    trigger.setAttribute("aria-expanded", "true");
+  };
+
+  trigger.addEventListener("click", toggleMenu);
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAllAnimatedSelects();
+    }
+  });
+
+  select.addEventListener("change", () => {
+    syncFromSelect();
+  });
+
+  if (select.id) {
+    document.querySelectorAll(`label[for="${select.id}"]`).forEach((label) => {
+      label.addEventListener("click", (event) => {
+        event.preventDefault();
+        trigger.focus();
+        toggleMenu();
+      });
+    });
+  }
+
+  select.dataset.animatedSelectBound = "true";
+  animatedSelectSyncMap.set(select, syncFromSelect);
+  animatedSelectRenderMap.set(select, renderOptions);
+  renderOptions();
+  syncFromSelect();
+}
+
+function syncAnimatedSelect(select) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  const sync = animatedSelectSyncMap.get(select);
+  if (typeof sync === "function") {
+    sync();
+  }
+}
+
+function refreshAnimatedSelectOptions(select) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  const render = animatedSelectRenderMap.get(select);
+  if (typeof render === "function") {
+    render();
+    syncAnimatedSelect(select);
+  }
+}
+
+function syncAllAnimatedSelects() {
+  document.querySelectorAll(".settings-page select").forEach((node) => {
+    if (node instanceof HTMLSelectElement) {
+      syncAnimatedSelect(node);
+    }
+  });
+}
+
+function initializeAnimatedSelects() {
+  document.querySelectorAll(".settings-page select").forEach((node) => {
+    if (node instanceof HTMLSelectElement) {
+      enhanceAnimatedSelect(node);
+    }
+  });
+
+  if (document.body.dataset.animatedSelectGlobalBound === "true") return;
+  document.body.dataset.animatedSelectGlobalBound = "true";
+
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof HTMLElement)) {
+      closeAllAnimatedSelects();
+      return;
+    }
+    if (event.target.closest(".animated-select")) return;
+    closeAllAnimatedSelects();
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAllAnimatedSelects();
+    }
+  });
+
+  document.addEventListener("settings:layoutchanged", () => {
+    closeAllAnimatedSelects();
+  });
 }
 
 function showMessage(text, kind = "info") {
@@ -156,12 +357,17 @@ function initializeTheme() {
     })),
     themeApi.currentPreferences().darkTheme,
   );
+  initializeAnimatedSelects();
 
   const syncControls = (preferences = themeApi.currentPreferences()) => {
     modeSelect.value = preferences.mode;
     lightSelect.value = preferences.lightTheme;
     darkSelect.value = preferences.darkTheme;
+    syncAnimatedSelect(modeSelect);
+    syncAnimatedSelect(lightSelect);
+    syncAnimatedSelect(darkSelect);
     renderThemeSummary(preferences);
+    syncAllAnimatedSelects();
   };
 
   syncControls(themeApi.currentPreferences());
@@ -314,6 +520,63 @@ function collectDailyScanTimes() {
   );
 }
 
+function normalizeScanCustomDays(values) {
+  if (!Array.isArray(values)) {
+    return [1];
+  }
+
+  const uniqueDays = new Set();
+  values.forEach((value) => {
+    const day = Number(value);
+    if (Number.isInteger(day) && day >= 1 && day <= MAX_SCAN_CUSTOM_DAY) {
+      uniqueDays.add(day);
+    }
+  });
+
+  const normalized = Array.from(uniqueDays).sort((a, b) => a - b);
+  return normalized.length > 0 ? normalized : [1];
+}
+
+function renderScanCustomDayPicker() {
+  const container = byId("settings-scan-custom-days");
+  if (!container) return;
+
+  container.textContent = "";
+
+  for (let day = 1; day <= MAX_SCAN_CUSTOM_DAY; day += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "settings-custom-day-chip";
+    if (selectedScanCustomDays.includes(day)) {
+      button.classList.add("is-selected");
+      button.setAttribute("aria-pressed", "true");
+    } else {
+      button.setAttribute("aria-pressed", "false");
+    }
+    button.dataset.customScanDay = String(day);
+    button.textContent = String(day);
+    button.addEventListener("click", () => {
+      const hasDay = selectedScanCustomDays.includes(day);
+      if (hasDay && selectedScanCustomDays.length === 1) {
+        return;
+      }
+      if (hasDay) {
+        selectedScanCustomDays = selectedScanCustomDays.filter(
+          (value) => value !== day,
+        );
+      } else {
+        selectedScanCustomDays = normalizeScanCustomDays([
+          ...selectedScanCustomDays,
+          day,
+        ]);
+      }
+      renderScanCustomDayPicker();
+      syncScanScheduleState();
+    });
+    container.appendChild(button);
+  }
+}
+
 function syncScanFrequencySummary() {
   const frequency = String(byId("settings-scan-frequency")?.value || "daily")
     .trim()
@@ -322,6 +585,7 @@ function syncScanFrequencySummary() {
   const note = byId("settings-scan-frequency-note");
   const weeklyOptions = byId("settings-scan-weekly-options");
   const monthlyOptions = byId("settings-scan-monthly-options");
+  const customOptions = byId("settings-scan-custom-options");
 
   const copy = {
     daily: {
@@ -337,8 +601,8 @@ function syncScanFrequencySummary() {
       note: "These run on the selected day of month at the times below.",
     },
     custom: {
-      title: "Custom scans",
-      note: "Custom keeps the explicit scan times below.",
+      title: "Custom monthly scans",
+      note: "These run on each selected day-of-month at the times below.",
     },
   };
   const selected = copy[frequency] || copy.daily;
@@ -347,6 +611,7 @@ function syncScanFrequencySummary() {
   if (note) note.textContent = selected.note;
   if (weeklyOptions) weeklyOptions.classList.toggle("hidden", frequency !== "weekly");
   if (monthlyOptions) monthlyOptions.classList.toggle("hidden", frequency !== "monthly");
+  if (customOptions) customOptions.classList.toggle("hidden", frequency !== "custom");
 }
 
 function syncScanScheduleState() {
@@ -354,13 +619,22 @@ function syncScanScheduleState() {
   const frequencySelect = byId("settings-scan-frequency");
   const weeklyDay = byId("settings-scan-weekly-day");
   const monthlyDay = byId("settings-scan-monthly-day");
+  const customDayButtons = Array.from(
+    document.querySelectorAll("[data-custom-scan-day]"),
+  );
   const addButton = byId("settings-add-scan-time");
   const times = Array.from(document.querySelectorAll("[data-scan-time]"));
   const removeButtons = Array.from(document.querySelectorAll("[data-remove-scan-time]"));
+  const frequency = String(frequencySelect?.value || "daily")
+    .trim()
+    .toLowerCase();
 
   if (frequencySelect) frequencySelect.disabled = !scanEnabled;
   if (weeklyDay) weeklyDay.disabled = !scanEnabled;
   if (monthlyDay) monthlyDay.disabled = !scanEnabled;
+  customDayButtons.forEach((button) => {
+    button.disabled = !scanEnabled || frequency !== "custom";
+  });
   if (addButton) addButton.disabled = !scanEnabled;
   times.forEach((input) => {
     input.disabled = !scanEnabled;
@@ -474,6 +748,10 @@ function populateSettingsForm(payload) {
     String(notifications.scan_weekly_day || "Monday");
   byId("settings-scan-monthly-day").value =
     String(Number(notifications.scan_monthly_day || 1));
+  selectedScanCustomDays = normalizeScanCustomDays(
+    notifications.scan_custom_days || [],
+  );
+  renderScanCustomDayPicker();
   syncScanFrequencySummary();
   syncScanScheduleState();
   byId("settings-webhook-enabled").checked = Boolean(
@@ -497,6 +775,7 @@ function populateSettingsForm(payload) {
   renderAccountSummary(account);
   toggleNotificationFieldState();
   syncScheduledServerSelect();
+  syncAllAnimatedSelects();
 
   // Backup schedule
   const backup = payload.backup || {};
@@ -556,6 +835,7 @@ function collectSettingsPayload() {
       String(byId("settings-scan-frequency").value || "daily").trim().toLowerCase(),
     scan_weekly_day: String(byId("settings-scan-weekly-day").value || "Monday"),
     scan_monthly_day: Number(byId("settings-scan-monthly-day").value || "1"),
+    scan_custom_days: normalizeScanCustomDays(selectedScanCustomDays),
     test_times: collectDailyScanTimes(),
     server_id: byId("settings-schedule-server").value,
     push_events: {

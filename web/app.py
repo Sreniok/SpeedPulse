@@ -612,7 +612,16 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     scan_enabled = bool(scheduling_cfg.get("scan_enabled", True))
     scan_frequency = _clean_scan_frequency(scheduling_cfg.get("scan_frequency", "daily"), "daily")
     scan_weekly_day = _clean_weekday_name(scheduling_cfg.get("scan_weekly_day", "Monday"), "Monday")
-    scan_monthly_day = max(1, min(28, _safe_int(scheduling_cfg.get("scan_monthly_day", 1), 1)))
+    scan_monthly_day = max(1, min(31, _safe_int(scheduling_cfg.get("scan_monthly_day", 1), 1)))
+    scan_custom_days = sorted(
+        {
+            day
+            for day in (_safe_int(value, 0) for value in scheduling_cfg.get("scan_custom_days", []))
+            if 1 <= day <= 31
+        }
+    )
+    if not scan_custom_days:
+        scan_custom_days = [scan_monthly_day]
 
     return {
         "login_email": login_email,
@@ -645,6 +654,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "scan_frequency": scan_frequency,
             "scan_weekly_day": scan_weekly_day,
             "scan_monthly_day": scan_monthly_day,
+            "scan_custom_days": scan_custom_days,
             "push_events": push_events,
             "report_theme_id": report_theme_id,
             "webhook_enabled": bool(notifications_cfg.get("webhook_enabled", False)),
@@ -824,6 +834,24 @@ def _normalize_test_times(values: object) -> list[str]:
         raise HTTPException(status_code=400, detail="Add at least one daily scan time")
 
     return sorted(normalized)
+
+
+def _normalize_scan_custom_days(values: object) -> list[int]:
+    if not isinstance(values, list):
+        raise HTTPException(status_code=400, detail="Custom scan days must be a list")
+
+    normalized_set: set[int] = set()
+    for raw_value in values:
+        day = _safe_int(raw_value, 0)
+        if day < 1 or day > 31:
+            raise HTTPException(status_code=400, detail="Custom scan days must be between 1 and 31")
+        normalized_set.add(day)
+
+    normalized = sorted(normalized_set)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Select at least one custom scan day")
+
+    return normalized
 
 
 def _send_settings_test_email(config: dict) -> None:
@@ -1641,7 +1669,14 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
             "scan_enabled": scan_enabled,
             "scan_frequency": scan_frequency,
             "scan_weekly_day": _clean_weekday_name(scheduling.get("scan_weekly_day", "Monday"), "Monday"),
-            "scan_monthly_day": max(1, min(28, _safe_int(scheduling.get("scan_monthly_day", 1), 1))),
+            "scan_monthly_day": max(1, min(31, _safe_int(scheduling.get("scan_monthly_day", 1), 1))),
+            "scan_custom_days": sorted(
+                {
+                    day
+                    for day in (_safe_int(value, 0) for value in scheduling.get("scan_custom_days", []))
+                    if 1 <= day <= 31
+                }
+            ),
         },
         "timeseries": timeseries,
         "latest_tests": latest_entries,
@@ -2208,6 +2243,7 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     scan_frequency = _clean_scan_frequency(payload.get("scan_frequency", "daily"), "daily")
     scan_weekly_day = _clean_weekday_name(payload.get("scan_weekly_day", "Monday"), "Monday")
     scan_monthly_day = _safe_int(payload.get("scan_monthly_day", 1), 1)
+    scan_custom_days = _normalize_scan_custom_days(payload.get("scan_custom_days", [scan_monthly_day]))
     test_times = _normalize_test_times(payload.get("test_times", ["08:00", "16:00", "22:00"]))
     selected_server_id = _clean_env_value(payload.get("server_id", ""))
     push_events = _normalize_push_events(payload.get("push_events", {}))
@@ -2244,8 +2280,10 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
     if not _validate_hhmm(monthly_report_time):
         raise HTTPException(status_code=400, detail="Monthly report time must use HH:MM format")
-    if scan_monthly_day < 1 or scan_monthly_day > 28:
-        raise HTTPException(status_code=400, detail="Monthly scan day must be between 1 and 28")
+    if scan_monthly_day < 1 or scan_monthly_day > 31:
+        raise HTTPException(status_code=400, detail="Monthly scan day must be between 1 and 31")
+    if scan_frequency == "custom" and not scan_custom_days:
+        raise HTTPException(status_code=400, detail="Select at least one custom scan day")
 
     config = load_config()
     account_cfg = config.setdefault("account", {})
@@ -2275,6 +2313,7 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     scheduling_cfg["scan_frequency"] = scan_frequency
     scheduling_cfg["scan_weekly_day"] = scan_weekly_day
     scheduling_cfg["scan_monthly_day"] = scan_monthly_day
+    scheduling_cfg["scan_custom_days"] = scan_custom_days
     speedtest_cfg["server_id"] = selected_server_id
 
     notifications_cfg["weekly_report_enabled"] = bool(payload.get("weekly_report_enabled", True))

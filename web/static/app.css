@@ -975,6 +975,7 @@ select {
   display: grid;
   gap: 1rem;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   scroll-behavior: smooth;
 }
 
@@ -1116,12 +1117,230 @@ select,
 input {
   width: 100%;
   min-height: 42px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 84%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+  );
+  color: var(--text);
+  padding: 0.68rem 0.9rem;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 8px 20px color-mix(in srgb, var(--bg) 14%, transparent);
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.15rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%),
+    linear-gradient(135deg, color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%, transparent 50%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+      color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+    );
+  background-position:
+    calc(100% - 16px) calc(50% + 1px),
+    calc(100% - 11px) calc(50% + 1px),
+    0 0;
+  background-size:
+    6px 6px,
+    6px 6px,
+    100% 100%;
+  background-repeat: no-repeat;
+}
+
+select:focus-visible,
+input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-strong));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 12px 26px color-mix(in srgb, var(--bg) 20%, transparent);
+}
+
+select:hover,
+input:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+}
+
+select option {
   background: var(--surface-strong);
   color: var(--text);
-  padding: 0.68rem 0.85rem;
+}
+
+.animated-select {
+  position: relative;
+  isolation: isolate;
+}
+
+.animated-select-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+}
+
+.animated-select-trigger {
+  width: 100%;
+  min-height: 42px;
+  padding: 0.68rem 0.9rem;
+  padding-right: 2.15rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 84%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+  );
+  color: var(--text);
+  text-align: left;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 8px 20px color-mix(in srgb, var(--bg) 14%, transparent);
+}
+
+.animated-select-trigger::before,
+.animated-select-option::before {
+  content: none;
+}
+
+.animated-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  transform: none;
+  filter: none;
+}
+
+.animated-select-trigger:focus-visible {
   outline: none;
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-strong));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 12px 26px color-mix(in srgb, var(--bg) 20%, transparent);
+}
+
+.animated-select-trigger-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animated-select-trigger-chevron {
+  position: absolute;
+  top: 50%;
+  right: 0.92rem;
+  width: 10px;
+  height: 10px;
+  transform: translateY(-52%);
+}
+
+.animated-select-trigger-chevron::before,
+.animated-select-trigger-chevron::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  width: 6px;
+  height: 1.6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 70%, var(--accent) 30%);
+  transition: transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.animated-select-trigger-chevron::before {
+  left: 0;
+  transform: rotate(35deg);
+}
+
+.animated-select-trigger-chevron::after {
+  right: 0;
+  transform: rotate(-35deg);
+}
+
+.animated-select-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 80;
+  padding: 0.38rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 88%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 96%, white 4%),
+    color-mix(in srgb, var(--surface) 96%, var(--bg) 4%)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 16px 32px color-mix(in srgb, var(--bg) 24%, transparent);
+  backdrop-filter: blur(14px);
+  max-height: 280px;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateY(-7px) scale(0.985);
+  transform-origin: top;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.animated-select.is-open .animated-select-menu {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.animated-select.is-open .animated-select-trigger-chevron::before {
+  transform: rotate(-35deg);
+}
+
+.animated-select.is-open .animated-select-trigger-chevron::after {
+  transform: rotate(35deg);
+}
+
+.animated-select-option {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 0.46rem 0.58rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.animated-select-trigger:active,
+.animated-select-option:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.animated-select-option:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: none;
+  filter: none;
+}
+
+.animated-select-option.is-selected {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: color-mix(in srgb, var(--text) 92%, white 8%);
 }
 
 input[type="checkbox"] {
@@ -1141,54 +1360,109 @@ button,
 .btn-ghost,
 .btn-muted,
 .btn-primary {
-  min-height: 42px;
-  padding: 0.68rem 0.95rem;
-  border-radius: 14px;
-  border: 1px solid transparent;
+  position: relative;
+  isolation: isolate;
+  min-height: 44px;
+  padding: 0.72rem 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   cursor: pointer;
   text-decoration: none;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   transition:
     color var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background-color var(--motion-duration-fast) var(--motion-ease-standard),
     box-shadow var(--motion-duration-base) var(--motion-ease-standard),
-    transform var(--motion-duration-base) var(--motion-ease-standard);
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    filter var(--motion-duration-base) var(--motion-ease-standard);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.45rem;
   max-width: 100%;
   text-align: center;
   white-space: normal;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 10px 24px color-mix(in srgb, var(--bg) 22%, transparent);
+}
+
+button::before,
+.btn-ghost::before,
+.btn-muted::before,
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 14%, transparent),
+    transparent 52%
+  );
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+button:focus-visible,
+.btn-ghost:focus-visible,
+.btn-muted:focus-visible,
+.btn-primary:focus-visible,
+.btn-icon:focus-visible,
+.icon-button:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-strong));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 12px 28px color-mix(in srgb, var(--bg) 26%, transparent);
 }
 
 .btn-muted {
-  background: var(--surface-strong);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+  );
   color: var(--text);
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--border-strong) 88%, transparent);
 }
 
 .btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-strong);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+  );
   color: var(--muted);
   cursor: pointer;
   transition:
     color var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
     transform var(--motion-duration-base) var(--motion-ease-standard);
   flex-shrink: 0;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 10px 22px color-mix(in srgb, var(--bg) 18%, transparent);
 }
 .btn-icon:hover {
   color: var(--text);
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+    0 16px 28px color-mix(in srgb, var(--bg) 24%, transparent);
 }
 
 .btn-muted:hover,
@@ -1196,30 +1470,84 @@ button,
 .btn-primary:hover,
 select:hover,
 input:hover {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border-strong));
 }
 
 .btn-primary {
   color: var(--accent-text);
-  border-color: rgba(0, 0, 0, 0.06);
-  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 76%, white 24%),
+    var(--accent) 52%,
+    var(--accent-strong)
+  );
   font-weight: 800;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
+    0 16px 32px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .btn-ghost {
   color: var(--text);
-  background: transparent;
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
+  border-color: color-mix(in srgb, var(--border) 92%, transparent);
 }
 
 .btn-small {
-  min-height: 36px;
-  padding: 0.48rem 0.72rem;
+  min-height: 38px;
+  padding: 0.52rem 0.78rem;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-muted:hover,
+.btn-ghost:hover,
+.btn-primary:hover,
+.icon-button:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.04);
+}
+
+.btn-muted:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 88%, white 12%),
+    color-mix(in srgb, var(--surface) 88%, var(--bg) 12%)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+    0 14px 28px color-mix(in srgb, var(--bg) 22%, transparent);
+}
+
+.btn-primary:hover {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    0 18px 34px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.btn-ghost:hover {
+  background: color-mix(in srgb, var(--surface-soft) 78%, var(--surface) 22%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 14px 28px color-mix(in srgb, var(--bg) 20%, transparent);
+}
+
+button:active,
+.btn-ghost:active,
+.btn-muted:active,
+.btn-primary:active,
+.btn-icon:active,
+.icon-button:active {
+  transform: translateY(0);
+  box-shadow:
+    inset 0 2px 6px color-mix(in srgb, var(--bg) 24%, transparent),
+    0 8px 18px color-mix(in srgb, var(--bg) 16%, transparent);
 }
 
 .user-pill {
@@ -1430,19 +1758,32 @@ button:disabled {
 }
 
 .icon-button {
-  min-width: 42px;
-  padding: 0.68rem;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: transparent;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.72rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 94%, white 6%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg) 8%)
+  );
   color: var(--muted);
   font-size: 1.3rem;
   line-height: 1;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 10px 22px color-mix(in srgb, var(--bg) 18%, transparent);
 }
 
 .icon-button:hover {
   color: var(--text);
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 88%, white 12%),
+    color-mix(in srgb, var(--surface) 88%, var(--bg) 12%)
+  );
 }
 
 .run-modal-card {
@@ -2105,30 +2446,96 @@ button:disabled {
 }
 
 .panel-collapse-toggle {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--text) 68%, var(--accent) 32%);
+}
+
+.panel-collapse-toggle:hover {
+  background: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--text) 84%, var(--accent) 16%);
+  transform: translateY(0);
+  filter: none;
+}
+
+.panel-collapse-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, var(--accent) 10%);
 }
 
 .panel-collapse-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform var(--motion-duration-base) var(--motion-ease-standard);
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  font-size: 0;
+  color: transparent;
+  opacity: 0.88;
+}
+
+.panel-collapse-chevron::before,
+.panel-collapse-chevron::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  width: 8px;
+  height: 1.75px;
+  border-radius: 999px;
+  background: currentColor;
+  color: color-mix(in srgb, var(--text) 78%, var(--accent) 22%);
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.panel-collapse-chevron::before {
+  left: 0;
+  transform-origin: right center;
+  transform: rotate(34deg);
+}
+
+.panel-collapse-chevron::after {
+  right: 0;
+  transform-origin: left center;
+  transform: rotate(-34deg);
 }
 
 .panel-collapse-toggle[aria-expanded="true"] .panel-collapse-chevron {
-  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.panel-collapse-toggle[aria-expanded="true"] .panel-collapse-chevron::before {
+  transform: rotate(-34deg);
+}
+
+.panel-collapse-toggle[aria-expanded="true"] .panel-collapse-chevron::after {
+  transform: rotate(34deg);
 }
 
 .panel-collapse-body {
   display: grid;
   gap: 0.9rem;
-  overflow: hidden;
+  overflow: visible;
   will-change: height, opacity;
+}
+
+.settings-page .panel-collapsible {
+  position: relative;
+}
+
+.settings-page .panel-collapsible.has-open-dropdown {
+  z-index: 70;
 }
 
 .panel-collapse-body[hidden] {
@@ -2196,6 +2603,42 @@ button:disabled {
   margin-top: 0.85rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
+}
+
+.settings-scan-frequency-row {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.settings-custom-days-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 0.5rem;
+}
+
+.settings-custom-day-chip {
+  min-height: 40px;
+  padding: 0.4rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.settings-custom-day-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+}
+
+.settings-custom-day-chip.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-strong));
+  color: var(--text);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.settings-custom-day-chip:disabled {
+  opacity: 0.45;
 }
 
 .settings-field-group {

@@ -54,6 +54,7 @@
     "scan_frequency": "daily",
     "scan_weekly_day": "Monday",
     "scan_monthly_day": 1,
+    "scan_custom_days": [1, 15],
     "test_times": ["08:00", "16:00", "22:00"],
     "weekly_report_time": "Monday 08:00",
     "monthly_report_time": "08:00"

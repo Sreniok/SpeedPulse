@@ -703,20 +703,17 @@
                   <span>Enable scheduled scans</span>
                 </label>
               </div>
-              <div class="settings-field-group settings-field-inline">
-                <label for="settings-scan-frequency">Scheduled scan frequency</label>
-                <select id="settings-scan-frequency">
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </div>
-              <div
-                id="settings-scan-weekly-options"
-                class="settings-fields settings-fields-schedule hidden"
-              >
+              <div class="settings-fields settings-fields-schedule settings-scan-frequency-row">
                 <div class="settings-field-group">
+                  <label for="settings-scan-frequency">Scheduled scan frequency</label>
+                  <select id="settings-scan-frequency">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div id="settings-scan-weekly-options" class="settings-field-group hidden">
                   <label for="settings-scan-weekly-day">Scan day (weekly)</label>
                   <select id="settings-scan-weekly-day">
                     <option value="Monday">Monday</option>
@@ -728,12 +725,7 @@
                     <option value="Sunday">Sunday</option>
                   </select>
                 </div>
-              </div>
-              <div
-                id="settings-scan-monthly-options"
-                class="settings-fields settings-fields-schedule hidden"
-              >
-                <div class="settings-field-group">
+                <div id="settings-scan-monthly-options" class="settings-field-group hidden">
                   <label for="settings-scan-monthly-day"
                     >Scan day of month (monthly)</label
                   >
@@ -741,11 +733,23 @@
                     id="settings-scan-monthly-day"
                     type="number"
                     min="1"
-                    max="28"
+                    max="31"
                     step="1"
                     value="1"
                   />
                 </div>
+              </div>
+              <div id="settings-scan-custom-options" class="settings-field-group hidden">
+                <label>Scan days (custom monthly repeat)</label>
+                <p class="panel-subtext">
+                  Select one or more days to run every month.
+                </p>
+                <div
+                  id="settings-scan-custom-days"
+                  class="settings-custom-days-grid"
+                  role="group"
+                  aria-label="Custom scan days of month"
+                ></div>
               </div>
               <div class="settings-schedule-shell">
               <section class="settings-schedule-block">

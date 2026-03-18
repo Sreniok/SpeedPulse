@@ -49,6 +49,21 @@ def parse_weekly_schedule(value: str) -> tuple[str, int, int]:
     return day_key, hour, minute
 
 
+def normalize_custom_scan_days(values: object) -> list[int]:
+    if not isinstance(values, list):
+        return [1]
+    normalized = sorted(
+        {
+            day
+            for day in (
+                int(value) for value in values if str(value).strip().isdigit()
+            )
+            if 1 <= day <= 31
+        }
+    )
+    return normalized or [1]
+
+
 def run_script(script_name: str) -> None:
     script_path = SCRIPT_DIR / script_name
     if not script_path.exists():
@@ -105,8 +120,11 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
                 trigger_kwargs["day_of_week"] = weekday
             elif scan_frequency == "monthly":
                 day_of_month = int(scheduling.get("scan_monthly_day", 1) or 1)
-                day_of_month = max(1, min(28, day_of_month))
+                day_of_month = max(1, min(31, day_of_month))
                 trigger_kwargs["day"] = day_of_month
+            elif scan_frequency == "custom":
+                custom_days = normalize_custom_scan_days(scheduling.get("scan_custom_days", []))
+                trigger_kwargs["day"] = ",".join(str(day) for day in custom_days)
             scheduler.add_job(
                 run_script,
                 trigger=CronTrigger(**trigger_kwargs),
@@ -121,6 +139,12 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
                 log(f"Scheduled weekly speed test #{index} at {hour:02d}:{minute:02d} ({weekday})")
             elif scan_frequency == "monthly":
                 log(f"Scheduled monthly speed test #{index} at {hour:02d}:{minute:02d} (day {day_of_month})")
+            elif scan_frequency == "custom":
+                custom_days_text = ",".join(str(day) for day in custom_days)
+                log(
+                    f"Scheduled custom monthly speed test #{index} at {hour:02d}:{minute:02d} "
+                    f"(days {custom_days_text})"
+                )
             else:
                 log(f"Scheduled speed test #{index} at {hour:02d}:{minute:02d}")
     else:
