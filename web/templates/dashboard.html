@@ -29,6 +29,7 @@
     <script src="/static/dashboard.js" defer></script>
   </head>
   <body class="dash-body dashboard-page">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <div class="app-shell">
       <button
         id="mobile-nav-toggle"
@@ -199,7 +200,7 @@
         </section>
       </aside>
 
-      <main class="main-shell">
+      <main id="main-content" class="main-shell" tabindex="-1">
         <header class="topbar" id="overview">
           <div class="topbar-copy">
             <p class="eyebrow">Dashboard</p>
@@ -374,7 +375,17 @@
             <div class="panel-head panel-head-row">
               <div>
                 <p class="eyebrow">Speed</p>
-                <h2>Download / Upload</h2>
+                <div class="panel-title-with-info">
+                  <h2>Download / Upload</h2>
+                  <button
+                    class="panel-info"
+                    type="button"
+                    data-tooltip="Download is incoming speed (higher is better). Upload is outgoing speed (higher is better). Trend lines show a 7-scan average and dashed lines mark your configured thresholds."
+                    aria-label="About download and upload chart"
+                  >
+                    i
+                  </button>
+                </div>
               </div>
               <button
                 class="btn-icon chart-save"
@@ -409,7 +420,17 @@
             <div class="panel-head panel-head-row">
               <div>
                 <p class="eyebrow">Latency</p>
-                <h2>Ping / Jitter / Packet loss</h2>
+                <div class="panel-title-with-info">
+                  <h2>Ping / Jitter / Packet loss</h2>
+                  <button
+                    class="panel-info"
+                    type="button"
+                    data-tooltip="Ping is response latency in ms (lower is better). Jitter is latency variation (lower is better). Packet loss is dropped packets in percent (closer to 0% is better)."
+                    aria-label="About latency metrics"
+                  >
+                    i
+                  </button>
+                </div>
               </div>
               <button
                 class="btn-icon chart-save"
@@ -444,7 +465,17 @@
             <div class="panel-head panel-head-row">
               <div>
                 <p class="eyebrow">Reliability</p>
-                <h2>Threshold breaches</h2>
+                <div class="panel-title-with-info">
+                  <h2>Threshold breaches</h2>
+                  <button
+                    class="panel-info"
+                    type="button"
+                    data-tooltip="Shows how often measurements crossed your configured limits: download/upload below minimum and ping/loss above maximum."
+                    aria-label="About threshold breaches chart"
+                  >
+                    i
+                  </button>
+                </div>
                 <p id="breach-summary" class="panel-subtext">
                   Comparing results against configured thresholds.
                 </p>

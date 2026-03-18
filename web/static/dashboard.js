@@ -714,6 +714,44 @@ function cssAlpha(name, opacityPercent) {
   return withAlpha(cssVar(name), opacityPercent / 100);
 }
 
+function buildSurfaceGradient(chart, colorVar, topAlpha = 24, bottomAlpha = 4) {
+  const area = chart?.chartArea;
+  const ctx = chart?.ctx;
+  if (!ctx || !area) {
+    return cssAlpha(colorVar, Math.max(bottomAlpha, 8));
+  }
+  const gradient = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+  gradient.addColorStop(0, cssAlpha(colorVar, topAlpha));
+  gradient.addColorStop(1, cssAlpha(colorVar, bottomAlpha));
+  return gradient;
+}
+
+function createEmptyStateCard(title, copy, options = {}) {
+  const card = document.createElement("article");
+  card.className = "empty-state-card";
+  if (options.compact) {
+    card.classList.add("empty-state-mini");
+  }
+
+  const icon = document.createElement("span");
+  icon.className = "empty-state-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = options.icon || "◇";
+
+  const heading = document.createElement("p");
+  heading.className = "empty-state-title";
+  heading.textContent = title;
+
+  const paragraph = document.createElement("p");
+  paragraph.className = "empty-state-copy";
+  paragraph.textContent = copy;
+
+  card.appendChild(icon);
+  card.appendChild(heading);
+  card.appendChild(paragraph);
+  return card;
+}
+
 function initializeTheme() {
   const themeApi = window.SpeedPulseTheme;
   if (!themeApi) return;
@@ -847,8 +885,36 @@ function metricCard(
     card.classList.add("metric-card-compact");
   }
 
+  const infoMap = {
+    "Latest download":
+      "Download speed is how fast data is received from the internet (Mbps). Higher is better.",
+    "Latest upload":
+      "Upload speed is how fast data is sent to the internet (Mbps). Higher is better.",
+    "Latest ping":
+      "Ping is network latency in milliseconds. Lower is better for responsiveness.",
+    "Scheduled scans":
+      "Scheduled scans are automated speed tests run at your configured times.",
+    "Manual scans":
+      "Manual scans are speed tests started by you from the dashboard.",
+  };
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "metric-title-row";
+
   const titleEl = document.createElement("h3");
   titleEl.textContent = title;
+  titleRow.appendChild(titleEl);
+
+  const infoText = infoMap[title];
+  if (infoText) {
+    const infoButton = document.createElement("button");
+    infoButton.type = "button";
+    infoButton.className = "metric-info";
+    infoButton.setAttribute("aria-label", `About ${title.toLowerCase()}`);
+    infoButton.setAttribute("data-tooltip", infoText);
+    infoButton.textContent = "i";
+    titleRow.appendChild(infoButton);
+  }
 
   const valueEl = document.createElement("p");
   valueEl.className = "metric-value";
@@ -858,7 +924,7 @@ function metricCard(
   noteEl.className = `metric-note ${toneClass}`;
   noteEl.textContent = noteText;
 
-  card.appendChild(titleEl);
+  card.appendChild(titleRow);
   card.appendChild(valueEl);
 
   if (deltaChip) {
@@ -913,9 +979,12 @@ function renderHeroMetrics(data) {
   const previous = rows[1];
 
   if (!latest) {
-    const empty = document.createElement("article");
-    empty.className = "metric-card metric-card-empty";
-    empty.textContent = "No tests available in the selected range.";
+    const empty = createEmptyStateCard(
+      "No scan data yet",
+      "Run a manual test or wait for the next scheduled scan to populate this range.",
+      { icon: "↺" },
+    );
+    empty.classList.add("metric-card", "metric-card-empty");
     root.appendChild(empty);
     return;
   }
@@ -1129,8 +1198,19 @@ function slaBreakdownChartOptions() {
     responsive: true,
     maintainAspectRatio: false,
     indexAxis: "y",
+    animation: {
+      duration: 720,
+      easing: "easeOutQuart",
+    },
     plugins: {
       legend: { display: false },
+      tooltip: {
+        backgroundColor: cssAlpha("--bg", 88),
+        borderColor: cssAlpha("--accent", 24),
+        borderWidth: 1,
+        titleColor: cssVar("--text"),
+        bodyColor: cssVar("--text"),
+      },
     },
     scales: {
       x: {
@@ -1194,6 +1274,8 @@ function renderSlaBreakdown(data, summaryElement) {
           ],
           borderWidth: 1.3,
           borderRadius: 12,
+          categoryPercentage: 0.72,
+          barPercentage: 0.72,
         },
       ],
     },
@@ -1324,10 +1406,12 @@ function renderIncidentHistory(data) {
       : `No grouped incidents were found for ${data.range_label || "the selected range"}.`;
 
   if (incidents.length === 0) {
-    const empty = document.createElement("article");
-    empty.className = "incident-item incident-item-empty";
-    empty.textContent =
-      "No consecutive threshold-breach incidents were detected in this window.";
+    const empty = createEmptyStateCard(
+      "No incidents detected",
+      "Consecutive threshold breaches did not occur in this selected window.",
+      { icon: "✓" },
+    );
+    empty.classList.add("incident-item", "incident-item-empty");
     root.appendChild(empty);
     return;
   }
@@ -1487,20 +1571,57 @@ function chartOptions() {
   return {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
+    animation: {
+      duration: 760,
+      easing: "easeOutQuart",
+    },
+    animations: {
+      x: { duration: 560, easing: "easeOutCubic" },
+      y: { duration: 680, easing: "easeOutCubic" },
+    },
+    elements: {
+      line: { borderWidth: 2.1, tension: 0.28 },
+      point: { radius: 0, hoverRadius: 3.4, hitRadius: 12 },
+      bar: { borderWidth: 1.2, borderRadius: 10 },
+    },
     plugins: {
       legend: {
         position: "bottom",
+        align: "start",
+        maxHeight: 84,
         labels: {
-          color: cssVar("--chart-label"),
+          color: cssVar("--text"),
           boxWidth: 12,
+          boxHeight: 3,
+          borderRadius: 999,
+          useBorderRadius: true,
           usePointStyle: true,
           pointStyle: "line",
+          padding: 10,
+          font: { weight: 700, size: 11 },
           filter: (item, data) => {
             const dataset = data?.datasets?.[item.datasetIndex];
             return !dataset?.hideFromLegend;
           },
         },
       },
+      tooltip: {
+        backgroundColor: cssAlpha("--bg", 88),
+        borderColor: cssAlpha("--accent", 24),
+        borderWidth: 1,
+        titleColor: cssVar("--text"),
+        bodyColor: cssVar("--text"),
+        displayColors: true,
+        padding: 10,
+        cornerRadius: 12,
+      },
+    },
+    layout: {
+      padding: { top: 4, right: 2, bottom: 8, left: 2 },
     },
     scales: {
       x: {
@@ -1633,6 +1754,7 @@ function renderCharts(data) {
   const loss = data.timeseries.map((item) => item.packet_loss_percent);
   const downloadTrend = rollingAverage(download, 7);
   const uploadTrend = rollingAverage(upload, 7);
+  const hasTrendWindow = labels.length >= 3;
 
   if (speedChart) speedChart.destroy();
   if (latencyChart) latencyChart.destroy();
@@ -1645,29 +1767,31 @@ function renderCharts(data) {
 
   const thresholdDatasets = [];
   if (dlThreshold > 0) {
-    thresholdDatasets.push({
-      label: `Min download threshold (${dlThreshold} Mbps)`,
-      data: labels.map(() => dlThreshold),
-      borderColor: "rgba(255,107,107,0.6)",
-      borderDash: [4, 4],
-      borderWidth: 1.5,
-      fill: false,
-      pointRadius: 0,
-      pointHitRadius: 0,
-    });
+      thresholdDatasets.push({
+        label: `Min DL ${dlThreshold} Mbps`,
+        data: labels.map(() => dlThreshold),
+        borderColor: "rgba(255,107,107,0.6)",
+        borderDash: [4, 4],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        pointHitRadius: 0,
+      });
   }
   if (ulThreshold > 0) {
-    thresholdDatasets.push({
-      label: `Min upload threshold (${ulThreshold} Mbps)`,
-      data: labels.map(() => ulThreshold),
-      borderColor: "rgba(255,170,80,0.5)",
-      borderDash: [4, 4],
-      borderWidth: 1.5,
-      fill: false,
-      pointRadius: 0,
-      pointHitRadius: 0,
-    });
+      thresholdDatasets.push({
+        label: `Min UL ${ulThreshold} Mbps`,
+        data: labels.map(() => ulThreshold),
+        borderColor: "rgba(255,170,80,0.5)",
+        borderDash: [4, 4],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        pointHitRadius: 0,
+      });
   }
+
+  const speedOptions = chartOptions();
 
   speedChart = new Chart(byId("speedChart"), {
     type: "line",
@@ -1675,46 +1799,52 @@ function renderCharts(data) {
       labels,
       datasets: [
         {
-          label: "Download (measured)",
+          label: "Download",
           data: download,
           borderColor: cssVar("--chart-download"),
-          backgroundColor: cssVar("--chart-download-fill"),
+          backgroundColor: (context) =>
+            buildSurfaceGradient(context.chart, "--chart-download", 28, 4),
           fill: true,
-          tension: 0.32,
-          pointRadius: 2,
+          pointRadius: 0,
+          pointHoverRadius: 3,
         },
         {
-          label: "Upload (measured)",
+          label: "Upload",
           data: upload,
           borderColor: cssVar("--chart-upload"),
-          backgroundColor: cssVar("--chart-upload-fill"),
+          backgroundColor: (context) =>
+            buildSurfaceGradient(context.chart, "--chart-upload", 24, 4),
           fill: true,
-          tension: 0.32,
-          pointRadius: 2,
+          pointRadius: 0,
+          pointHoverRadius: 3,
         },
         {
-          label: "Download trend (7-test avg)",
+          label: "Download trend",
           data: downloadTrend,
           borderColor: cssVar("--chart-dl-avg"),
           borderDash: [8, 5],
           fill: false,
           tension: 0.25,
           pointRadius: 0,
+          hideFromLegend: !hasTrendWindow,
         },
         {
-          label: "Upload trend (7-test avg)",
+          label: "Upload trend",
           data: uploadTrend,
           borderColor: cssVar("--chart-ul-avg"),
           borderDash: [8, 5],
           fill: false,
           tension: 0.25,
           pointRadius: 0,
+          hideFromLegend: !hasTrendWindow,
         },
         ...thresholdDatasets,
       ],
     },
-    options: chartOptions(),
+    options: speedOptions,
   });
+
+  const latencyOptions = latencyChartOptions();
 
   latencyChart = new Chart(byId("latencyChart"), {
     type: "bar",
@@ -1722,32 +1852,35 @@ function renderCharts(data) {
       labels,
       datasets: [
         {
-          label: "Ping (measured)",
+          label: "Ping",
           data: ping,
           borderColor: cssVar("--chart-ping"),
-          backgroundColor: cssVar("--chart-ping-fill"),
+          backgroundColor: (context) =>
+            buildSurfaceGradient(context.chart, "--chart-ping", 20, 5),
           fill: false,
-          tension: 0.32,
-          pointRadius: 2,
+          pointRadius: 0,
+          pointHoverRadius: 3,
           type: "line",
           yAxisID: "y",
         },
         {
-          label: "Jitter (measured)",
+          label: "Jitter",
           data: jitter,
           borderColor: cssVar("--chart-download"),
-          backgroundColor: cssVar("--chart-download-fill"),
+          backgroundColor: (context) =>
+            buildSurfaceGradient(context.chart, "--chart-download", 16, 4),
           fill: false,
-          tension: 0.32,
-          pointRadius: 2,
+          pointRadius: 0,
+          pointHoverRadius: 3,
           type: "line",
           yAxisID: "y",
         },
         {
-          label: "Packet loss (measured %)",
+          label: "Packet loss",
           data: loss,
           borderColor: "transparent",
-          backgroundColor: cssVar("--chart-loss-fill"),
+          backgroundColor: (context) =>
+            buildSurfaceGradient(context.chart, "--chart-loss", 28, 8),
           type: "bar",
           yAxisID: "yLoss",
           borderRadius: 10,
@@ -1756,7 +1889,7 @@ function renderCharts(data) {
         ...(pingThreshold > 0
           ? [
               {
-                label: `Max ping threshold (${pingThreshold} ms)`,
+                label: `Max ping ${pingThreshold} ms`,
                 data: labels.map(() => pingThreshold),
                 borderColor: "rgba(255,107,107,0.5)",
                 borderDash: [4, 4],
@@ -1771,7 +1904,7 @@ function renderCharts(data) {
           : []),
       ],
     },
-    options: latencyChartOptions(),
+    options: latencyOptions,
   });
 
   const breaches = data.violations || {};
@@ -1806,6 +1939,9 @@ function renderCharts(data) {
           ],
           borderWidth: 1.4,
           borderRadius: 12,
+          hoverBorderWidth: 1.8,
+          barPercentage: 0.74,
+          categoryPercentage: 0.74,
         },
       ],
     },
@@ -1849,8 +1985,13 @@ function renderHeatmap(data) {
   }
 
   if (allAvg.length === 0) {
-    grid.innerHTML =
-      '<p class="empty-state" style="grid-column:1/-1">Not enough data for the heatmap in this range.</p>';
+    const empty = createEmptyStateCard(
+      "Heatmap waiting for data",
+      "Collect a few scans across different times to reveal usage patterns.",
+      { icon: "◌", compact: true },
+    );
+    empty.style.gridColumn = "1 / -1";
+    grid.appendChild(empty);
     return;
   }
 
@@ -2062,7 +2203,12 @@ function renderTable() {
     const emptyCell = document.createElement("td");
     emptyCell.colSpan = 9;
     emptyCell.className = "empty-state";
-    emptyCell.textContent = "No results match the current filter.";
+    const empty = createEmptyStateCard(
+      "No matching results",
+      "Adjust the search text or range filter to find historical scans.",
+      { icon: "⌕", compact: true },
+    );
+    emptyCell.appendChild(empty);
     emptyRow.appendChild(emptyCell);
     tbody.appendChild(emptyRow);
   }
@@ -2119,7 +2265,10 @@ function updateSortIndicators() {
 function bindSorting() {
   const headers = document.querySelectorAll("th.sortable");
   for (const header of headers) {
-    header.addEventListener("click", () => {
+    header.tabIndex = 0;
+    header.setAttribute("role", "button");
+
+    const triggerSort = () => {
       const nextKey = header.dataset.sortKey;
       if (!nextKey) return;
 
@@ -2136,6 +2285,14 @@ function bindSorting() {
       currentPage = 1;
       updateSortIndicators();
       renderTable();
+    };
+
+    header.addEventListener("click", triggerSort);
+    header.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        triggerSort();
+      }
     });
   }
 
@@ -2948,16 +3105,27 @@ async function loadNotificationLog() {
   try {
     const response = await fetch("/api/notifications/log");
     if (!response.ok) {
-      root.innerHTML =
-        '<p class="empty-state">Unable to load notification history.</p>';
+      root.textContent = "";
+      root.appendChild(
+        createEmptyStateCard(
+          "Notification log unavailable",
+          "The history feed could not be loaded right now.",
+          { icon: "!" },
+        ),
+      );
       return;
     }
     const entries = await response.json();
     root.textContent = "";
 
     if (!entries.length) {
-      root.innerHTML =
-        '<p class="empty-state">No notifications have been sent yet.</p>';
+      root.appendChild(
+        createEmptyStateCard(
+          "No notifications yet",
+          "Alerts and reports will appear here after the first delivery.",
+          { icon: "✦" },
+        ),
+      );
       return;
     }
 
@@ -3001,8 +3169,14 @@ async function loadNotificationLog() {
       root.appendChild(item);
     }
   } catch {
-    root.innerHTML =
-      '<p class="empty-state">Unable to load notification history.</p>';
+    root.textContent = "";
+    root.appendChild(
+      createEmptyStateCard(
+        "Notification log unavailable",
+        "The history feed could not be loaded right now.",
+        { icon: "!" },
+      ),
+    );
   }
 }
 

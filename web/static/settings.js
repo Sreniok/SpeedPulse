@@ -82,6 +82,7 @@ function closeAllAnimatedSelects(exceptWrapper = null) {
     const trigger = wrapper.querySelector(".animated-select-trigger");
     if (trigger instanceof HTMLElement) {
       trigger.setAttribute("aria-expanded", "false");
+      trigger.removeAttribute("aria-activedescendant");
     }
   });
 }
@@ -103,6 +104,10 @@ function enhanceAnimatedSelect(select) {
   trigger.className = "animated-select-trigger";
   trigger.setAttribute("aria-haspopup", "listbox");
   trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute(
+    "aria-label",
+    select.getAttribute("aria-label") || select.name || "Select option",
+  );
 
   const triggerLabel = document.createElement("span");
   triggerLabel.className = "animated-select-trigger-label";
@@ -116,9 +121,102 @@ function enhanceAnimatedSelect(select) {
   const menu = document.createElement("div");
   menu.className = "animated-select-menu";
   menu.setAttribute("role", "listbox");
+  const menuId = `${select.id || `animated-select-${Date.now()}`}-menu`;
+  menu.id = menuId;
+  trigger.setAttribute("aria-controls", menuId);
 
   wrapper.appendChild(trigger);
   wrapper.appendChild(menu);
+
+  let activeIndex = -1;
+
+  const optionButtons = () =>
+    Array.from(menu.querySelectorAll(".animated-select-option")).filter(
+      (node) => !node.disabled,
+    );
+
+  const activeOptionAt = (index) => {
+    const options = optionButtons();
+    if (options.length === 0) return null;
+    const normalized = Math.max(0, Math.min(index, options.length - 1));
+    return options[normalized] || null;
+  };
+
+  const applyActiveIndex = (nextIndex) => {
+    const options = optionButtons();
+    if (options.length === 0) {
+      activeIndex = -1;
+      trigger.removeAttribute("aria-activedescendant");
+      return;
+    }
+
+    activeIndex = Math.max(0, Math.min(nextIndex, options.length - 1));
+    options.forEach((option, index) => {
+      option.tabIndex = index === activeIndex ? 0 : -1;
+    });
+
+    const active = options[activeIndex];
+    if (active?.id) {
+      trigger.setAttribute("aria-activedescendant", active.id);
+    } else {
+      trigger.removeAttribute("aria-activedescendant");
+    }
+  };
+
+  const focusSelectedOption = () => {
+    const options = optionButtons();
+    if (options.length === 0) return;
+    const selectedIndex = options.findIndex(
+      (option) => option.dataset.value === String(select.value),
+    );
+    applyActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    options[activeIndex]?.focus();
+  };
+
+  const commitOptionValue = (optionButton) => {
+    if (!(optionButton instanceof HTMLButtonElement) || optionButton.disabled) {
+      return;
+    }
+    const nextValue = String(optionButton.dataset.value || "");
+    if (String(select.value) === nextValue) return;
+    select.value = nextValue;
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    syncFromSelect();
+  };
+
+  const closeMenu = (restoreFocus = false) => {
+    closeAllAnimatedSelects();
+    trigger.removeAttribute("aria-activedescendant");
+    if (restoreFocus) {
+      trigger.focus();
+    }
+  };
+
+  const openMenu = (focusMode = "selected") => {
+    closeAllAnimatedSelects(wrapper);
+    wrapper.classList.add("is-open");
+    const panel = wrapper.closest(".panel-collapsible");
+    if (panel instanceof HTMLElement) {
+      panel.classList.add("has-open-dropdown");
+    }
+    trigger.setAttribute("aria-expanded", "true");
+
+    const options = optionButtons();
+    if (options.length === 0) return;
+
+    if (focusMode === "first") {
+      applyActiveIndex(0);
+      options[0]?.focus();
+      return;
+    }
+    if (focusMode === "last") {
+      applyActiveIndex(options.length - 1);
+      options[options.length - 1]?.focus();
+      return;
+    }
+    focusSelectedOption();
+  };
 
   const syncFromSelect = () => {
     const selectedOption = select.options[select.selectedIndex];
@@ -133,23 +231,33 @@ function enhanceAnimatedSelect(select) {
       node.classList.toggle("is-selected", selected);
       node.setAttribute("aria-selected", selected ? "true" : "false");
     });
+
+    const selectedIndex = optionButtons().findIndex(
+      (option) => option.dataset.value === String(select.value),
+    );
+    if (selectedIndex >= 0) {
+      applyActiveIndex(selectedIndex);
+    }
   };
 
   const renderOptions = () => {
     menu.textContent = "";
 
-    Array.from(select.options).forEach((option) => {
+    Array.from(select.options).forEach((option, index) => {
       const optionButton = document.createElement("button");
       optionButton.type = "button";
       optionButton.className = "animated-select-option";
+      optionButton.style.setProperty("--option-index", String(index));
       optionButton.dataset.value = option.value;
       optionButton.setAttribute("role", "option");
+      optionButton.id = `${menuId}-option-${index}`;
       optionButton.setAttribute(
         "aria-selected",
         option.value === select.value ? "true" : "false",
       );
       optionButton.textContent = option.textContent || "";
       optionButton.disabled = option.disabled;
+      optionButton.tabIndex = -1;
 
       if (option.value === select.value) {
         optionButton.classList.add("is-selected");
@@ -160,33 +268,91 @@ function enhanceAnimatedSelect(select) {
         select.value = option.value;
         select.dispatchEvent(new Event("input", { bubbles: true }));
         select.dispatchEvent(new Event("change", { bubbles: true }));
-        closeAllAnimatedSelects();
+        closeMenu(true);
         syncFromSelect();
+      });
+
+      optionButton.addEventListener("keydown", (event) => {
+        const options = optionButtons();
+        const current = options.indexOf(optionButton);
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          const next = current + 1 >= options.length ? 0 : current + 1;
+          applyActiveIndex(next);
+          const target = options[next];
+          target?.focus();
+          commitOptionValue(target);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          const next = current - 1 < 0 ? options.length - 1 : current - 1;
+          applyActiveIndex(next);
+          const target = options[next];
+          target?.focus();
+          commitOptionValue(target);
+          return;
+        }
+        if (event.key === "Home") {
+          event.preventDefault();
+          applyActiveIndex(0);
+          const target = options[0];
+          target?.focus();
+          commitOptionValue(target);
+          return;
+        }
+        if (event.key === "End") {
+          event.preventDefault();
+          applyActiveIndex(options.length - 1);
+          const target = options[options.length - 1];
+          target?.focus();
+          commitOptionValue(target);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeMenu(true);
+          return;
+        }
+        if (event.key === "Tab") {
+          closeMenu(false);
+        }
       });
 
       menu.appendChild(optionButton);
     });
+
+    syncFromSelect();
   };
 
   const toggleMenu = () => {
     const isOpen = wrapper.classList.contains("is-open");
     if (isOpen) {
-      closeAllAnimatedSelects();
+      closeMenu(true);
       return;
     }
-    closeAllAnimatedSelects(wrapper);
-    wrapper.classList.add("is-open");
-    const panel = wrapper.closest(".panel-collapsible");
-    if (panel instanceof HTMLElement) {
-      panel.classList.add("has-open-dropdown");
-    }
-    trigger.setAttribute("aria-expanded", "true");
+    openMenu("selected");
   };
 
   trigger.addEventListener("click", toggleMenu);
   trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleMenu();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openMenu("first");
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      openMenu("last");
+      return;
+    }
     if (event.key === "Escape") {
-      closeAllAnimatedSelects();
+      closeMenu(true);
     }
   });
 
@@ -314,10 +480,11 @@ function renderThemeSummary(preferences) {
   const activeThemeName = themeDisplayName(themeApi, preferences.activeTheme);
   const lightThemeName = themeDisplayName(themeApi, preferences.lightTheme);
   const darkThemeName = themeDisplayName(themeApi, preferences.darkTheme);
+  const resolvedMode = String(preferences.resolvedMode || preferences.mode || "system");
 
   if (preferences.mode === "system") {
     summary.textContent =
-      `System mode is active and currently using ${activeThemeName}. ` +
+      `System mode is active and currently using the ${resolvedMode} palette: ${activeThemeName}. ` +
       `Saved light palette: ${lightThemeName}. Saved dark palette: ${darkThemeName}.`;
     return;
   }
