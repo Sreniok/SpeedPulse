@@ -2,6 +2,7 @@ let speedChart;
 let latencyChart;
 let thresholdChart;
 let slaBreakdownChart;
+let hoverGuidePluginRegistered = false;
 let latestRows = [];
 let currentPayload = null;
 let currentPage = 1;
@@ -746,9 +747,20 @@ function createEmptyStateCard(title, copy, options = {}) {
   paragraph.className = "empty-state-copy";
   paragraph.textContent = copy;
 
+  const hintText = String(options.hint || "").trim();
+  let hint = null;
+  if (hintText) {
+    hint = document.createElement("p");
+    hint.className = "empty-state-hint";
+    hint.textContent = hintText;
+  }
+
   card.appendChild(icon);
   card.appendChild(heading);
   card.appendChild(paragraph);
+  if (hint) {
+    card.appendChild(hint);
+  }
   return card;
 }
 
@@ -760,6 +772,39 @@ function initializeTheme() {
   if (document.body) {
     document.body.dataset.theme = activeTheme;
   }
+}
+
+function modeLabel(mode) {
+  if (mode === "light") return "Light";
+  if (mode === "dark") return "Dark";
+  return "System";
+}
+
+function syncThemeModeToggle(preferences = null) {
+  const toggle = byId("theme-mode-toggle");
+  if (!toggle) return;
+  const themeApi = window.SpeedPulseTheme;
+  const prefs =
+    preferences ||
+    (themeApi && typeof themeApi.currentPreferences === "function"
+      ? themeApi.currentPreferences()
+      : null);
+  const mode = String(prefs?.mode || "system");
+  const label = modeLabel(mode);
+  toggle.dataset.mode = mode;
+  toggle.setAttribute("aria-label", `Theme mode: ${label}. Click to switch`);
+  toggle.setAttribute("title", `Theme mode: ${label}. Click to cycle`);
+}
+
+function cycleThemeMode() {
+  const themeApi = window.SpeedPulseTheme;
+  if (!themeApi || typeof themeApi.setMode !== "function") return;
+  const sequence = ["system", "light", "dark"];
+  const current = String(themeApi.currentPreferences?.().mode || "system");
+  const index = Math.max(0, sequence.indexOf(current));
+  const nextMode = sequence[(index + 1) % sequence.length];
+  const updated = themeApi.setMode(nextMode);
+  syncThemeModeToggle(updated);
 }
 
 function healthyLabel(row) {
@@ -866,6 +911,66 @@ function manualScanSummary(manualCount) {
   };
 }
 
+function recentMetricSeries(timeseries, key, limit = 14) {
+  return (timeseries || [])
+    .map((item) => Number(item?.[key]))
+    .filter((value) => Number.isFinite(value))
+    .slice(-limit);
+}
+
+function metricContextText(currentValue, values, higherIsBetter = true) {
+  if (!Number.isFinite(currentValue) || !Array.isArray(values) || values.length < 3) {
+    return "";
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spread = max - min;
+  if (spread <= 0.0001) return "Stable in range";
+
+  const best = higherIsBetter ? max : min;
+  const worst = higherIsBetter ? min : max;
+  const closenessToBest = Math.abs(currentValue - best) / spread;
+  const closenessToWorst = Math.abs(currentValue - worst) / spread;
+
+  if (closenessToBest <= 0.08) return "Best in range";
+  if (closenessToWorst <= 0.08) return "Weakest in range";
+  return "Within normal range";
+}
+
+function createMetricSparkline(values, colorToken) {
+  if (!Array.isArray(values) || values.length < 2) return null;
+
+  const width = 124;
+  const height = 28;
+  const pad = 2;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spread = max - min || 1;
+
+  const points = values
+    .map((value, index) => {
+      const x = pad + (index * (width - pad * 2)) / (values.length - 1);
+      const normalized = (value - min) / spread;
+      const y = pad + (1 - normalized) * (height - pad * 2);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "metric-sparkline";
+  wrapper.innerHTML =
+    `<svg viewBox="0 0 ${width} ${height}" role="presentation" aria-hidden="true">` +
+    '<polyline class="metric-sparkline-area" points="' +
+    `${points} ${width - pad},${height - pad} ${pad},${height - pad}` +
+    '"></polyline>' +
+    `<polyline class="metric-sparkline-line" points="${points}"></polyline>` +
+    "</svg>";
+
+  wrapper.style.setProperty("--spark-color", cssVar(colorToken));
+  return wrapper;
+}
+
 function metricCard(
   title,
   valueText,
@@ -879,6 +984,11 @@ function metricCard(
       : null;
   const compact = Boolean(options.compact);
   const reserveDeltaSpace = Boolean(options.reserveDeltaSpace);
+  const contextText = String(options.contextText || "").trim();
+  const sparklineValues = Array.isArray(options.sparklineValues)
+    ? options.sparklineValues
+    : null;
+  const sparklineColorToken = String(options.sparklineColorToken || "--accent");
   const card = document.createElement("article");
   card.className = "metric-card";
   if (compact) {
@@ -924,8 +1034,16 @@ function metricCard(
   noteEl.className = `metric-note ${toneClass}`;
   noteEl.textContent = noteText;
 
+  const sparklineEl =
+    sparklineValues && sparklineValues.length >= 2
+      ? createMetricSparkline(sparklineValues, sparklineColorToken)
+      : null;
+
   card.appendChild(titleRow);
   card.appendChild(valueEl);
+  if (sparklineEl) {
+    card.appendChild(sparklineEl);
+  }
 
   if (deltaChip) {
     const chipEl = document.createElement("span");
@@ -940,6 +1058,12 @@ function metricCard(
   }
 
   card.appendChild(noteEl);
+  if (contextText) {
+    const contextEl = document.createElement("p");
+    contextEl.className = "metric-context";
+    contextEl.textContent = contextText;
+    card.appendChild(contextEl);
+  }
   return card;
 }
 
@@ -982,7 +1106,7 @@ function renderHeroMetrics(data) {
     const empty = createEmptyStateCard(
       "No scan data yet",
       "Run a manual test or wait for the next scheduled scan to populate this range.",
-      { icon: "↺" },
+      { icon: "↺", hint: "Tip: press R to run a test now." },
     );
     empty.classList.add("metric-card", "metric-card-empty");
     root.appendChild(empty);
@@ -1038,35 +1162,47 @@ function renderHeroMetrics(data) {
     data.scheduled_tests_per_day || 0,
   );
   const manualTrend = manualScanSummary(manualToday);
+  const downloadSeries = recentMetricSeries(data.timeseries, "download_mbps");
+  const uploadSeries = recentMetricSeries(data.timeseries, "upload_mbps");
+  const pingSeries = recentMetricSeries(data.timeseries, "ping_ms");
 
-  root.appendChild(
+  const cards = [
     metricCard(
       "Latest download",
       `${safeFixed(latest.download_mbps)} Mbps`,
       downloadTrend.note || downloadTrend.label,
       downloadTrend.tone,
-      { deltaChip: downloadTrend.chip },
+      {
+        deltaChip: downloadTrend.chip,
+        sparklineValues: downloadSeries,
+        sparklineColorToken: "--chart-download",
+        contextText: metricContextText(latest.download_mbps, downloadSeries, true),
+      },
     ),
-  );
-  root.appendChild(
     metricCard(
       "Latest upload",
       `${safeFixed(latest.upload_mbps)} Mbps`,
       uploadTrend.note || uploadTrend.label,
       uploadTrend.tone,
-      { deltaChip: uploadTrend.chip },
+      {
+        deltaChip: uploadTrend.chip,
+        sparklineValues: uploadSeries,
+        sparklineColorToken: "--chart-upload",
+        contextText: metricContextText(latest.upload_mbps, uploadSeries, true),
+      },
     ),
-  );
-  root.appendChild(
     metricCard(
       "Latest ping",
       `${safeFixed(latest.ping_ms)} ms`,
       pingTrend.note || pingTrend.label,
       pingTrend.tone,
-      { deltaChip: pingTrend.chip },
+      {
+        deltaChip: pingTrend.chip,
+        sparklineValues: pingSeries,
+        sparklineColorToken: "--chart-ping",
+        contextText: metricContextText(latest.ping_ms, pingSeries, false),
+      },
     ),
-  );
-  root.appendChild(
     metricCard(
       "Scheduled scans",
       `${scheduledToday} / ${data.scheduled_tests_per_day || 0}`,
@@ -1074,8 +1210,6 @@ function renderHeroMetrics(data) {
       todayTrend.tone,
       { reserveDeltaSpace: true },
     ),
-  );
-  root.appendChild(
     metricCard(
       "Manual scans",
       `${manualToday}`,
@@ -1083,7 +1217,19 @@ function renderHeroMetrics(data) {
       manualTrend.tone,
       { reserveDeltaSpace: true },
     ),
-  );
+  ];
+
+  cards.forEach((card, index) => {
+    card.classList.add("metric-card-enter");
+    card.style.setProperty("--metric-enter-delay", `${index * 45}ms`);
+    root.appendChild(card);
+  });
+
+  window.requestAnimationFrame(() => {
+    root.querySelectorAll(".metric-card-enter").forEach((card) => {
+      card.classList.add("is-visible");
+    });
+  });
 }
 
 function renderHeroMetricsSkeleton(cardCount = 5) {
@@ -1203,6 +1349,7 @@ function slaBreakdownChartOptions() {
       easing: "easeOutQuart",
     },
     plugins: {
+      speedpulseHoverGuide: { enabled: false },
       legend: { display: false },
       tooltip: {
         backgroundColor: cssAlpha("--bg", 88),
@@ -1216,13 +1363,13 @@ function slaBreakdownChartOptions() {
       x: {
         beginAtZero: true,
         ticks: {
-          color: cssVar("--chart-label"),
+          color: cssVar("--chart-label-strong"),
           precision: 0,
         },
         grid: { color: cssVar("--chart-grid") },
       },
       y: {
-        ticks: { color: cssVar("--chart-label") },
+        ticks: { color: cssVar("--chart-label-strong") },
         grid: { display: false },
       },
     },
@@ -1409,7 +1556,7 @@ function renderIncidentHistory(data) {
     const empty = createEmptyStateCard(
       "No incidents detected",
       "Consecutive threshold breaches did not occur in this selected window.",
-      { icon: "✓" },
+      { icon: "✓", hint: "Tip: try 30 or 90 days for deeper history." },
     );
     empty.classList.add("incident-item", "incident-item-empty");
     root.appendChild(empty);
@@ -1567,6 +1714,38 @@ function renderSidebarContract() {
     .catch(() => {});
 }
 
+function ensureHoverGuidePlugin() {
+  if (hoverGuidePluginRegistered || typeof Chart === "undefined") {
+    return;
+  }
+
+  Chart.register({
+    id: "speedpulseHoverGuide",
+    afterDatasetsDraw(chart, _args, options) {
+      if (!options?.enabled) return;
+      const activeElements = chart?.tooltip?.getActiveElements?.() || [];
+      if (activeElements.length === 0) return;
+      const x = activeElements[0]?.element?.x;
+      if (!Number.isFinite(x)) return;
+      const area = chart?.chartArea;
+      if (!area) return;
+
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x, area.top + 2);
+      ctx.lineTo(x, area.bottom - 2);
+      ctx.lineWidth = Number(options.width || 1);
+      ctx.setLineDash(Array.isArray(options.dash) ? options.dash : [4, 4]);
+      ctx.strokeStyle = String(options.color || "rgba(255,255,255,0.15)");
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
+
+  hoverGuidePluginRegistered = true;
+}
+
 function chartOptions() {
   return {
     responsive: true,
@@ -1589,12 +1768,18 @@ function chartOptions() {
       bar: { borderWidth: 1.2, borderRadius: 10 },
     },
     plugins: {
+      speedpulseHoverGuide: {
+        enabled: true,
+        color: cssAlpha("--accent", 20),
+        width: 1,
+        dash: [4, 4],
+      },
       legend: {
         position: "bottom",
         align: "start",
         maxHeight: 84,
         labels: {
-          color: cssVar("--text"),
+          color: cssVar("--chart-label-strong"),
           boxWidth: 12,
           boxHeight: 3,
           borderRadius: 999,
@@ -1625,7 +1810,7 @@ function chartOptions() {
     },
     scales: {
       x: {
-        ticks: { color: cssVar("--chart-label") },
+        ticks: { color: cssVar("--chart-label-strong") },
         grid: {
           color: cssVar("--chart-grid"),
           lineWidth: 0.8,
@@ -1633,7 +1818,7 @@ function chartOptions() {
         },
       },
       y: {
-        ticks: { color: cssVar("--chart-label") },
+        ticks: { color: cssVar("--chart-label-strong") },
         grid: {
           color: cssVar("--chart-grid"),
           lineWidth: 0.8,
@@ -1665,7 +1850,7 @@ function latencyChartOptions() {
   const options = chartOptions();
   options.scales = {
     x: {
-      ticks: { color: cssVar("--chart-label") },
+      ticks: { color: cssVar("--chart-label-strong") },
       grid: {
         color: cssVar("--chart-grid"),
         lineWidth: 0.8,
@@ -1674,7 +1859,7 @@ function latencyChartOptions() {
     },
     y: {
       beginAtZero: true,
-      ticks: { color: cssVar("--chart-label") },
+      ticks: { color: cssVar("--chart-label-strong") },
       grid: {
         color: cssVar("--chart-grid"),
         lineWidth: 0.8,
@@ -1683,19 +1868,19 @@ function latencyChartOptions() {
       title: {
         display: true,
         text: "ms",
-        color: cssVar("--chart-label"),
+        color: cssVar("--chart-label-strong"),
       },
     },
     yLoss: {
       beginAtZero: true,
       position: "right",
       suggestedMax: 5,
-      ticks: { color: cssVar("--chart-label") },
+      ticks: { color: cssVar("--chart-label-strong") },
       grid: { drawOnChartArea: false },
       title: {
         display: true,
         text: "Loss %",
-        color: cssVar("--chart-label"),
+        color: cssVar("--chart-label-strong"),
       },
     },
   };
@@ -1704,11 +1889,12 @@ function latencyChartOptions() {
 
 function thresholdChartOptions() {
   const options = chartOptions();
+  options.plugins.speedpulseHoverGuide.enabled = false;
   options.plugins.legend.display = false;
   options.scales.y = {
     beginAtZero: true,
     ticks: {
-      color: cssVar("--chart-label"),
+      color: cssVar("--chart-label-strong"),
       precision: 0,
     },
     grid: {
@@ -1719,7 +1905,7 @@ function thresholdChartOptions() {
     title: {
       display: true,
       text: "Breaches (count)",
-      color: cssVar("--chart-label"),
+      color: cssVar("--chart-label-strong"),
     },
   };
   return options;
@@ -1743,6 +1929,7 @@ function renderThresholdSummary(data) {
 
 function renderCharts(data) {
   currentPayload = data;
+  ensureHoverGuidePlugin();
 
   const labels = data.timeseries.map((item) =>
     item.timestamp.slice(5, 16).replace("T", " "),
@@ -1988,7 +2175,7 @@ function renderHeatmap(data) {
     const empty = createEmptyStateCard(
       "Heatmap waiting for data",
       "Collect a few scans across different times to reveal usage patterns.",
-      { icon: "◌", compact: true },
+      { icon: "◌", compact: true, hint: "Tip: keep scheduled scans enabled for 24h." },
     );
     empty.style.gridColumn = "1 / -1";
     grid.appendChild(empty);
@@ -2187,6 +2374,10 @@ function setDashboardLoadingState(isLoading, isInitial = false) {
   );
 }
 
+function setChartsTransitioning(isTransitioning) {
+  byId("charts")?.classList.toggle("charts-transitioning", isTransitioning);
+}
+
 function renderTable() {
   const tbody = document.querySelector("#latest-table tbody");
   tbody.textContent = "";
@@ -2206,7 +2397,7 @@ function renderTable() {
     const empty = createEmptyStateCard(
       "No matching results",
       "Adjust the search text or range filter to find historical scans.",
-      { icon: "⌕", compact: true },
+      { icon: "⌕", compact: true, hint: "Tip: clear search or widen the range." },
     );
     emptyCell.appendChild(empty);
     emptyRow.appendChild(emptyCell);
@@ -2376,6 +2567,9 @@ async function loadMetrics() {
   setStatus("Loading metrics...");
   const isInitialLoad = !initialMetricsLoaded;
   setDashboardLoadingState(true, isInitialLoad);
+  if (!isInitialLoad) {
+    setChartsTransitioning(true);
+  }
 
   try {
     const response = await fetch(metricsUrl());
@@ -2401,12 +2595,20 @@ async function loadMetrics() {
     renderDetectedConnectionInfo(data);
     renderScheduleNote(data);
     renderHeroMetrics(data);
+    initPremiumDepth();
     renderSlaPanel(data);
     renderIncidentHistory(data);
     renderCharts(data);
     renderTable();
     initialMetricsLoaded = true;
     setDashboardLoadingState(false, isInitialLoad);
+    if (!isInitialLoad) {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setChartsTransitioning(false);
+        });
+      });
+    }
 
     setStatus(
       data.last_test_at
@@ -2421,6 +2623,9 @@ async function loadMetrics() {
     setStatus("Connection error — click Refresh to retry");
   } finally {
     setDashboardLoadingState(false, isInitialLoad);
+    if (!isInitialLoad) {
+      setChartsTransitioning(false);
+    }
   }
 }
 
@@ -2658,6 +2863,83 @@ function initMotionReveals() {
   targets.forEach((element) => observer.observe(element));
 }
 
+function initPremiumDepth() {
+  if (prefersReducedMotion()) return;
+  if (
+    typeof window.matchMedia === "function" &&
+    !window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  ) {
+    return;
+  }
+
+  document.querySelectorAll(".dashboard-page .topbar").forEach((topbar) => {
+    topbar.classList.remove("premium-depth-target", "is-depth-active");
+    topbar.removeAttribute("data-depth-bound");
+    topbar.querySelectorAll(":scope > .depth-sheen").forEach((sheen) => {
+      sheen.remove();
+    });
+  });
+
+  const targets = collectMotionTargets([
+    ".dashboard-page #hero-metrics .metric-card",
+    ".dashboard-page #charts .panel",
+  ]);
+
+  targets.forEach((target) => {
+    if (target.dataset.depthBound === "true") return;
+    target.dataset.depthBound = "true";
+    target.classList.add("premium-depth-target");
+    if (!target.querySelector(":scope > .depth-sheen")) {
+      const sheen = document.createElement("span");
+      sheen.className = "depth-sheen";
+      sheen.setAttribute("aria-hidden", "true");
+      target.prepend(sheen);
+    }
+
+    target.addEventListener("pointermove", (event) => {
+      const rect = target.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 100;
+      const y = ((event.clientY - rect.top) / rect.height) * 100;
+      target.style.setProperty("--depth-x", `${Math.max(0, Math.min(100, x))}%`);
+      target.style.setProperty("--depth-y", `${Math.max(0, Math.min(100, y))}%`);
+      target.classList.add("is-depth-active");
+    });
+
+    target.addEventListener("pointerleave", () => {
+      target.classList.remove("is-depth-active");
+    });
+  });
+}
+
+function initMagneticPrimaryCta() {
+  if (prefersReducedMotion()) return;
+  if (
+    typeof window.matchMedia === "function" &&
+    !window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  ) {
+    return;
+  }
+
+  const button = byId("run-test");
+  if (!(button instanceof HTMLElement)) return;
+  if (button.dataset.magneticBound === "true") return;
+  button.dataset.magneticBound = "true";
+  button.classList.add("is-magnetic");
+
+  button.addEventListener("pointermove", (event) => {
+    const rect = button.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    button.style.setProperty("--magnetic-x", `${Math.max(0, Math.min(100, x))}`);
+    button.style.setProperty("--magnetic-y", `${Math.max(0, Math.min(100, y))}`);
+  });
+
+  button.addEventListener("pointerleave", () => {
+    button.style.removeProperty("--magnetic-x");
+    button.style.removeProperty("--magnetic-y");
+  });
+}
+
 function setPanelCollapsedState(toggle, body, collapsed, options = {}) {
   const instant = Boolean(options.instant) || prefersReducedMotion();
   const panel = toggle.closest(".panel-collapsible");
@@ -2795,15 +3077,28 @@ function bindEvents() {
   bindCollapsiblePanels();
   bindSectionNavHighlight();
   bindMobileNav();
+  const themeModeToggle = byId("theme-mode-toggle");
+  if (themeModeToggle) {
+    syncThemeModeToggle();
+    themeModeToggle.addEventListener("click", cycleThemeMode);
+  }
+  const reportButton = byId("generate-report");
+  const runButton = byId("run-test");
+  if (reportButton) {
+    reportButton.setAttribute("title", "Generate report (Shortcut: G)");
+  }
+  if (runButton) {
+    runButton.setAttribute("title", "Manual speed test (Shortcut: R)");
+  }
   byId("range").addEventListener("change", loadMetrics);
-  byId("generate-report").addEventListener("click", () => {
+  reportButton?.addEventListener("click", () => {
     void generateRangeReport();
   });
   const defaultServerSelect = byId("server-select");
   if (defaultServerSelect) {
     defaultServerSelect.addEventListener("change", updateServerSettings);
   }
-  byId("run-test").addEventListener("click", () => {
+  runButton?.addEventListener("click", () => {
     if (serverOptions.length === 0 && !serverSettingsLoading) {
       void loadServerSettings();
     }
@@ -2872,6 +3167,12 @@ function bindEvents() {
         if (serverOptions.length === 0 && !serverSettingsLoading)
           void loadServerSettings();
         openServerModal();
+      }
+    }
+    if (event.key === "g" || event.key === "G") {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        void generateRangeReport();
       }
     }
     const rangeKeys = { 1: "today", 2: "7", 3: "30", 4: "90", 5: "365" };
@@ -3110,7 +3411,7 @@ async function loadNotificationLog() {
         createEmptyStateCard(
           "Notification log unavailable",
           "The history feed could not be loaded right now.",
-          { icon: "!" },
+          { icon: "!", hint: "Tip: refresh in a few seconds." },
         ),
       );
       return;
@@ -3123,7 +3424,7 @@ async function loadNotificationLog() {
         createEmptyStateCard(
           "No notifications yet",
           "Alerts and reports will appear here after the first delivery.",
-          { icon: "✦" },
+          { icon: "✦", hint: "Tip: enable alerts in Settings > Push alerts." },
         ),
       );
       return;
@@ -3174,14 +3475,17 @@ async function loadNotificationLog() {
       createEmptyStateCard(
         "Notification log unavailable",
         "The history feed could not be loaded right now.",
-        { icon: "!" },
+        { icon: "!", hint: "Tip: refresh in a few seconds." },
       ),
     );
   }
 }
 
 document.addEventListener("speedpulse:themechange", () => {
+  syncThemeModeToggle();
   if (currentPayload) {
+    renderHeroMetrics(currentPayload);
+    initPremiumDepth();
     renderSlaPanel(currentPayload);
     renderCharts(currentPayload);
   }
@@ -3190,7 +3494,9 @@ document.addEventListener("speedpulse:themechange", () => {
 initializeTheme();
 bindSorting();
 bindEvents();
+initMagneticPrimaryCta();
 initMotionReveals();
+initPremiumDepth();
 void loadServerSettings();
 void syncRunStatus(false);
 loadMetrics();

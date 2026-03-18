@@ -341,6 +341,7 @@
   --chart-loss: color-mix(in srgb, var(--theme-secondary) 30%, #ffd46b 70%);
   --chart-loss-fill: color-mix(in srgb, var(--chart-loss) 10%, transparent);
   --chart-label: var(--muted);
+  --chart-label-strong: color-mix(in srgb, var(--theme-text) 84%, var(--theme-bg) 16%);
   --chart-grid: color-mix(in srgb, var(--theme-text) 5%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 5%, transparent);
   --hover-accent-strength: 20%;
@@ -404,6 +405,7 @@
   --chart-loss: color-mix(in srgb, var(--theme-secondary) 22%, #ca8a04 78%);
   --chart-loss-fill: color-mix(in srgb, var(--chart-loss) 10%, transparent);
   --chart-label: var(--muted);
+  --chart-label-strong: color-mix(in srgb, var(--theme-text) 76%, var(--theme-bg) 24%);
   --chart-grid: color-mix(in srgb, var(--theme-text) 6%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 4%, transparent);
   --hover-accent-strength: 14%;
@@ -804,6 +806,32 @@ select {
   transform: translate3d(0, 0, 0) scale(1);
 }
 
+.premium-depth-target {
+  position: relative;
+  overflow: hidden;
+}
+
+.depth-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    background-position var(--motion-duration-fast) var(--motion-ease-standard);
+  background: radial-gradient(
+    360px circle at var(--depth-x, 50%) var(--depth-y, 50%),
+    color-mix(in srgb, white 10%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 8%, transparent) 28%,
+    transparent 62%
+  );
+}
+
+.premium-depth-target.is-depth-active .depth-sheen {
+  opacity: 0.58;
+}
+
 .sidebar {
   padding: var(--space-5);
   border-right: 1px solid var(--border);
@@ -1097,11 +1125,11 @@ select {
 
 .eyebrow {
   margin: 0 0 0.35rem;
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text) 28%);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   font-size: var(--type-label);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .nav-block {
@@ -1110,6 +1138,10 @@ select {
 }
 
 .nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   padding: 0.78rem 0.9rem;
   text-decoration: none;
   color: var(--muted);
@@ -1121,7 +1153,23 @@ select {
     color var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background-color var(--motion-duration-base) var(--motion-ease-standard),
-    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.nav-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.04rem;
+  height: 1.04rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 68%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+  color: color-mix(in srgb, var(--accent) 68%, var(--text) 32%);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .nav-link:hover,
@@ -1142,6 +1190,7 @@ select {
     var(--bg) var(--hover-nav-shadow-alpha),
     transparent
   );
+  transform: translateY(-0.5px);
 }
 
 .nav-link:focus-visible {
@@ -1160,6 +1209,36 @@ select {
     color-mix(in srgb, var(--accent) 14%, transparent),
     color-mix(in srgb, var(--accent) 5%, transparent)
   );
+}
+
+.nav-link.active::after {
+  content: "";
+  position: absolute;
+  left: 0.1rem;
+  top: 22%;
+  bottom: 22%;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    color-mix(in srgb, var(--accent) 82%, transparent),
+    color-mix(in srgb, var(--accent) 22%, transparent)
+  );
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-page .sidebar .sidebar-card:hover {
+    transform: translate3d(0, -2px, 0);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+      0 20px 34px color-mix(in srgb, var(--bg) 22%, transparent);
+  }
+
+  .dashboard-page .sidebar .nav-link:hover {
+    box-shadow: 0 6px 13px color-mix(in srgb, var(--bg) 12%, transparent);
+  }
 }
 
 .section-jumpbar-wrap {
@@ -1407,6 +1486,56 @@ select {
   flex: 1 1 320px;
   justify-content: flex-end;
   margin-left: auto;
+}
+
+.theme-mode-toggle {
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-mode-toggle-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-mode-toggle .theme-icon-system,
+.theme-mode-toggle .theme-icon-light,
+.theme-mode-toggle .theme-icon-dark {
+  opacity: 0;
+  transform-origin: 50% 50%;
+  transform: scale(0.72) rotate(-16deg);
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-emphasis);
+}
+
+.theme-mode-toggle[data-mode="system"] .theme-icon-system,
+.theme-mode-toggle[data-mode="light"] .theme-icon-light,
+.theme-mode-toggle[data-mode="dark"] .theme-icon-dark {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.shortcut-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin-left: 0.4rem;
+  padding: 0 0.28rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 56%, transparent);
+  color: color-mix(in srgb, var(--text) 84%, var(--accent) 16%);
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .topbar-account-email {
@@ -1849,7 +1978,7 @@ input:hover {
     var(--accent) 52%,
     var(--accent-strong)
   );
-  font-weight: 800;
+  font-weight: 820;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
     0 16px 32px color-mix(in srgb, var(--accent) 24%, transparent);
@@ -1898,6 +2027,15 @@ button:disabled {
     0 18px 34px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+.btn-primary.is-magnetic:hover {
+  transform: translate3d(
+      calc((var(--magnetic-x, 50) - 50) * 0.04px),
+      calc((var(--magnetic-y, 50) - 50) * 0.04px),
+      0
+    )
+    translateY(-1px);
+}
+
 .btn-ghost:hover {
   background: color-mix(in srgb, var(--surface-soft) 78%, var(--surface) 22%);
   box-shadow:
@@ -1911,10 +2049,18 @@ button:active,
 .btn-primary:active,
 .btn-icon:active,
 .icon-button:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.985);
   box-shadow:
     inset 0 2px 6px color-mix(in srgb, var(--bg) 24%, transparent),
     0 8px 18px color-mix(in srgb, var(--bg) 16%, transparent);
+}
+
+.nav-link:active,
+.section-jumpbar .nav-link-inline:active,
+.animated-select-trigger:active,
+.animated-select-option:active,
+.panel-collapse-toggle:active {
+  transform: translateY(0) scale(0.985);
 }
 
 .user-pill {
@@ -2518,14 +2664,63 @@ button:active,
 .metric-value {
   margin: 0.45rem 0 0.28rem;
   font-size: clamp(1.7rem, 3vw, 2.4rem);
-  font-weight: 800;
-  letter-spacing: -0.04em;
+  font-weight: 820;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-sparkline {
+  width: 100%;
+  height: 28px;
+  margin: 0.06rem 0 0.3rem;
+  opacity: 0.9;
+}
+
+.metric-sparkline svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.metric-sparkline-line {
+  fill: none;
+  stroke: var(--spark-color, var(--accent));
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.metric-sparkline-area {
+  fill: color-mix(in srgb, var(--spark-color, var(--accent)) 16%, transparent);
+  stroke: none;
 }
 
 .metric-note {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 700;
+  opacity: 0.92;
+}
+
+.metric-context {
+  margin: 0.2rem 0 0;
+  color: color-mix(in srgb, var(--muted) 86%, var(--text) 14%);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.metric-card-enter {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0) scale(0.99);
+  transition:
+    opacity 360ms var(--motion-ease-standard) var(--metric-enter-delay, 0ms),
+    transform 420ms var(--motion-ease-emphasis) var(--metric-enter-delay, 0ms);
+}
+
+.metric-card-enter.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
 .metric-delta-chip {
@@ -2539,7 +2734,7 @@ button:active,
   background: var(--surface-soft);
   color: var(--muted);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.1;
 }
@@ -2588,9 +2783,9 @@ button:active,
   border-radius: 999px;
   background: linear-gradient(
     92deg,
-    color-mix(in srgb, var(--theme-text) 8%, transparent) 22%,
-    color-mix(in srgb, var(--theme-text) 20%, transparent) 45%,
-    color-mix(in srgb, var(--theme-text) 8%, transparent) 67%
+    color-mix(in srgb, var(--accent) 8%, transparent) 22%,
+    color-mix(in srgb, var(--theme-secondary) 24%, transparent) 45%,
+    color-mix(in srgb, var(--accent) 8%, transparent) 67%
   );
   background-size: 250% 100%;
   animation: skeleton-shimmer 1.35s linear infinite;
@@ -2663,9 +2858,9 @@ button:active,
   border-radius: 16px;
   background: linear-gradient(
     95deg,
-    color-mix(in srgb, var(--theme-text) 8%, transparent) 22%,
-    color-mix(in srgb, var(--theme-text) 20%, transparent) 45%,
-    color-mix(in srgb, var(--theme-text) 8%, transparent) 67%
+    color-mix(in srgb, var(--accent) 8%, transparent) 22%,
+    color-mix(in srgb, var(--theme-secondary) 20%, transparent) 45%,
+    color-mix(in srgb, var(--accent) 8%, transparent) 67%
   );
   background-size: 240% 100%;
   animation: skeleton-shimmer 1.35s linear infinite;
@@ -2688,9 +2883,9 @@ button:active,
   border-radius: 14px;
   background: linear-gradient(
     95deg,
-    color-mix(in srgb, var(--theme-text) 7%, transparent) 22%,
-    color-mix(in srgb, var(--theme-text) 14%, transparent) 45%,
-    color-mix(in srgb, var(--theme-text) 7%, transparent) 67%
+    color-mix(in srgb, var(--accent) 7%, transparent) 22%,
+    color-mix(in srgb, var(--theme-secondary) 14%, transparent) 45%,
+    color-mix(in srgb, var(--accent) 7%, transparent) 67%
   );
   background-size: 220% 100%;
   animation: skeleton-shimmer 1.25s linear infinite;
@@ -2988,6 +3183,16 @@ button:active,
 
 #charts .panel::before {
   background:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--text) 2%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent) 2%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
     linear-gradient(
       180deg,
       color-mix(in srgb, white calc(var(--premium-sheen-strength) + 2%), transparent) 0%,
@@ -2998,7 +3203,7 @@ button:active,
       color-mix(in srgb, var(--accent) var(--premium-glow-soft), transparent),
       transparent 58%
     );
-  opacity: 0.85;
+  opacity: 0.74;
 }
 
 #charts .panel::after {
@@ -3013,6 +3218,20 @@ button:active,
 #charts .panel > * {
   position: relative;
   z-index: 1;
+}
+
+#charts.charts-transitioning canvas {
+  opacity: 0.34;
+  transform: translateY(4px) scale(0.996);
+  transition:
+    opacity 240ms var(--motion-ease-standard),
+    transform 280ms var(--motion-ease-standard);
+}
+
+#charts canvas {
+  transition:
+    opacity 320ms var(--motion-ease-standard),
+    transform 360ms var(--motion-ease-emphasis);
 }
 
 .panel-head {
@@ -4383,7 +4602,7 @@ tbody tr:last-child td {
   margin: 0;
   color: var(--text);
   font-size: 0.95rem;
-  font-weight: 750;
+  font-weight: 780;
 }
 
 .empty-state-copy {
@@ -4391,6 +4610,14 @@ tbody tr:last-child td {
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.4;
+}
+
+.empty-state-hint {
+  margin: 0.16rem 0 0;
+  color: color-mix(in srgb, var(--accent) 66%, var(--text) 34%);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .empty-state-mini {
@@ -4882,6 +5109,19 @@ label {
 
   .topbar-controls {
     grid-template-columns: 1fr;
+  }
+
+  .theme-mode-toggle {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .shortcut-hint {
+    min-width: 1rem;
+    height: 1rem;
+    font-size: 0.56rem;
+    margin-left: 0.3rem;
   }
 
   .section-jumpbar {

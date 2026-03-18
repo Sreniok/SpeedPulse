@@ -106,10 +106,18 @@
         </section>
 
         <nav class="nav-block">
-          <a class="nav-link active" href="#overview">Overview</a>
-          <a class="nav-link" href="#charts">Charts</a>
-          <a class="nav-link" href="#latest-results">Results</a>
-          <a class="nav-link" href="/settings">Settings</a>
+          <a class="nav-link active" href="#overview"
+            ><span class="nav-link-icon" aria-hidden="true">O</span>Overview</a
+          >
+          <a class="nav-link" href="#charts"
+            ><span class="nav-link-icon" aria-hidden="true">C</span>Charts</a
+          >
+          <a class="nav-link" href="#latest-results"
+            ><span class="nav-link-icon" aria-hidden="true">R</span>Results</a
+          >
+          <a class="nav-link" href="/settings"
+            ><span class="nav-link-icon" aria-hidden="true">S</span>Settings</a
+          >
         </nav>
 
         <section class="sidebar-card sidebar-card-schedule">
@@ -222,10 +230,36 @@
               </select>
             </div>
             <button id="generate-report" class="btn-muted" type="button">
-              Generate report
+              Generate report <span class="shortcut-hint" aria-hidden="true">G</span>
             </button>
             <button id="run-test" class="btn-primary" type="button">
-              Manual speed test
+              Manual speed test <span class="shortcut-hint" aria-hidden="true">R</span>
+            </button>
+            <button
+              id="theme-mode-toggle"
+              class="btn-icon theme-mode-toggle"
+              type="button"
+              aria-label="Theme mode: System. Click to switch"
+              title="Theme mode: System. Click to cycle"
+            >
+              <svg
+                class="theme-mode-toggle-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <g class="theme-icon-system">
+                  <rect x="4.5" y="5.5" width="15" height="10" rx="2"></rect>
+                  <path d="M10 18.5h4"></path>
+                  <path d="M8.5 15.5h7"></path>
+                </g>
+                <g class="theme-icon-light">
+                  <circle cx="12" cy="12" r="3.2"></circle>
+                  <path d="M12 4.2v2.1M12 17.7v2.1M4.2 12h2.1M17.7 12h2.1M6.3 6.3l1.5 1.5M16.2 16.2l1.5 1.5M17.7 6.3l-1.5 1.5M7.8 16.2l-1.5 1.5"></path>
+                </g>
+                <g class="theme-icon-dark">
+                  <path d="M15.8 4.8a7.8 7.8 0 1 0 3.4 10.9 8.2 8.2 0 0 1-7.3-11z"></path>
+                </g>
+              </svg>
             </button>
             <p class="topbar-account-email" title="{{ login_email }}">
               {{ login_email }}
