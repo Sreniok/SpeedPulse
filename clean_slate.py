@@ -11,16 +11,18 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from config_loader import resolve_config_path, resolve_runtime_path
+
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
-LOG_DIR = SCRIPT_DIR / "Log"
-IMAGES_DIR = SCRIPT_DIR / "Images"
-ARCHIVE_DIR = SCRIPT_DIR / "Archive"
+LOG_DIR = resolve_runtime_path(__file__, "Log")
+IMAGES_DIR = resolve_runtime_path(__file__, "Images")
+ARCHIVE_DIR = resolve_runtime_path(__file__, "Archive")
 
 # Files to clean
-ERROR_LOG = SCRIPT_DIR / "errors.log"
-CRON_LOG = SCRIPT_DIR / "cron.log"
-LAST_ALERT = SCRIPT_DIR / "last_alert.txt"
+ERROR_LOG = resolve_runtime_path(__file__, "errors.log")
+CRON_LOG = resolve_runtime_path(__file__, "cron.log")
+LAST_ALERT = resolve_runtime_path(__file__, "last_alert.txt")
 
 # Colors
 RED = '\033[0;31m'
@@ -75,11 +77,11 @@ def confirm_deletion():
 
 def backup_config():
     """Create a backup of config.json."""
-    config_file = SCRIPT_DIR / "config.json"
+    config_file = resolve_config_path(__file__)
 
     if config_file.exists():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = SCRIPT_DIR / f"config_backup_{timestamp}.json"
+        backup_file = config_file.parent / f"config_backup_{timestamp}.json"
 
         try:
             shutil.copy2(config_file, backup_file)

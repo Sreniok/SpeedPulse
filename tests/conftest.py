@@ -28,6 +28,18 @@ def isolated_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("STATE_DB_PATH", str(tmp_path / "runtime_state.sqlite3"))
 
 
+@pytest.fixture(autouse=True)
+def isolated_measurement_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Isolate the SQL-backed measurement store for every test."""
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'measurements.sqlite3'}")
+
+
+@pytest.fixture(autouse=True)
+def test_secrets_master_key(monkeypatch: pytest.MonkeyPatch):
+    """Provide a stable secret-encryption key for tests."""
+    monkeypatch.setenv("SECRETS_MASTER_KEY", "tests-secret-master-key-please-change")
+
+
 @pytest.fixture()
 def sample_config(tmp_path: Path) -> dict:
     """Return a minimal config dict and write it to a temp config.json."""

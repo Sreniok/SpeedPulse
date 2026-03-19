@@ -4,10 +4,17 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I"]
-# E501 is relaxed via the generous line-length above.
+ignore = ["E501", "W293"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["log_parser", "mail_settings", "logger_setup"]
+known-first-party = [
+  "db_migrate",
+  "log_parser",
+  "logger_setup",
+  "mail_settings",
+  "measurement_repository",
+  "measurement_store",
+]
 
 [tool.mypy]
 python_version = "3.12"

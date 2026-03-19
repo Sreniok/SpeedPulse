@@ -10,10 +10,11 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from log_parser import parse_weekly_log_file
+from config_loader import resolve_config_path, resolve_runtime_path
+from measurement_repository import load_measurement_entries
 
 # ── LOAD CONFIG ──────────────────────────────────────────────────────
-config_path: Path = Path(__file__).parent / "config.json"
+config_path: Path = resolve_config_path(__file__)
 with open(config_path, 'r') as f:
     config: dict = json.load(f)
 
@@ -22,10 +23,8 @@ with open(config_path, 'r') as f:
 week_num: int = (dt.date.today() - dt.timedelta(days=1)).isocalendar()[1]
 
 # Resolve paths relative to script directory
-script_dir: Path = Path(__file__).parent
-LOG_PATH: Path = script_dir / config['paths']['log_directory'] / f"speed_log_week_{week_num}.txt"
-IMG_DIR: Path = script_dir / config['paths']['images_directory']
-B64_FILE: Path = script_dir / config['paths']['chart_base64']
+IMG_DIR: Path = resolve_runtime_path(__file__, config['paths']['images_directory'])
+B64_FILE: Path = resolve_runtime_path(__file__, config['paths']['chart_base64'])
 Y_MAX: int = config['chart']['y_max']
 THRESHOLD: int = config['thresholds']['download_mbps']
 ACCOUNT_NO: str = config['account']['number']
@@ -35,15 +34,19 @@ NAME: str = config['account']['name']
 IMG_DIR.mkdir(parents=True, exist_ok=True)
 IMG_PATH: Path = IMG_DIR / f"speedchart_week_{week_num}.png"
 
-# ── PARSE LOG VIA SHARED PARSER ───────────────────────────────────────
+# ── LOAD ENTRIES VIA SHARED REPOSITORY ────────────────────────────────
 try:
-    parsed: list[dict] = parse_weekly_log_file(LOG_PATH)
+    parsed: list[dict] = [
+        entry
+        for entry in load_measurement_entries(config)
+        if entry["timestamp"].isocalendar()[1] == week_num
+    ]
 except Exception as exc:
-    print(f"Error parsing {LOG_PATH}: {exc}")
+    print(f"Error loading measurements for week {week_num}: {exc}")
     exit(1)
 
 if not parsed:
-    print(f"No speed test data found in {LOG_PATH}")
+    print(f"No speed test data found for ISO week {week_num}")
     exit(1)
 
 entries: list[dict] = [
@@ -62,7 +65,7 @@ entries: list[dict] = [
 df: pd.DataFrame = pd.DataFrame(entries).sort_values("Datetime")
 
 if df.empty:
-    print(f"No speed test data found in {LOG_PATH}")
+    print(f"No speed test data found for ISO week {week_num}")
     exit(1)
 
 # Filter out zero values for better visualization (optional)

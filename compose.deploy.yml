@@ -19,13 +19,56 @@ services:
     volumes:
       - .:/workspace
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: speedpulse-postgres
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    env_file:
+      - path: ./.env
+        required: false
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  migrate:
+    image: ghcr.io/sreniok/speedpulse:latest
+    container_name: speedpulse-migrate
+    restart: "no"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      - TZ=${TZ:-UTC}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - APP_DATA_DIR=/app/data
+    command: ["python", "db_migrate.py", "--import-logs"]
+    volumes:
+      - ./data:/app/data
+
   dashboard:
     image: ghcr.io/sreniok/speedpulse:latest
     container_name: speedpulse-dashboard
     restart: unless-stopped
     user: "1000:1000"
     depends_on:
-      init:
+      migrate:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
@@ -46,6 +89,7 @@ services:
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - APP_DATA_DIR=/app/data
     ports:
       - "${DASHBOARD_PORT:-8000}:8000"
     healthcheck:
@@ -54,23 +98,15 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=5)",
         ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
     volumes:
-      - ./data/config.json:/app/config.json
+      - ./data:/app/data
       - ./.env:/app/.env
-      - ./data/Log:/app/Log
-      - ./data/Images:/app/Images
-      - ./data/Archive:/app/Archive
-      - ./data/cron.log:/app/cron.log
-      - ./data/errors.log:/app/errors.log
-      - ./data/last_alert.txt:/app/last_alert.txt
-      - ./data/chart_base64.txt:/app/chart_base64.txt
-      - /mnt/speedpulse-backups:/app/Backups
 
   scheduler:
     image: ghcr.io/sreniok/speedpulse:latest
@@ -78,7 +114,7 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     depends_on:
-      init:
+      migrate:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
@@ -99,18 +135,14 @@ services:
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - APP_DATA_DIR=/app/data
       - HEALTH_CHECK_TIME=${HEALTH_CHECK_TIME:-07:00}
       - LOG_ROTATION_TIME=${LOG_ROTATION_TIME:-02:00}
       - RUN_STARTUP_SPEEDTEST=${RUN_STARTUP_SPEEDTEST:-false}
     command: ["python", "scheduler_service.py"]
     volumes:
-      - ./data/config.json:/app/config.json
+      - ./data:/app/data
       - ./.env:/app/.env
-      - ./data/Log:/app/Log
-      - ./data/Images:/app/Images
-      - ./data/Archive:/app/Archive
-      - ./data/cron.log:/app/cron.log
-      - ./data/errors.log:/app/errors.log
-      - ./data/last_alert.txt:/app/last_alert.txt
-      - ./data/chart_base64.txt:/app/chart_base64.txt
-      - /mnt/speedpulse-backups:/app/Backups
+
+volumes:
+  postgres_data:

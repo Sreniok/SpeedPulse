@@ -10,6 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backup_manager import validate_backup
+from db_migrate import import_logs
+from measurement_store import get_app_secret, run_migrations
 
 LOG_FIXTURE = """\
 Date: 13-03-2026
@@ -115,8 +117,11 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     )
     monkeypatch.setenv("EMAIL_TO", "alerts@example.com")
 
-    import web.app as webapp
+    run_migrations()
+    import_logs(json.loads(config_path.read_text(encoding="utf-8")))
+
     import backup_manager
+    import web.app as webapp
 
     monkeypatch.setattr(webapp, "AUTH_SALT", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")
     monkeypatch.setattr(backup_manager, "SCRIPT_DIR", tmp_path)
@@ -319,6 +324,86 @@ def test_server_selection_settings_persist_to_config(api_client):
     assert payload["selected_id"] == "41075"
     saved_config = json.loads(config_path.read_text(encoding="utf-8"))
     assert saved_config["speedtest"]["server_id"] == "41075"
+
+
+def test_appearance_settings_persist_theme_preferences(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    response = client.post(
+        "/api/settings/appearance",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "ui_theme": {
+                "mode": "dark",
+                "light": "github-light",
+                "dark": "tokyo-night",
+            },
+            "report_theme_id": "tokyo-night",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ui_theme"]["mode"] == "dark"
+    assert payload["ui_theme"]["dark"] == "tokyo-night"
+    assert payload["notifications"]["report_theme_id"] == "tokyo-night"
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["app"]["ui_theme_mode"] == "dark"
+    assert saved_config["app"]["ui_theme_dark"] == "tokyo-night"
+    assert saved_config["notifications"]["report_theme_id"] == "tokyo-night"
+
+
+def test_notification_settings_store_smtp_password_encrypted(api_client):
+    client, _, _, env_path, csrf_token = api_client
+
+    current_settings = client.get("/api/settings/notifications")
+    assert current_settings.status_code == 200
+    settings_payload = current_settings.json()
+
+    response = client.post(
+        "/api/settings/notifications",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "account_name": settings_payload["account"]["name"],
+            "broadband_provider": settings_payload["account"]["provider"],
+            "broadband_account_number": settings_payload["account"]["number"],
+            "smtp_server": settings_payload["email"]["smtp_server"],
+            "smtp_port": settings_payload["email"]["smtp_port"],
+            "smtp_username": "mailer@example.com",
+            "smtp_password": "new-smtp-password",
+            "email_from": "mailer@example.com",
+            "send_realtime_alerts": settings_payload["email"]["send_realtime_alerts"],
+            "weekly_report_enabled": settings_payload["notifications"]["weekly_report_enabled"],
+            "weekly_report_time": settings_payload["notifications"]["weekly_report_time"],
+            "monthly_report_enabled": settings_payload["notifications"]["monthly_report_enabled"],
+            "monthly_report_time": settings_payload["notifications"]["monthly_report_time"],
+            "scan_enabled": settings_payload["notifications"]["scan_enabled"],
+            "scan_frequency": settings_payload["notifications"]["scan_frequency"],
+            "scan_weekly_day": settings_payload["notifications"]["scan_weekly_day"],
+            "scan_monthly_day": settings_payload["notifications"]["scan_monthly_day"],
+            "scan_custom_days": settings_payload["notifications"]["scan_custom_days"],
+            "test_times": settings_payload["notifications"]["test_times"],
+            "server_id": settings_payload["server_selection_id"],
+            "push_events": settings_payload["notifications"]["push_events"],
+            "ui_theme": settings_payload["ui_theme"],
+            "report_theme_id": settings_payload["notifications"]["report_theme_id"],
+            "webhook_enabled": settings_payload["notifications"]["webhook_enabled"],
+            "webhook_url": settings_payload["notifications"]["webhook_url"],
+            "ntfy_enabled": settings_payload["notifications"]["ntfy_enabled"],
+            "ntfy_server": settings_payload["notifications"]["ntfy_server"],
+            "ntfy_topic": settings_payload["notifications"]["ntfy_topic"],
+            "thresholds": settings_payload["thresholds"],
+            "contract": settings_payload["contract"],
+            "backup": settings_payload["backup"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["email"]["smtp_password_set"] is True
+    assert get_app_secret("smtp_password") == "new-smtp-password"
+    assert 'SMTP_PASSWORD=""' in env_path.read_text(encoding="utf-8")
 
 
 def test_manual_speedtest_start_and_status_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):

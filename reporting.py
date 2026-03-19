@@ -122,6 +122,186 @@ def _entry_breach_flags(entry: dict, thresholds: dict) -> list[str]:
     return breaches
 
 
+def _downsample_rows(rows: list[dict], max_points: int = 120) -> list[dict]:
+    if len(rows) <= max_points:
+        return list(rows)
+    if max_points <= 1:
+        return [rows[-1]]
+
+    sampled: list[dict] = []
+    last_index = len(rows) - 1
+    for position in range(max_points):
+        source_index = round((position * last_index) / (max_points - 1))
+        item = rows[source_index]
+        if not sampled or sampled[-1] is not item:
+            sampled.append(item)
+    return sampled
+
+
+def _chart_timestamp_label(value: object, dense: bool = False) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%m-%d" if dense else "%m-%d %H:%M")
+    return str(value or "")
+
+
+def _chart_polyline(values: list[float], left: float, top: float, width: float, height: float, y_max: float) -> str:
+    if not values:
+        return ""
+
+    safe_y_max = max(y_max, 1.0)
+    if len(values) == 1:
+        x = left + (width / 2)
+        y = top + height - ((values[0] / safe_y_max) * height)
+        return f"{x:.1f},{y:.1f}"
+
+    points: list[str] = []
+    for index, value in enumerate(values):
+        x = left + (index * width / (len(values) - 1))
+        y = top + height - ((value / safe_y_max) * height)
+        points.append(f"{x:.1f},{y:.1f}")
+    return " ".join(points)
+
+
+def _build_chart_card(
+    title: str,
+    subtitle: str,
+    rows: list[dict],
+    *,
+    palette: dict[str, str],
+    series: list[dict[str, object]],
+    y_unit: str,
+) -> str:
+    if not rows:
+        return (
+            "<section class=\"chart-card\">"
+            f"<div class=\"chart-card-head\"><h3>{escape(title)}</h3><p>{escape(subtitle)}</p></div>"
+            "<div class=\"chart-empty\">No test data available for this range.</div>"
+            "</section>"
+        )
+
+    sampled_rows = _downsample_rows(rows)
+    sampled_count = len(sampled_rows)
+    dense_labels = sampled_count > 40
+    left = 56.0
+    top = 16.0
+    width = 468.0
+    height = 204.0
+    baseline = 0.0
+
+    plotted_series: list[dict[str, object]] = []
+    max_value = 1.0
+    for spec in series:
+        key = str(spec.get("key") or "")
+        values = [_as_number(item.get(key)) for item in sampled_rows]
+        threshold_value = _as_number(spec.get("threshold"))
+        max_value = max(max_value, max(values or [0.0]), threshold_value)
+        plotted_series.append(
+            {
+                "label": str(spec.get("label") or key),
+                "color": str(spec.get("color") or palette["accent"]),
+                "values": values,
+                "threshold": threshold_value,
+                "threshold_label": str(spec.get("threshold_label") or "").strip(),
+            }
+        )
+
+    y_max = max_value * 1.12
+    if y_max <= 0:
+        y_max = 1.0
+
+    grid_lines: list[str] = []
+    for step in range(5):
+        ratio = step / 4
+        y = top + (height * ratio)
+        value = y_max * (1 - ratio)
+        grid_lines.append(
+            f"<line x1=\"{left:.1f}\" y1=\"{y:.1f}\" x2=\"{left + width:.1f}\" y2=\"{y:.1f}\" class=\"chart-grid-line\"></line>"
+        )
+        grid_lines.append(
+            f"<text x=\"{left - 10:.1f}\" y=\"{y + 4:.1f}\" class=\"chart-axis-label chart-axis-label-y\">{escape(_fmt(value, 0))}{escape(y_unit)}</text>"
+        )
+
+    x_label_indexes = sorted({0, sampled_count // 2, sampled_count - 1})
+    x_labels: list[str] = []
+    for index in x_label_indexes:
+        x = left + (width / 2 if sampled_count == 1 else index * width / (sampled_count - 1))
+        anchor = "middle"
+        if index == 0:
+            anchor = "start"
+        elif index == sampled_count - 1:
+            anchor = "end"
+        x_labels.append(
+            f"<text x=\"{x:.1f}\" y=\"{top + height + 22:.1f}\" text-anchor=\"{anchor}\" class=\"chart-axis-label\">"
+            f"{escape(_chart_timestamp_label(sampled_rows[index].get('timestamp'), dense_labels))}</text>"
+        )
+
+    threshold_lines: list[str] = []
+    legend_items: list[str] = []
+    series_lines: list[str] = []
+    for spec in plotted_series:
+        color = str(spec["color"])
+        label = str(spec["label"])
+        values = list(spec["values"])
+        polyline = _chart_polyline(values, left, top, width, height, y_max)
+        series_lines.append(
+            f"<polyline points=\"{polyline}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"3\" "
+            "stroke-linecap=\"round\" stroke-linejoin=\"round\"></polyline>"
+        )
+
+        if values:
+            last_x = left + (width / 2 if len(values) == 1 else width)
+            last_y = top + height - ((values[-1] / y_max) * height)
+            series_lines.append(
+                f"<circle cx=\"{last_x:.1f}\" cy=\"{last_y:.1f}\" r=\"4.5\" fill=\"{color}\" stroke=\"{palette['surface']}\" stroke-width=\"2\"></circle>"
+            )
+
+        legend_items.append(
+            "<span class=\"chart-legend-item\">"
+            f"<span class=\"chart-legend-swatch\" style=\"background:{color}\"></span>"
+            f"{escape(label)}"
+            "</span>"
+        )
+
+        threshold_value = _as_number(spec.get("threshold"))
+        threshold_label = str(spec.get("threshold_label") or "").strip()
+        if threshold_value > baseline and threshold_label:
+            threshold_y = top + height - ((threshold_value / y_max) * height)
+            threshold_lines.append(
+                f"<line x1=\"{left:.1f}\" y1=\"{threshold_y:.1f}\" x2=\"{left + width:.1f}\" y2=\"{threshold_y:.1f}\" "
+                f"stroke=\"{color}\" stroke-width=\"1.5\" stroke-dasharray=\"6 5\" opacity=\"0.55\"></line>"
+            )
+            legend_items.append(
+                "<span class=\"chart-legend-item chart-legend-item-threshold\">"
+                f"<span class=\"chart-legend-swatch chart-legend-swatch-threshold\" style=\"color:{color}\"></span>"
+                f"{escape(threshold_label)}"
+                "</span>"
+            )
+
+    note = ""
+    if len(rows) > sampled_count:
+        note = f"Showing {sampled_count} sampled points from {len(rows)} tests."
+
+    svg = (
+        f"<svg class=\"report-chart\" viewBox=\"0 0 540 258\" role=\"img\" aria-label=\"{escape(title)}\">"
+        f"<rect x=\"0.5\" y=\"0.5\" width=\"539\" height=\"257\" rx=\"16\" class=\"chart-frame\"></rect>"
+        + "".join(grid_lines)
+        + f"<line x1=\"{left:.1f}\" y1=\"{top + height:.1f}\" x2=\"{left + width:.1f}\" y2=\"{top + height:.1f}\" class=\"chart-axis\"></line>"
+        + "".join(threshold_lines)
+        + "".join(series_lines)
+        + "".join(x_labels)
+        + "</svg>"
+    )
+
+    return (
+        "<section class=\"chart-card\">"
+        f"<div class=\"chart-card-head\"><h3>{escape(title)}</h3><p>{escape(subtitle)}</p></div>"
+        f"{svg}"
+        f"<div class=\"chart-legend\">{''.join(legend_items)}</div>"
+        f"<p class=\"chart-note\">{escape(note)}</p>"
+        "</section>"
+    )
+
+
 def build_report_html(
     config: dict,
     entries: list[dict],
@@ -175,6 +355,53 @@ def build_report_html(
     dl_change_text, dl_change_tone = _metric_change(download_avg, prev_download_avg, True)
     ul_change_text, ul_change_tone = _metric_change(upload_avg, prev_upload_avg, True)
     ping_change_text, ping_change_tone = _metric_change(ping_avg, prev_ping_avg, False)
+
+    throughput_chart = _build_chart_card(
+        "Throughput trend",
+        "Download and upload speeds across the selected report window.",
+        rows,
+        palette=palette,
+        series=[
+            {
+                "key": "download_mbps",
+                "label": "Download",
+                "color": palette["accent"],
+                "threshold": _as_number(thresholds.get("download_mbps")),
+                "threshold_label": "Download floor",
+            },
+            {
+                "key": "upload_mbps",
+                "label": "Upload",
+                "color": palette["good"],
+                "threshold": _as_number(thresholds.get("upload_mbps")),
+                "threshold_label": "Upload floor",
+            },
+        ],
+        y_unit=" Mbps",
+    )
+    latency_chart = _build_chart_card(
+        "Latency trend",
+        "Ping and jitter over time for the same report window.",
+        rows,
+        palette=palette,
+        series=[
+            {
+                "key": "ping_ms",
+                "label": "Ping",
+                "color": palette["bad"],
+                "threshold": _as_number(thresholds.get("ping_ms")),
+                "threshold_label": "Ping ceiling",
+            },
+            {
+                "key": "jitter_ms",
+                "label": "Jitter",
+                "color": palette["warn"],
+                "threshold": 0.0,
+                "threshold_label": "",
+            },
+        ],
+        y_unit=" ms",
+    )
 
     newest_first = list(reversed(rows[-rows_limit:]))
     table_rows = ""
@@ -301,6 +528,105 @@ def build_report_html(
       margin-bottom: 14px;
       background: {palette['surface_alt']};
     }}
+    .chart-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }}
+    .chart-card {{
+      border: 1px solid {palette['border']};
+      border-radius: 14px;
+      padding: 12px;
+      background: {palette['surface_alt']};
+    }}
+    .chart-card-head {{
+      margin-bottom: 10px;
+    }}
+    .chart-card-head h3 {{
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }}
+    .chart-card-head p {{
+      margin: 4px 0 0;
+      color: {palette['muted']};
+      font-size: 12px;
+    }}
+    .report-chart {{
+      width: 100%;
+      height: auto;
+      display: block;
+    }}
+    .chart-frame {{
+      fill: {palette['surface']};
+      stroke: {palette['border']};
+    }}
+    .chart-grid-line {{
+      stroke: {palette['border']};
+      stroke-width: 1;
+      opacity: 0.8;
+    }}
+    .chart-axis {{
+      stroke: {palette['muted']};
+      stroke-width: 1.2;
+      opacity: 0.75;
+    }}
+    .chart-axis-label {{
+      fill: {palette['muted']};
+      font-size: 11px;
+      font-family: "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
+    }}
+    .chart-axis-label-y {{
+      text-anchor: end;
+    }}
+    .chart-legend {{
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+    }}
+    .chart-legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: {palette['muted']};
+      font-size: 12px;
+      font-weight: 600;
+    }}
+    .chart-legend-swatch {{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }}
+    .chart-legend-swatch-threshold {{
+      width: 12px;
+      height: 0;
+      border-top: 2px dashed currentColor;
+      border-radius: 0;
+      background: transparent !important;
+    }}
+    .chart-note {{
+      margin: 10px 0 0;
+      color: {palette['muted']};
+      font-size: 12px;
+    }}
+    .chart-note:empty {{
+      display: none;
+    }}
+    .chart-empty {{
+      min-height: 258px;
+      border: 1px dashed {palette['border']};
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: {palette['muted']};
+      font-size: 13px;
+      text-align: center;
+      padding: 12px;
+    }}
     .summary b {{
       color: {palette['accent']};
     }}
@@ -341,6 +667,7 @@ def build_report_html(
       body {{ padding: 10px; }}
       .wrap {{ padding: 14px; border-radius: 16px; }}
       .grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .chart-grid {{ grid-template-columns: 1fr; }}
       h1 {{ font-size: 27px; }}
     }}
   </style>
@@ -381,6 +708,11 @@ def build_report_html(
       <div><b>Thresholds:</b> DL ≥ {_fmt(_as_number(thresholds.get("download_mbps")))} Mbps · UL ≥ {_fmt(_as_number(thresholds.get("upload_mbps")))} Mbps · Ping ≤ {_fmt(_as_number(thresholds.get("ping_ms")))} ms · Loss ≤ {_fmt(_as_number(thresholds.get("packet_loss_percent")))}%</div>
       <div><b>Breaches:</b> Download {breaches_download} · Upload {breaches_upload} · Ping {breaches_ping} · Loss {breaches_loss}</div>
       <div><b>Latency quality:</b> Jitter avg {_fmt(jitter_avg)} ms · Packet loss avg {_fmt(loss_avg)}%</div>
+    </section>
+
+    <section class="chart-grid">
+      {throughput_chart}
+      {latency_chart}
     </section>
 
     <table>

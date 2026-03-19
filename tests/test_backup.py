@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 
@@ -18,6 +16,32 @@ from backup_manager import (
     save_backup_to_path,
     validate_backup,
 )
+from measurement_store import get_app_secret, set_app_secret
+from state_store import (
+    bump_session_version,
+    consume_reset_token,
+    get_notification_log,
+    get_session_version,
+    initialize_state_store,
+    load_manual_runtime_state,
+    load_speedtest_completion_state,
+    log_notification,
+    record_speedtest_completion,
+    store_reset_token,
+)
+
+DEFAULT_MANUAL_STATE = {
+    "status": "idle",
+    "stage": "Idle",
+    "message": "",
+    "logs": [],
+    "selected_server_id": "",
+    "selected_server_label": "Auto (nearest server)",
+    "started_at": None,
+    "completed_at": None,
+    "updated_at": None,
+    "exit_code": None,
+}
 
 
 @pytest.fixture()
@@ -63,6 +87,13 @@ def backup_env(monkeypatch, tmp_path):
     # Create Backups dir
     (tmp_path / "Backups").mkdir()
 
+    initialize_state_store(DEFAULT_MANUAL_STATE)
+    bump_session_version()
+    store_reset_token("backup-token", "backup@example.com", expires=9999999999.0, now=10.0)
+    record_speedtest_completion("success", "manual", completed_at=456.0)
+    log_notification("email", "health_check", "Backup fixture notification")
+    set_app_secret("smtp_password", "db-mail-pass")
+
     return tmp_path
 
 
@@ -96,6 +127,7 @@ class TestValidateBackup:
         assert "created_at" in manifest
         assert "files" in manifest
         assert "config.json" in manifest["files"]
+        assert "runtime_state.json" in manifest["files"]
 
     def test_wrong_password(self, backup_env):
         encrypted, _ = create_backup("testpass123")
@@ -117,12 +149,14 @@ class TestRestoreBackup:
         new_config = {"account": {"name": "Modified"}, "thresholds": {"download_mbps": 999}}
         (backup_env / "config.json").write_text(json.dumps(new_config), encoding="utf-8")
         (backup_env / "Log" / "speed_log_week_01.txt").write_text("MODIFIED", encoding="utf-8")
+        set_app_secret("smtp_password", "changed-db-mail-pass")
 
         # Restore
         summary = restore_backup(encrypted, password)
         assert "config.json" in summary["restored"]
         assert ".env settings" in summary["restored"]
         assert "runtime_state.sqlite3" in summary["restored"]
+        assert "runtime_state.json" in summary["restored"]
         assert any("speed log" in item for item in summary["restored"])
 
         # Verify config.json was restored
@@ -131,6 +165,20 @@ class TestRestoreBackup:
 
         # Verify log was restored
         assert (backup_env / "Log" / "speed_log_week_01.txt").read_text(encoding="utf-8") == "log data week 1\n"
+        assert get_app_secret("smtp_password") == "db-mail-pass"
+
+        last_run_at, payload = load_manual_runtime_state(DEFAULT_MANUAL_STATE)
+        assert last_run_at == 0.0
+        assert payload["status"] == "idle"
+
+        completion = load_speedtest_completion_state()
+        assert completion["sequence"] == 1
+        assert completion["status"] == "success"
+        assert completion["source"] == "manual"
+        assert get_session_version() == 2
+        assert consume_reset_token("backup-token", now=100.0) == "backup@example.com"
+        entries = get_notification_log(limit=10)
+        assert any(entry["summary"] == "Backup fixture notification" for entry in entries)
 
     def test_env_security_tokens_preserved(self, backup_env):
         """APP_SECRET_KEY and AUTH_SALT should NOT be overwritten."""

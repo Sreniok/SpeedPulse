@@ -35,6 +35,7 @@ chart_base64.txt
 
 # Project-generated data
 IMPROVEMENTS.md
+data/
 Log/*.txt
 Images/*.png
 !Images/.gitkeep

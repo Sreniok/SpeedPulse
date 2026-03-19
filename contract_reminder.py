@@ -18,17 +18,17 @@ from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-
-from version import USER_AGENT
 from urllib.parse import quote, urlparse
 
+from config_loader import resolve_config_path
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
+from version import USER_AGENT
 
 log = get_logger("ContractReminder")
 
 SCRIPT_DIR = Path(__file__).parent
-CONFIG_PATH = SCRIPT_DIR / "config.json"
+CONFIG_PATH = resolve_config_path(__file__)
 
 _BLOCKED_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"}
 
@@ -52,7 +52,10 @@ def _validate_outbound_url(url: str) -> None:
 
 def load_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+        payload = json.load(fh)
+    if not isinstance(payload, dict):
+        raise ValueError("Config must be a JSON object")
+    return payload
 
 
 # ------------------------------------------------------------------
@@ -113,6 +116,7 @@ def _send_email(config: dict, html_body: str, days_left: int) -> bool:
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         if mail.smtp_port == 465:
             server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
         else:

@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG SPEEDTEST_VERSION=1.2.0.84-1.ea6b6773cf
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata ca-certificates curl gnupg \
     && mkdir -p /etc/apt/keyrings \
@@ -13,7 +15,7 @@ RUN apt-get update \
     && echo "deb [signed-by=/etc/apt/keyrings/ookla-speedtest.gpg] https://packagecloud.io/ookla/speedtest-cli/debian/ bookworm main" \
         > /etc/apt/sources.list.d/ookla-speedtest.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends speedtest \
+    && apt-get install -y --no-install-recommends "speedtest=${SPEEDTEST_VERSION}" \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./

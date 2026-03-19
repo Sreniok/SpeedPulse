@@ -9,12 +9,29 @@ import os
 import re
 import zipfile
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from sqlalchemy import insert
 
+from config_loader import resolve_config_path
+from measurement_store import (
+    NOTIFICATION_EVENTS,
+    RUNTIME_LOGIN_STATE,
+    RUNTIME_MANUAL_RUN_STATE,
+    RUNTIME_METADATA,
+    RUNTIME_RESET_TOKENS,
+    RUNTIME_SPEEDTEST_COMPLETION_STATE,
+    database_enabled,
+    delete_app_secret,
+    get_app_secret,
+    get_engine,
+    run_migrations,
+    set_app_secret,
+)
 from version import __version__
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -25,6 +42,7 @@ _CONFIG_NAME = "config.json"
 _ENV_NAME = ".env"
 _ENV_BACKUP_NAME = "env_backup.json"
 _RUNTIME_DB_NAME = "runtime_state.sqlite3"
+_RUNTIME_STATE_SNAPSHOT_NAME = "runtime_state.json"
 _STATE_DB_DEFAULT = "Archive/runtime_state.sqlite3"
 _LOG_DIR_NAME = "Log"
 _LOG_PATTERN = "speed_log_week_*.txt"
@@ -87,6 +105,12 @@ def _resolve_path(value: str) -> Path:
     p = Path(value)
     if p.is_absolute():
         return p
+    data_root = os.getenv("APP_DATA_DIR", "").strip()
+    if data_root:
+        root = Path(data_root)
+        if not root.is_absolute():
+            root = SCRIPT_DIR / root
+        return root / p
     return SCRIPT_DIR / p
 
 
@@ -94,11 +118,14 @@ def _load_config(config: dict | None = None) -> dict:
     """Return provided config or load config.json from SCRIPT_DIR."""
     if config is not None:
         return config
-    config_path = SCRIPT_DIR / _CONFIG_NAME
+    config_path = resolve_config_path(__file__, _CONFIG_NAME)
     if not config_path.is_file():
         return {}
     with config_path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        return {}
+    return payload
 
 
 def _runtime_state_db_path() -> Path:
@@ -117,7 +144,10 @@ def _backup_files(backup_dir: Path, *, newest_first: bool) -> list[Path]:
 def _read_manifest_from_archive(zf: zipfile.ZipFile, names: list[str]) -> dict:
     if _MANIFEST_NAME not in names:
         raise ValueError("Invalid backup: manifest not found.")
-    return json.loads(zf.read(_MANIFEST_NAME))
+    manifest = json.loads(zf.read(_MANIFEST_NAME))
+    if not isinstance(manifest, dict):
+        raise ValueError("Invalid backup: manifest must be a JSON object.")
+    return manifest
 
 
 def _restore_log_files(zf: zipfile.ZipFile, names: list[str], summary: dict) -> int:
@@ -150,6 +180,96 @@ def _read_env_subset(env_path: Path) -> dict[str, str]:
             value = value.strip().strip('"').strip("'")
             result[key] = value
     return result
+
+
+def _serialize_runtime_value(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return value
+
+
+def _runtime_state_snapshot() -> dict[str, object] | None:
+    if not database_enabled():
+        return None
+
+    run_migrations()
+    table_map = {
+        "runtime_metadata": RUNTIME_METADATA,
+        "runtime_login_state": RUNTIME_LOGIN_STATE,
+        "runtime_reset_tokens": RUNTIME_RESET_TOKENS,
+        "runtime_manual_run_state": RUNTIME_MANUAL_RUN_STATE,
+        "runtime_speedtest_completion_state": RUNTIME_SPEEDTEST_COMPLETION_STATE,
+        "notification_events": NOTIFICATION_EVENTS,
+    }
+    tables_snapshot: dict[str, list[dict[str, object]]] = {}
+
+    snapshot: dict[str, object] = {
+        "format_version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "tables": tables_snapshot,
+        "secrets": {},
+    }
+
+    with get_engine().connect() as connection:
+        for name, table in table_map.items():
+            rows = connection.execute(table.select()).mappings().all()
+            tables_snapshot[name] = [
+                {key: _serialize_runtime_value(value) for key, value in dict(row).items()}
+                for row in rows
+            ]
+
+    snapshot["secrets"] = {
+        "smtp_password": get_app_secret("smtp_password"),
+    }
+    return snapshot
+
+
+def _restore_runtime_state_snapshot(snapshot: dict[str, object]) -> None:
+    if not database_enabled():
+        raise RuntimeError("DATABASE_URL is not configured; cannot restore runtime SQL state.")
+
+    run_migrations()
+    tables = snapshot.get("tables", {})
+    if not isinstance(tables, dict):
+        raise ValueError("Invalid runtime state snapshot: tables must be an object.")
+
+    restore_order = [
+        ("runtime_metadata", RUNTIME_METADATA),
+        ("runtime_login_state", RUNTIME_LOGIN_STATE),
+        ("runtime_reset_tokens", RUNTIME_RESET_TOKENS),
+        ("runtime_manual_run_state", RUNTIME_MANUAL_RUN_STATE),
+        ("runtime_speedtest_completion_state", RUNTIME_SPEEDTEST_COMPLETION_STATE),
+        ("notification_events", NOTIFICATION_EVENTS),
+    ]
+
+    with get_engine().begin() as connection:
+        for _, table in reversed(restore_order):
+            connection.execute(table.delete())
+
+        for name, table in restore_order:
+            rows = tables.get(name, [])
+            if not isinstance(rows, list):
+                raise ValueError(f"Invalid runtime state snapshot: {name} must be a list.")
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise ValueError(f"Invalid runtime state snapshot: row in {name} must be an object.")
+                payload = dict(row)
+                if table is NOTIFICATION_EVENTS and payload.get("created_at"):
+                    payload["created_at"] = datetime.fromisoformat(str(payload["created_at"]))
+                connection.execute(insert(table).values(**payload))
+
+    secrets_payload = snapshot.get("secrets", {})
+    if not isinstance(secrets_payload, dict):
+        raise ValueError("Invalid runtime state snapshot: secrets must be an object.")
+
+    if "smtp_password" in secrets_payload:
+        secret_value = str(secrets_payload.get("smtp_password", "") or "")
+        if secret_value:
+            set_app_secret("smtp_password", secret_value)
+        else:
+            delete_app_secret("smtp_password")
 
 
 def create_backup(password: str, include_logs: bool = True) -> tuple[bytes, str]:
@@ -187,6 +307,11 @@ def create_backup(password: str, include_logs: bool = True) -> tuple[bytes, str]
         if db_path.is_file():
             zf.write(db_path, _RUNTIME_DB_NAME)
             manifest["files"].append(_RUNTIME_DB_NAME)
+
+        runtime_snapshot = _runtime_state_snapshot()
+        if runtime_snapshot:
+            zf.writestr(_RUNTIME_STATE_SNAPSHOT_NAME, json.dumps(runtime_snapshot, indent=2))
+            manifest["files"].append(_RUNTIME_STATE_SNAPSHOT_NAME)
 
         # Speed test logs
         if include_logs:
@@ -244,6 +369,11 @@ def restore_backup(data: bytes, password: str) -> dict:
             db_path.parent.mkdir(parents=True, exist_ok=True)
             db_path.write_bytes(zf.read(_RUNTIME_DB_NAME))
             summary["restored"].append(_RUNTIME_DB_NAME)
+
+        if _RUNTIME_STATE_SNAPSHOT_NAME in names:
+            runtime_snapshot = json.loads(zf.read(_RUNTIME_STATE_SNAPSHOT_NAME))
+            _restore_runtime_state_snapshot(runtime_snapshot)
+            summary["restored"].append(_RUNTIME_STATE_SNAPSHOT_NAME)
 
         # Speed test logs
         log_count = _restore_log_files(zf, names, summary)

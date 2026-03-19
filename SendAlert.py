@@ -10,11 +10,11 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 
-from config_loader import load_json_config
+from config_loader import load_json_config, resolve_runtime_path
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
+from measurement_store import record_notification_event
 from push_notifications import send_ntfy_event, send_webhook_event
 
 log = get_logger("SendAlert")
@@ -27,9 +27,7 @@ def load_config():
 
 def check_cooldown(cooldown_file, cooldown_minutes):
     """Check if alert cooldown period has passed"""
-    # Resolve cooldown file relative to script directory
-    script_dir = Path(__file__).parent
-    cooldown_path = script_dir / cooldown_file if not Path(cooldown_file).is_absolute() else Path(cooldown_file)
+    cooldown_path = resolve_runtime_path(__file__, str(cooldown_file))
 
     if cooldown_path.exists():
         try:
@@ -151,6 +149,7 @@ def send_alert_email(config, subject, body):
 
     # Send email
     try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         # Use SMTP_SSL for port 465 or SMTP with STARTTLS for port 587
         if mail.smtp_port == 465:
             server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
@@ -233,10 +232,8 @@ def main():
 
     # Load configuration
     config = load_config()
-    script_dir = Path(__file__).parent
-
     # Check cooldown
-    cooldown_file = script_dir / "last_alert.txt"
+    cooldown_file = resolve_runtime_path(__file__, "last_alert.txt")
     cooldown_minutes = config['email']['alert_cooldown_minutes']
 
     if not check_cooldown(cooldown_file, cooldown_minutes):
@@ -270,6 +267,7 @@ def main():
             summary = f"Violations: {', '.join(violations)} | DL {download} UL {upload} Ping {ping}"
             for ch in sent_channels:
                 log_notification(ch, "alert", summary)
+                record_notification_event(ch, "alert", summary)
         except Exception:
             pass
 
@@ -277,8 +275,7 @@ def main():
         sys.exit(0)
     else:
         # Log error
-        script_dir = Path(__file__).parent
-        error_log = script_dir / config['paths']['error_log']
+        error_log = resolve_runtime_path(__file__, config['paths']['error_log'])
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(error_log, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] Failed to send alert notifications (email/webhook/ntfy)\n")

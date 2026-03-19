@@ -15,10 +15,11 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from backup_manager import run_scheduled_backup
+from config_loader import resolve_config_path, resolve_runtime_path
 
 SCRIPT_DIR = Path(__file__).parent
-CONFIG_PATH = SCRIPT_DIR / "config.json"
-CRON_LOG = SCRIPT_DIR / "cron.log"
+CONFIG_PATH = resolve_config_path(__file__)
+CRON_LOG = resolve_runtime_path(__file__, "cron.log")
 CONFIG_CHECK_INTERVAL = 10  # seconds between config change checks
 
 
@@ -32,7 +33,10 @@ def log(message: str) -> None:
 
 def load_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("Config must be a JSON object")
+    return payload
 
 
 def parse_hhmm(value: str, default: str) -> tuple[int, int]:
@@ -227,15 +231,15 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
             result = run_scheduled_backup()
             log(f"backup | {result}")
 
-        trigger_kwargs: dict = {"hour": backup_hour, "minute": backup_minute}
+        backup_trigger_kwargs: dict[str, object] = {"hour": backup_hour, "minute": backup_minute}
         if backup_frequency == "weekly":
-            trigger_kwargs["day_of_week"] = "sun"
+            backup_trigger_kwargs["day_of_week"] = "sun"
         elif backup_frequency == "monthly":
-            trigger_kwargs["day"] = 1
+            backup_trigger_kwargs["day"] = 1
 
         scheduler.add_job(
             _run_backup_job,
-            trigger=CronTrigger(**trigger_kwargs),
+            trigger=CronTrigger(**backup_trigger_kwargs),
             id="scheduled_backup",
             replace_existing=True,
             max_instances=1,

@@ -523,6 +523,43 @@ function themeDisplayName(themeApi, themeId) {
   return themeApi?.themeMap?.[themeId]?.name || "Default";
 }
 
+function themeModeLabel(mode) {
+  if (mode === "light") return "Light";
+  if (mode === "dark") return "Dark";
+  return "System";
+}
+
+function syncSettingsThemeModeToggle(preferences = null) {
+  const toggle = byId("settings-theme-mode-toggle");
+  if (!toggle) return;
+
+  const themeApi = window.SpeedPulseTheme;
+  const prefs =
+    preferences ||
+    (themeApi && typeof themeApi.currentPreferences === "function"
+      ? themeApi.currentPreferences()
+      : null);
+  const mode = String(prefs?.mode || "system");
+  const label = themeModeLabel(mode);
+
+  toggle.dataset.mode = mode;
+  toggle.setAttribute("aria-label", `Theme mode: ${label}. Click to switch`);
+  toggle.setAttribute("title", `Theme mode: ${label}. Click to cycle`);
+}
+
+function cycleSettingsThemeMode() {
+  const themeApi = window.SpeedPulseTheme;
+  if (!themeApi || typeof themeApi.setMode !== "function") return;
+
+  const sequence = ["system", "light", "dark"];
+  const current = String(themeApi.currentPreferences?.().mode || "system");
+  const index = Math.max(0, sequence.indexOf(current));
+  const nextMode = sequence[(index + 1) % sequence.length];
+  const updated = themeApi.setMode(nextMode);
+
+  syncSettingsThemeModeToggle(updated);
+}
+
 function renderThemeSummary(preferences) {
   const summary = byId("settings-theme-summary");
   const themeApi = window.SpeedPulseTheme;
@@ -578,6 +615,7 @@ function initializeTheme() {
   const modeSelect = byId("settings-theme-mode");
   const lightSelect = byId("settings-theme-light");
   const darkSelect = byId("settings-theme-dark");
+  const quickToggle = byId("settings-theme-mode-toggle");
   if (!themeApi || !modeSelect || !lightSelect || !darkSelect) return;
 
   populateSelectOptions(
@@ -600,6 +638,7 @@ function initializeTheme() {
     syncAnimatedSelect(lightSelect);
     syncAnimatedSelect(darkSelect);
     renderThemeSummary(preferences);
+    syncSettingsThemeModeToggle(preferences);
     syncAllAnimatedSelects();
   };
 
@@ -614,6 +653,11 @@ function initializeTheme() {
   darkSelect.addEventListener("change", () => {
     syncControls(themeApi.setTheme("dark", darkSelect.value));
   });
+  if (quickToggle) {
+    quickToggle.addEventListener("click", () => {
+      cycleSettingsThemeMode();
+    });
+  }
 
   document.addEventListener("speedpulse:themechange", (event) => {
     syncControls(event.detail || themeApi.currentPreferences());
@@ -647,6 +691,20 @@ function currentUiThemePreferences() {
   };
 }
 
+function applyThemePreferencesFromPayload(payload) {
+  const themeApi = window.SpeedPulseTheme;
+  const uiTheme = payload?.ui_theme || {};
+  if (!themeApi || typeof themeApi.applyPreferences !== "function") {
+    return;
+  }
+
+  themeApi.applyPreferences({
+    mode: String(uiTheme.mode || "system"),
+    lightTheme: String(uiTheme.light || "github-light"),
+    darkTheme: String(uiTheme.dark || "github-dark"),
+  });
+}
+
 function toggleNotificationFieldState() {
   const webhookEnabled = byId("settings-webhook-enabled")?.checked;
   const ntfyEnabled = byId("settings-ntfy-enabled")?.checked;
@@ -668,13 +726,24 @@ function renderAccountSummary(account) {
   const ipAddress = String(account?.ip_address || "").trim() || "Not detected yet";
   const number = String(account?.number || "").trim() || "N/A";
 
-  byId("settings-sidebar-account-name").textContent = name;
-  byId("settings-sidebar-account-provider").textContent = provider;
+  const accountNameNode = byId("settings-sidebar-account-name");
+  if (accountNameNode) {
+    accountNameNode.textContent = name;
+  }
+  const providerNode = byId("settings-sidebar-account-provider");
+  if (providerNode) {
+    providerNode.textContent = provider;
+  }
   const ipNode = byId("settings-sidebar-account-ip");
   if (ipNode) {
     ipNode.textContent = `IP: ${ipAddress}`;
   }
-  byId("settings-sidebar-account-number").textContent = `Account No: ${number}`;
+  const numberNode = byId("settings-sidebar-account-number");
+  if (numberNode) {
+    const hasNumber = number !== "N/A";
+    numberNode.textContent = `Account No: ${number}`;
+    numberNode.classList.toggle("hidden", !hasNumber);
+  }
 }
 
 function syncDailyScanRowState() {
@@ -906,6 +975,8 @@ function syncScheduledServerSelect() {
 }
 
 function populateSettingsForm(payload) {
+  applyThemePreferencesFromPayload(payload);
+
   const account = payload.account || {};
   const email = payload.email || {};
   const notifications = payload.notifications || {};
@@ -1045,6 +1116,17 @@ function populateSettingsForm(payload) {
       ? "Leave this blank to reuse the saved scheduled backup password, or enter a different one for this backup only."
       : "Enter a password for this backup, or save one under Scheduled backups to reuse it by default.";
   }
+}
+
+function collectAppearancePayload() {
+  const uiTheme = currentUiThemePreferences();
+  return {
+    ui_theme: uiTheme,
+    ui_theme_mode: uiTheme.mode,
+    ui_theme_light: uiTheme.light,
+    ui_theme_dark: uiTheme.dark,
+    report_theme_id: currentThemeId(),
+  };
 }
 
 function collectSettingsPayload() {
@@ -1201,6 +1283,42 @@ async function saveNotificationSettings() {
     saveButtons.forEach((button) => {
       button.disabled = false;
     });
+  }
+}
+
+async function saveAppearanceSettings() {
+  const saveButton = byId("settings-save-appearance");
+  if (!saveButton) return;
+  saveButton.disabled = true;
+
+  try {
+    const response = await fetch("/api/settings/appearance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify(collectAppearancePayload()),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to save appearance",
+      );
+    }
+
+    populateSettingsForm(payload);
+    showMessage(payload.message || "Appearance saved.", "success");
+  } catch (error) {
+    showMessage(error.message || "Failed to save appearance.", "error");
+  } finally {
+    saveButton.disabled = false;
   }
 }
 
@@ -1955,6 +2073,12 @@ function bindEvents() {
   bindCollapsiblePanels();
   bindSettingsSectionNav();
   bindMobileNav();
+  const appearanceSaveButton = byId("settings-save-appearance");
+  if (appearanceSaveButton) {
+    appearanceSaveButton.addEventListener("click", () => {
+      void saveAppearanceSettings();
+    });
+  }
   settingsSaveButtons().forEach((button) => {
     button.addEventListener("click", () => {
       void saveNotificationSettings();

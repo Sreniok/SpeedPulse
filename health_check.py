@@ -10,10 +10,11 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 
-from config_loader import load_json_config_or_exit
+from config_loader import load_json_config_or_exit, resolve_runtime_path
 from mail_settings import load_mail_settings
+from measurement_repository import load_measurement_entries
+from measurement_store import record_notification_event
 from push_notifications import send_ntfy_event, send_webhook_event
 
 
@@ -56,8 +57,7 @@ def check_disk_space(path, min_gb=1.0):
 def check_log_files(config):
     """Check log file sizes and rotation status"""
     issues = []
-    script_dir = Path(__file__).parent
-    log_dir = script_dir / config['paths']['log_directory']
+    log_dir = resolve_runtime_path(__file__, config['paths']['log_directory'])
 
     if not log_dir.exists():
         return {
@@ -66,7 +66,7 @@ def check_log_files(config):
         }
 
     # Check total log directory size
-    total_size_mb = 0
+    total_size_mb = 0.0
     log_files = list(log_dir.glob('speed_log_week_*.txt'))
 
     for log_file in log_files:
@@ -98,57 +98,17 @@ def check_log_files(config):
 
 def check_last_speedtest(config):
     """Check when the last successful speedtest was run"""
-    current_week = datetime.now().isocalendar()[1]
-    script_dir = Path(__file__).parent
-    log_dir = script_dir / config['paths']['log_directory']
-    current_log = log_dir / f"speed_log_week_{current_week}.txt"
-
-    if not current_log.exists():
-        return {
-            'healthy': False,
-            'last_test': None,
-            'hours_ago': None,
-            'issue': 'No log file for current week'
-        }
-
     try:
-        with open(current_log, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        if not content.strip():
+        entries = load_measurement_entries(config)
+        if not entries:
             return {
                 'healthy': False,
                 'last_test': None,
                 'hours_ago': None,
-                'issue': 'Log file is empty'
+                'issue': 'No speed test measurements found'
             }
 
-        # Parse log entries (format: Date: DD-MM-YYYY, Time: HH:MM)
-        lines = content.strip().split('\n')
-        date_str = None
-        time_str = None
-
-        # Parse from end to find last test
-        for line in reversed(lines):
-            if line.startswith('Date:'):
-                date_str = line.split('Date:')[1].strip()
-            elif line.startswith('Time:'):
-                time_str = line.split('Time:')[1].strip()
-
-            if date_str and time_str:
-                break
-
-        if not date_str or not time_str:
-            return {
-                'healthy': False,
-                'last_test': None,
-                'hours_ago': None,
-                'issue': 'Could not parse last test timestamp'
-            }
-
-        # Combine date and time (DD-MM-YYYY HH:MM)
-        timestamp_str = f"{date_str} {time_str}"
-        last_test = datetime.strptime(timestamp_str, "%d-%m-%Y %H:%M")
+        last_test = entries[-1]["timestamp"]
         hours_ago = (datetime.now() - last_test).total_seconds() / 3600
 
         # Alert if last test was more than 24 hours ago
@@ -172,8 +132,7 @@ def check_last_speedtest(config):
 
 def check_error_log(config):
     """Check error log for recent issues"""
-    script_dir = Path(__file__).parent
-    error_log = script_dir / config['paths']['error_log']
+    error_log = resolve_runtime_path(__file__, config['paths']['error_log'])
 
     if not error_log.exists():
         return {
@@ -237,12 +196,11 @@ def check_config_integrity(config):
 
     # Check required paths exist
     if 'paths' in config:
-        script_dir = Path(__file__).parent
         for path_key in required_paths:
             if path_key not in config['paths']:
                 issues.append(f"Missing path config: {path_key}")
             else:
-                path = script_dir / config['paths'][path_key]
+                path = resolve_runtime_path(__file__, config['paths'][path_key])
                 if path_key.endswith('_directory'):
                     if not path.exists():
                         issues.append(f"Directory does not exist: {path}")
@@ -452,6 +410,7 @@ def send_health_alert(config, health_data):
         msg.attach(MIMEText(html_body, 'html'))
 
         # Send email
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         if mail.smtp_port == 465:
             server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
         else:
@@ -468,6 +427,7 @@ def send_health_alert(config, health_data):
             issues = sum(1 for k in ("disk","logs","speedtest","errors","config","credentials") if not health_data.get(k, {}).get("healthy", True))
             summary = f"{issues} issue(s) found" if issues else "All checks passed"
             log_notification("email", "health_check", summary)
+            record_notification_event("email", "health_check", summary)
 
             webhook_success = send_webhook_event(
                 config,
@@ -486,8 +446,10 @@ def send_health_alert(config, health_data):
             )
             if webhook_success:
                 log_notification("webhook", "health_check", summary)
+                record_notification_event("webhook", "health_check", summary)
             if ntfy_success:
                 log_notification("ntfy", "health_check", summary)
+                record_notification_event("ntfy", "health_check", summary)
         except Exception:
             pass
         return True
@@ -504,9 +466,7 @@ def main():
     # Load configuration
     config = load_config()
 
-    # Resolve log directory relative to script
-    script_dir = Path(__file__).parent
-    log_directory = str(script_dir / config['paths']['log_directory'])
+    log_directory = str(resolve_runtime_path(__file__, config['paths']['log_directory']))
 
     # Perform health checks
     health_data = {

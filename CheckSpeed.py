@@ -16,8 +16,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from config_loader import load_json_config_or_exit
+from config_loader import load_json_config_or_exit, resolve_runtime_path
 from logger_setup import get_logger
+from measurement_store import database_enabled, record_speed_test
 from state_store import record_speedtest_completion
 
 log = get_logger("CheckSpeed")
@@ -37,8 +38,7 @@ def write_error_log(config, message):
     """Write error to error log"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] ERROR: {message}\n"
-    script_dir = Path(__file__).parent
-    error_log = script_dir / config["paths"]["error_log"]
+    error_log = resolve_runtime_path(__file__, config["paths"]["error_log"])
 
     with open(error_log, "a", encoding="utf-8") as f:
         f.write(log_entry)
@@ -268,15 +268,14 @@ def get_week_number():
 
 
 def log_result(config, result):
-    """Log speed test result to weekly log file"""
-    timestamp = datetime.now()
+    """Persist speed test result to the database and weekly log file."""
+    timestamp = datetime.now().replace(second=0, microsecond=0)
     week_num = get_week_number()
     run_source = os.getenv("SPEEDTEST_RUN_SOURCE", "scheduled").strip().lower()
     if run_source not in {"manual", "scheduled"}:
         run_source = "scheduled"
 
-    script_dir = Path(__file__).parent
-    log_dir = script_dir / config["paths"]["log_directory"]
+    log_dir = resolve_runtime_path(__file__, config["paths"]["log_directory"])
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_path = log_dir / f"speed_log_week_{week_num}.txt"
@@ -287,12 +286,13 @@ def log_result(config, result):
     jitter_ms = round(result.get("jitter_ms", 0.0), 2)
     packet_loss = round(result.get("packet_loss_percent", 0.0), 2)
     external_ip = str(result.get("external_ip", "N/A") or "N/A")
+    server_label = f"{result['server_name']} – {result['server_location']} (id: {result['server_id']})"
 
     header = f"{'=' * 20}  {timestamp.strftime('%d-%m-%Y')} Speed Test Result  {'=' * 20}\n"
     entry = f"""Date: {timestamp.strftime('%d-%m-%Y')}
 Time: {timestamp.strftime('%H:%M')}
 Source: {run_source}
-Server: {result['server_name']} – {result['server_location']} (id: {result['server_id']})
+Server: {server_label}
 ISP: {result['isp']}
 IP: {external_ip}
 Ping: {ping_ms} ms
@@ -309,6 +309,28 @@ Result URL: {result['result_url']}
         f.write(entry)
 
     log.info("Speed test logged to: %s", log_path)
+
+    if database_enabled():
+        stored = record_speed_test(
+            {
+                "timestamp": timestamp,
+                "source": run_source,
+                "server": server_label,
+                "server_id": str(result.get("server_id", "") or ""),
+                "isp": str(result.get("isp", "Unknown") or "Unknown"),
+                "ip_address": external_ip,
+                "download_mbps": download_mbps,
+                "upload_mbps": upload_mbps,
+                "ping_ms": ping_ms,
+                "jitter_ms": jitter_ms,
+                "packet_loss_percent": packet_loss,
+                "result_url": str(result.get("result_url", "") or ""),
+            }
+        )
+        if not stored:
+            log.warning("Speed test result already exists in database; skipping duplicate insert")
+        else:
+            log.info("Speed test stored in database")
 
     return download_mbps, upload_mbps, ping_ms, jitter_ms, packet_loss
 

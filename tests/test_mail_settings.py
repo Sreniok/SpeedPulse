@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mail_settings import MailSettings, load_mail_settings
+from measurement_store import set_app_secret
 
 # Env vars used by load_mail_settings.
 _MAIL_ENV_VARS = (
@@ -61,6 +62,14 @@ class TestLoadMailSettingsFromEnv:
         ms = load_mail_settings(config)
         assert ms.smtp_server == "env.smtp.com"
 
+    def test_encrypted_secret_overrides_plaintext_env(self, monkeypatch: pytest.MonkeyPatch):
+        _set_all_env(monkeypatch, SMTP_PASSWORD="plaintext-secret")
+        assert set_app_secret("smtp_password", "encrypted-secret") is True
+
+        ms = load_mail_settings({})
+
+        assert ms.smtp_password == "encrypted-secret"
+
 
 class TestLoadMailSettingsFromConfig:
     def test_fallback_to_config(self, monkeypatch: pytest.MonkeyPatch):
@@ -86,7 +95,7 @@ class TestLoadMailSettingsFromConfig:
 
 class TestLoadMailSettingsValidation:
     def test_missing_password_raises(self):
-        with pytest.raises(RuntimeError, match="SMTP_PASSWORD"):
+        with pytest.raises(RuntimeError, match="SMTP password"):
             load_mail_settings({"email": {"smtp_server": "s", "from": "a@b", "to": "c@d"}})
 
     def test_missing_username_raises(self, monkeypatch: pytest.MonkeyPatch):

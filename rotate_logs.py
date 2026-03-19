@@ -18,25 +18,24 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from config_loader import load_json_config, resolve_runtime_path
+
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
-LOG_DIR = SCRIPT_DIR / "Log"
-IMAGES_DIR = SCRIPT_DIR / "Images"
-ARCHIVE_DIR = SCRIPT_DIR / "Archive"
+LOG_DIR = resolve_runtime_path(__file__, "Log")
+IMAGES_DIR = resolve_runtime_path(__file__, "Images")
+ARCHIVE_DIR = resolve_runtime_path(__file__, "Archive")
 
 # Load retention settings: env var > config.json > hardcoded default
 def _load_retention() -> tuple[int, int]:
-    config_path = SCRIPT_DIR / "config.json"
     keep_weeks = 52
     keep_days = 30
-    if config_path.exists():
-        try:
-            with config_path.open("r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            keep_weeks = cfg.get("data_retention", {}).get("keep_weeks", keep_weeks)
-            keep_days = cfg.get("data_retention", {}).get("keep_days", keep_days)
-        except (json.JSONDecodeError, OSError):
-            pass
+    try:
+        cfg = load_json_config(__file__)
+        keep_weeks = cfg.get("data_retention", {}).get("keep_weeks", keep_weeks)
+        keep_days = cfg.get("data_retention", {}).get("keep_days", keep_days)
+    except (json.JSONDecodeError, OSError):
+        pass
     keep_weeks = int(os.getenv("KEEP_WEEKS", str(keep_weeks)))
     keep_days = int(os.getenv("KEEP_DAYS", str(keep_days)))
     return keep_weeks, keep_days
@@ -202,7 +201,12 @@ def rotate_error_log():
     """Rotate error log if older than 30 days."""
     print_info("Rotating error log...")
 
-    error_log = SCRIPT_DIR / "errors.log"
+    config = {}
+    try:
+        config = load_json_config(__file__)
+    except (json.JSONDecodeError, OSError):
+        config = {}
+    error_log = resolve_runtime_path(__file__, config.get("paths", {}).get("error_log", "errors.log"))
 
     if not error_log.exists():
         print_warning("Error log not found")
@@ -238,7 +242,7 @@ def rotate_cron_log():
     """Rotate cron log if larger than 10MB or older than 30 days."""
     print_info("Rotating cron log...")
 
-    cron_log = SCRIPT_DIR / "cron.log"
+    cron_log = resolve_runtime_path(__file__, "cron.log")
 
     if not cron_log.exists():
         print_warning("Cron log not found")

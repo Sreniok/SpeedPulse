@@ -29,10 +29,14 @@ if [ ! -f "$ROOT/.env" ]; then
   # Generate cryptographically random values
   SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
   SALT=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
+  SECRETS_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 48)
   PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)
+  DB_PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 24)
 
   sed -i "s|replace-with-32-plus-char-random-secret|$SECRET|" "$ROOT/.env"
   sed -i "s|replace-with-random-hex-string|$SALT|" "$ROOT/.env"
+  sed -i "s|replace-with-random-secret-master-key|$SECRETS_KEY|" "$ROOT/.env"
+  sed -i "s|replace-with-random-postgres-password|$DB_PASSWORD|g" "$ROOT/.env"
 
   # Replace the placeholder hash with a plain password
   # (the dashboard will auto-hash it on first startup)
@@ -57,6 +61,7 @@ if [ ! -f "$ROOT/.env" ]; then
   echo ""
   echo "  Edit .env to configure SMTP settings"
   echo "  for email reports and alerts."
+  echo "  PostgreSQL credentials were generated for DATABASE_URL."
   echo "=========================================="
   echo ""
 fi

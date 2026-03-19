@@ -11,7 +11,6 @@ import logging
 import os
 import re
 import secrets
-import shutil
 import smtplib
 import subprocess
 import sys
@@ -27,8 +26,8 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -42,23 +41,47 @@ from backup_manager import (
     save_backup_to_path,
     validate_backup,
 )
-from log_parser import load_all_log_entries
 from mail_settings import load_mail_settings
+from measurement_repository import load_measurement_entries, load_measurement_entries_in_range
+from measurement_store import (
+    database_enabled,
+    database_healthcheck,
+    encrypted_secret_store_enabled,
+    has_app_secret,
+    set_app_secret,
+)
 from reporting import build_report_html, resolve_report_theme_id
-from version import USER_AGENT, __version__
 from state_store import (
     blocked_seconds as state_blocked_seconds,
+)
+from state_store import (
     bump_session_version,
-    clear_login_failures as state_clear_login_failures,
-    consume_reset_token as state_consume_reset_token,
     get_session_version,
+    get_state_db_path,
     initialize_state_store,
     load_manual_runtime_state,
     load_speedtest_completion_state,
-    register_failed_login as state_register_failed_login,
     save_manual_runtime_state,
     store_reset_token,
 )
+from state_store import (
+    clear_login_failures as state_clear_login_failures,
+)
+from state_store import (
+    consume_reset_token as state_consume_reset_token,
+)
+from state_store import (
+    register_failed_login as state_register_failed_login,
+)
+from version import USER_AGENT, __version__
+from web.routes.auth import build_auth_router
+from web.routes.backups import build_backup_router
+from web.routes.dashboard import build_dashboard_router
+from web.routes.manual_runs import build_manual_runs_router
+from web.routes.system import build_system_router
+from web.services.system import build_readiness_state
+from web.services.system import resolve_speedtest_executable as service_resolve_speedtest_executable
+from web.services.system import server_setting_payload as build_server_setting_payload
 
 SCRIPT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
@@ -130,6 +153,16 @@ _PUSH_EVENT_DEFAULTS = {
 }
 
 
+def _runtime_root() -> Path:
+    raw_value = os.getenv("APP_DATA_DIR", "").strip()
+    if not raw_value:
+        return SCRIPT_DIR
+    path = Path(raw_value)
+    if path.is_absolute():
+        return path
+    return SCRIPT_DIR / path
+
+
 def _resolve_runtime_path(default_path: Path, env_name: str) -> Path:
     raw_value = os.getenv(env_name, "").strip()
     if not raw_value:
@@ -141,7 +174,13 @@ def _resolve_runtime_path(default_path: Path, env_name: str) -> Path:
 
 
 def _config_path() -> Path:
-    return _resolve_runtime_path(CONFIG_PATH, "CONFIG_PATH")
+    explicit_path = _resolve_runtime_path(CONFIG_PATH, "CONFIG_PATH")
+    if explicit_path != CONFIG_PATH:
+        return explicit_path
+    data_root = os.getenv("APP_DATA_DIR", "").strip()
+    if data_root:
+        return _runtime_root() / CONFIG_PATH.name
+    return CONFIG_PATH
 
 
 def _env_path() -> Path:
@@ -156,6 +195,53 @@ def _env_int(name: str, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+def _current_session_version() -> int:
+    with SESSION_VERSION_LOCK:
+        return SESSION_VERSION
+
+
+def _rotate_session_version() -> int:
+    global SESSION_VERSION
+    with SESSION_VERSION_LOCK:
+        SESSION_VERSION = bump_session_version()
+        return SESSION_VERSION
+
+
+def _get_last_manual_speedtest_at() -> float:
+    return LAST_MANUAL_SPEEDTEST_AT
+
+
+def _set_last_manual_speedtest_at(value: float) -> None:
+    global LAST_MANUAL_SPEEDTEST_AT
+    LAST_MANUAL_SPEEDTEST_AT = value
+
+
+def _try_acquire_manual_speedtest_lock() -> bool:
+    return MANUAL_SPEEDTEST_LOCK.acquire(blocking=False)
+
+
+def _release_manual_speedtest_lock() -> None:
+    if MANUAL_SPEEDTEST_LOCK.locked():
+        MANUAL_SPEEDTEST_LOCK.release()
+
+
+def _build_system_readiness_state() -> tuple[list[str], list[str], dict[str, str]]:
+    return build_readiness_state(
+        config_path=_config_path,
+        load_config=load_config,
+        runtime_root=_runtime_root,
+        get_state_db_path=get_state_db_path,
+        database_healthcheck=database_healthcheck,
+        database_enabled=database_enabled,
+        load_mail_settings=load_mail_settings,
+        resolve_speedtest_executable_fn=resolve_speedtest_executable,
+    )
+
+
+def resolve_speedtest_executable(config: dict) -> str:
+    return service_resolve_speedtest_executable(config)
 
 
 def _iso_now() -> str:
@@ -275,17 +361,6 @@ APP = FastAPI(title="SpeedPulse Dashboard", version=__version__, lifespan=lifesp
 APP.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
-@APP.get("/logo.svg", include_in_schema=False)
-def app_logo() -> FileResponse:
-    if not LOGO_PATH.is_file():
-        raise HTTPException(status_code=404, detail="Logo not found.")
-    response = FileResponse(LOGO_PATH, media_type="image/svg+xml")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
 def _infer_manual_run_stage(line: str) -> str | None:
     text = line.lower()
 
@@ -391,6 +466,16 @@ def _manual_speedtest_worker(selected_server_id: str = "") -> None:
         if process and process.stdout is not None:
             process.stdout.close()
         MANUAL_SPEEDTEST_LOCK.release()
+
+
+def _start_manual_speedtest_thread(selected_server_id: str) -> None:
+    worker = threading.Thread(
+        target=_manual_speedtest_worker,
+        kwargs={"selected_server_id": selected_server_id},
+        name="manual-speedtest",
+        daemon=True,
+    )
+    worker.start()
 
 
 def load_config() -> dict:
@@ -564,8 +649,7 @@ def _detected_account_network_identity(
 
     source_entries = entries
     if source_entries is None:
-        log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
-        source_entries = load_all_log_entries(log_dir)
+        source_entries = load_measurement_entries(config)
 
     if source_entries:
         latest = source_entries[-1]
@@ -599,6 +683,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
 
     smtp_username = os.getenv("SMTP_USERNAME", email_cfg.get("from", ""))
     email_from = os.getenv("EMAIL_FROM", email_cfg.get("from", smtp_username))
+    smtp_password_set = has_app_secret("smtp_password") or bool(os.getenv("SMTP_PASSWORD", "").strip())
 
     contract_cfg = loaded.get("contract", {})
     current_contract = contract_cfg.get("current", {})
@@ -639,7 +724,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "smtp_server": os.getenv("SMTP_SERVER", email_cfg.get("smtp_server", "")),
             "smtp_port": smtp_port,
             "smtp_username": smtp_username,
-            "smtp_password_set": bool(os.getenv("SMTP_PASSWORD", "").strip()),
+            "smtp_password_set": smtp_password_set,
             "from": email_from,
             "to": os.getenv("EMAIL_TO", email_cfg.get("to", "")),
             "send_realtime_alerts": bool(email_cfg.get("send_realtime_alerts", True)),
@@ -958,140 +1043,13 @@ def _send_settings_test_ntfy(config: dict) -> None:
             raise RuntimeError(f"ntfy returned HTTP {response.status}")
 
 
-def resolve_path(path_value: str) -> Path:
-    path = Path(path_value)
-    if path.is_absolute():
-        return path
-    return SCRIPT_DIR / path
-
-
-def resolve_speedtest_executable(config: dict) -> str:
-    configured = config.get("paths", {}).get("speedtest_exe", "speedtest")
-    candidates = [
-        configured,
-        "speedtest",
-        "speedtest-cli",
-        "/usr/bin/speedtest",
-        "/usr/local/bin/speedtest",
-        "/usr/bin/speedtest-cli",
-        "/usr/local/bin/speedtest-cli",
-    ]
-
-    seen: set[str] = set()
-    for candidate in candidates:
-        if not candidate or candidate in seen:
-            continue
-        seen.add(candidate)
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
-
-    raise FileNotFoundError("No speedtest executable found in PATH")
-
-
-def _parse_server_listing(output: str) -> list[dict]:
-    options: list[dict] = []
-    pattern = re.compile(r"^\s*(\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(.+?)\s*$")
-
-    for raw_line in output.splitlines():
-        line = raw_line.rstrip()
-        if not line or line.startswith("Closest servers") or line.startswith("=") or line.lstrip().startswith("ID "):
-            continue
-
-        match = pattern.match(line)
-        if not match:
-            continue
-
-        server_id, name, location, country = match.groups()
-        options.append(
-            {
-                "id": server_id,
-                "name": name.strip(),
-                "location": location.strip(),
-                "country": country.strip(),
-                "label": f"{name.strip()} - {location.strip()}",
-            }
-        )
-
-    return options
-
-
-def get_speedtest_server_options(force_refresh: bool = False) -> list[dict]:
-    now = time.time()
-    cached_at = float(SERVER_OPTIONS_CACHE.get("fetched_at", 0.0) or 0.0)
-    cached_options = SERVER_OPTIONS_CACHE.get("options", [])
-    if not force_refresh and cached_options and (now - cached_at) < SERVER_OPTIONS_CACHE_TTL_SECONDS:
-        return list(cached_options)
-
-    config = load_config()
-    speedtest_exe = resolve_speedtest_executable(config)
-    result = subprocess.run(
-        [speedtest_exe, "--servers"],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "Unable to list speedtest servers").strip())
-
-    options = _parse_server_listing(result.stdout)
-    SERVER_OPTIONS_CACHE["fetched_at"] = now
-    SERVER_OPTIONS_CACHE["options"] = list(options)
-    return options
-
-
-def current_server_setting(config: dict | None = None) -> str:
-    loaded = config or load_config()
-    return str(loaded.get("speedtest", {}).get("server_id", "") or "").strip()
-
-
 def server_setting_payload(config: dict | None = None, force_refresh: bool = False) -> dict:
-    loaded = config or load_config()
-    selected_id = current_server_setting(loaded)
-
-    options = []
-    try:
-        options = get_speedtest_server_options(force_refresh=force_refresh)
-    except Exception:
-        LOGGER.exception("Failed to load speedtest server list")
-
-    selected_label = "Auto (nearest server)"
-    normalized_options = [
-        {
-            "id": "",
-            "label": "Auto (nearest server)",
-            "name": "Auto",
-            "location": "Automatic",
-            "country": "",
-        }
-    ]
-
-    found_selected = not selected_id
-    for option in options:
-        normalized_options.append(option)
-        if option["id"] == selected_id:
-            selected_label = option["label"]
-            found_selected = True
-
-    if selected_id and not found_selected:
-        selected_label = f"Pinned server #{selected_id}"
-        normalized_options.append(
-            {
-                "id": selected_id,
-                "label": selected_label,
-                "name": "Pinned server",
-                "location": f"ID {selected_id}",
-                "country": "",
-            }
-        )
-
-    return {
-        "selected_id": selected_id,
-        "selected_label": selected_label,
-        "options": normalized_options,
-    }
+    return build_server_setting_payload(
+        load_config=load_config,
+        logger=LOGGER,
+        config=config,
+        force_refresh=force_refresh,
+    )
 
 
 def _is_setup_mode() -> bool:
@@ -1382,6 +1340,99 @@ def require_csrf(request: Request, session: dict) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
 
 
+APP.include_router(
+    build_system_router(
+        logo_path=LOGO_PATH,
+        version=__version__,
+        require_session=require_session,
+        build_readiness_state=_build_system_readiness_state,
+    )
+)
+APP.include_router(
+    build_auth_router(
+        templates=TEMPLATES,
+        flash_cookie=FLASH_COOKIE,
+        session_cookie=SESSION_COOKIE,
+        get_serializer=get_serializer,
+        is_setup_mode=_is_setup_mode,
+        resolve_recovery_email=_resolve_recovery_email,
+        normalize_email=_normalize_email,
+        extract_client_ip=_extract_client_ip,
+        is_login_blocked=_is_login_blocked,
+        verify_login_credentials=verify_login_credentials,
+        register_failed_login=_register_failed_login,
+        clear_failed_logins=_clear_failed_logins,
+        env_int=_env_int,
+        get_session_version=_current_session_version,
+        is_secure_request=_is_secure_request,
+        is_valid_email=_is_valid_email,
+        build_password_hash=build_password_hash,
+        update_env_file=_update_env_file,
+        apply_runtime_env=_apply_runtime_env,
+        logger=LOGGER,
+        create_reset_token=lambda login_email: _create_reset_token(login_email),
+        send_reset_email=lambda to_addr, token, base_url: _send_reset_email(to_addr, token, base_url),
+        resolve_login_email=_resolve_login_email,
+        consume_reset_token=_consume_reset_token,
+        rotate_session_version=_rotate_session_version,
+    )
+)
+APP.include_router(
+    build_backup_router(
+        require_session=require_session,
+        require_csrf=require_csrf,
+        load_config=load_config,
+        logger=LOGGER,
+        create_backup_fn=lambda password, include_logs: create_backup(password, include_logs=include_logs),
+        delete_backup_fn=lambda filename, config: delete_backup(filename, config),
+        get_backup_path_fn=lambda filename, config: get_backup_path(filename, config),
+        list_backups_fn=lambda config: list_backups(config),
+        restore_backup_fn=lambda data, password: restore_backup(data, password),
+        save_backup_to_path_fn=lambda encrypted, filename, config: save_backup_to_path(encrypted, filename, config),
+        validate_backup_fn=lambda data, password: validate_backup(data, password),
+    )
+)
+APP.include_router(
+    build_dashboard_router(
+        templates=TEMPLATES,
+        current_session=current_session,
+        load_config=load_config,
+        detected_account_network_identity=_detected_account_network_identity,
+        github_project_url=_github_project_url,
+        github_sponsors_url=_github_sponsors_url,
+        ui_theme_preferences=_ui_theme_preferences,
+        require_session=require_session,
+        build_dashboard_payload_fn=lambda days, mode: build_dashboard_payload(days, mode=mode),
+        load_measurement_entries_fn=load_measurement_entries,
+        filter_entries_for_mode_fn=lambda entries, now, days, mode: _filter_entries_for_mode(entries, now, days, mode),
+        clean_theme_id_fn=_clean_theme_id,
+        resolve_report_theme_id_fn=resolve_report_theme_id,
+        build_report_html_fn=build_report_html,
+    )
+)
+APP.include_router(
+    build_manual_runs_router(
+        require_session=require_session,
+        require_csrf=require_csrf,
+        env_int=_env_int,
+        get_last_manual_speedtest_at=_get_last_manual_speedtest_at,
+        set_last_manual_speedtest_at=_set_last_manual_speedtest_at,
+        manual_run_snapshot=_manual_run_snapshot,
+        load_speedtest_completion_state=load_speedtest_completion_state,
+        iso_from_epoch=_iso_from_epoch,
+        load_config=load_config,
+        resolve_server_label=lambda server_id, config=None: _resolve_server_label(server_id, config=config),
+        try_acquire_manual_speedtest_lock=_try_acquire_manual_speedtest_lock,
+        release_manual_speedtest_lock=_release_manual_speedtest_lock,
+        start_manual_run_state=_start_manual_run_state,
+        start_manual_speedtest_thread=_start_manual_speedtest_thread,
+        update_manual_run_state=_update_manual_run_state,
+        iso_now=_iso_now,
+        logger=LOGGER,
+    )
+)
+
+
 def _filter_entries_for_mode(entries: list[dict], now: datetime, days: int, mode: str) -> list[dict]:
     if mode == "today":
         return [entry for entry in entries if entry["timestamp"].date() == now.date()]
@@ -1547,8 +1598,7 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
     server_settings = server_setting_payload(config)
     thresholds = config.get("thresholds", {})
     scheduling = config.get("scheduling", {})
-    log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
-    entries = load_all_log_entries(log_dir)
+    entries = load_measurement_entries(config)
     detected_identity = _detected_account_network_identity(config, entries=entries)
     now = datetime.now()
     scan_enabled = bool(scheduling.get("scan_enabled", True))
@@ -1709,483 +1759,6 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-@APP.get("/api/notifications/log")
-async def api_notification_log(request: Request):
-    require_session(request)
-    from state_store import get_notification_log
-    entries = get_notification_log(limit=50)
-    return entries
-
-
-@APP.get("/health")
-def health() -> dict:
-    return {"status": "ok", "time": datetime.now().isoformat()}
-
-
-def _set_flash(response: RedirectResponse, message: str, path: str = "/login") -> RedirectResponse:
-    """Set a short-lived signed flash cookie for displaying errors."""
-    signed = get_serializer().dumps({"msg": message, "t": int(time.time())})
-    response.set_cookie(
-        key=FLASH_COOKIE,
-        value=signed,
-        httponly=True,
-        samesite="strict",
-        max_age=60,
-        path=path,
-    )
-    return response
-
-
-def _consume_flash(request: Request) -> str | None:
-    """Read and validate flash cookie. Returns message or None."""
-    token = request.cookies.get(FLASH_COOKIE)
-    if not token:
-        return None
-    try:
-        payload = get_serializer().loads(token)
-    except BadSignature:
-        return None
-    issued = payload.get("t", 0)
-    if int(time.time()) - int(issued) > 60:
-        return None
-    return str(payload.get("msg", ""))
-
-
-@APP.get("/login", response_class=HTMLResponse)
-def login_page(request: Request) -> HTMLResponse:
-    setup_mode = _is_setup_mode()
-    recovery_email = _resolve_recovery_email()
-    error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse(
-        request,
-        "login.html",
-        {
-            "request": request,
-            "error": error,
-            "setup_mode": setup_mode,
-            "has_recovery_email": bool(recovery_email) and not setup_mode,
-        },
-    )
-    response.delete_cookie(FLASH_COOKIE, path="/login")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-@APP.post("/login")
-def login(
-    request: Request,
-    email: str = Form(""),
-    username: str = Form(""),
-    password: str = Form(...),
-) -> RedirectResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
-    login_email = _normalize_email(email or username)
-    client_ip = _extract_client_ip(request)
-    blocked_for = _is_login_blocked(client_ip)
-    if blocked_for > 0:
-        response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, f"Too many attempts. Retry in {blocked_for}s")
-
-    if not verify_login_credentials(login_email, password):
-        new_block_seconds = _register_failed_login(client_ip)
-        if new_block_seconds > 0:
-            LOGGER.warning("Login blocked for %ss from IP %s", new_block_seconds, client_ip)
-            response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-            return _set_flash(response, f"Too many attempts. Retry in {new_block_seconds}s")
-
-        LOGGER.warning("Failed login attempt from IP %s", client_ip)
-        response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Invalid credentials")
-
-    _clear_failed_logins(client_ip)
-
-    ttl_seconds = _env_int("SESSION_TTL_SECONDS", 60 * 60 * 12)
-    exp_ts = int(time.time()) + ttl_seconds
-    csrf_token = secrets.token_urlsafe(24)
-    with SESSION_VERSION_LOCK:
-        sv = SESSION_VERSION
-    token = get_serializer().dumps(
-        {
-            "login_email": login_email,
-            "username": login_email,
-            "exp": exp_ts,
-            "csrf": csrf_token,
-            "sv": sv,
-        }
-    )
-
-    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(
-        key=SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        samesite="strict",
-        secure=_is_secure_request(request),
-        max_age=ttl_seconds,
-    )
-    return response
-
-
-@APP.get("/logout")
-def logout() -> RedirectResponse:
-    response = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-    response.delete_cookie(SESSION_COOKIE)
-    return response
-
-
-# ── Registration (setup mode only) ──────────────────────────────
-
-
-@APP.get("/register", response_class=HTMLResponse)
-def register_page(request: Request) -> HTMLResponse:
-    if not _is_setup_mode():
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-
-    error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse(request, "register.html", {"request": request, "error": error})
-    response.delete_cookie(FLASH_COOKIE, path="/register")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return response
-
-
-@APP.post("/register")
-def register(
-    request: Request,
-    email: str = Form(""),
-    username: str = Form(""),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-) -> RedirectResponse:
-    if not _is_setup_mode():
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-
-    login_email = _normalize_email(email or username)
-    if not _is_valid_email(login_email):
-        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Enter a valid login email address", path="/register")
-
-    if len(password) < 10:
-        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Password must be at least 10 characters", path="/register")
-
-    if password != confirm_password:
-        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Passwords do not match", path="/register")
-
-    password_hash = build_password_hash(password)
-    env_updates = {
-        "DASHBOARD_LOGIN_EMAIL": login_email,
-        "DASHBOARD_USERNAME": "",
-        "RECOVERY_EMAIL": login_email,
-        "DASHBOARD_PASSWORD_HASH": password_hash,
-        "DASHBOARD_PASSWORD": "",
-    }
-
-    try:
-        _update_env_file(env_updates)
-    except OSError as exc:
-        LOGGER.error("Failed to write credentials to .env: %s", exc)
-        response = RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-        return _set_flash(response, "Failed to save credentials", path="/register")
-
-    _apply_runtime_env(env_updates)
-    LOGGER.info("Account created for login email '%s' via setup wizard", login_email)
-
-    # Auto-login the new user
-    ttl_seconds = _env_int("SESSION_TTL_SECONDS", 60 * 60 * 12)
-    exp_ts = int(time.time()) + ttl_seconds
-    csrf_token = secrets.token_urlsafe(24)
-    with SESSION_VERSION_LOCK:
-        sv = SESSION_VERSION
-    token = get_serializer().dumps(
-        {
-            "login_email": login_email,
-            "username": login_email,
-            "exp": exp_ts,
-            "csrf": csrf_token,
-            "sv": sv,
-        }
-    )
-
-    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    response.set_cookie(
-        key=SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        samesite="strict",
-        secure=_is_secure_request(request),
-        max_age=ttl_seconds,
-    )
-    return response
-
-
-# ── Forgot / Reset password ─────────────────────────────────────
-
-
-@APP.get("/forgot-password", response_class=HTMLResponse)
-def forgot_password_page(request: Request) -> HTMLResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
-    error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse(
-        request,
-        "forgot_password.html",
-        {"request": request, "error": error, "sent": False},
-    )
-    response.delete_cookie(FLASH_COOKIE, path="/forgot-password")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return response
-
-
-@APP.post("/forgot-password")
-def forgot_password(request: Request, email: str = Form(""), username: str = Form("")) -> HTMLResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
-    login_email = _normalize_email(email or username)
-    client_ip = _extract_client_ip(request)
-    blocked_for = _is_login_blocked(client_ip)
-    if blocked_for > 0:
-        return TEMPLATES.TemplateResponse(
-            request,
-            "forgot_password.html",
-            {"request": request, "error": f"Too many attempts. Retry in {blocked_for}s", "sent": False},
-        )
-
-    # Always show success to prevent login email enumeration
-    success_response = TEMPLATES.TemplateResponse(
-        request,
-        "forgot_password.html",
-        {"request": request, "error": None, "sent": True},
-    )
-
-    recovery_email = _resolve_recovery_email()
-    expected_login_email = _resolve_login_email()
-
-    if not recovery_email or not hmac.compare_digest(login_email, expected_login_email):
-        _register_failed_login(client_ip)
-        LOGGER.info("Forgot-password request — no action (email mismatch or no recovery email)")
-        return success_response
-
-    try:
-        token = _create_reset_token(login_email)
-        base_url = str(request.base_url)
-        _send_reset_email(recovery_email, token, base_url)
-        LOGGER.info("Password reset email sent for login email '%s'", login_email)
-    except Exception as exc:
-        LOGGER.error("Failed to send password reset email: %s", exc)
-
-    return success_response
-
-
-@APP.get("/reset-password", response_class=HTMLResponse)
-def reset_password_page(request: Request) -> HTMLResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
-    token = request.query_params.get("token", "")
-    error = _consume_flash(request)
-    response = TEMPLATES.TemplateResponse(
-        request,
-        "reset_password.html",
-        {"request": request, "token": token, "error": error, "success": False},
-    )
-    response.delete_cookie(FLASH_COOKIE, path="/reset-password")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return response
-
-
-@APP.post("/reset-password")
-def reset_password(
-    request: Request,
-    token: str = Form(...),
-    new_password: str = Form(...),
-    confirm_password: str = Form(...),
-) -> HTMLResponse:
-    if _is_setup_mode():
-        return RedirectResponse(url="/register", status_code=status.HTTP_302_FOUND)
-
-    if len(new_password) < 10:
-        response = RedirectResponse(url=f"/reset-password?token={quote(token)}", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key=FLASH_COOKIE, value=get_serializer().dumps({"msg": "Password must be at least 10 characters", "t": int(time.time())}), httponly=True, samesite="strict", max_age=60, path="/reset-password")
-        return response
-
-    if new_password != confirm_password:
-        response = RedirectResponse(url=f"/reset-password?token={quote(token)}", status_code=status.HTTP_302_FOUND)
-        response.set_cookie(key=FLASH_COOKIE, value=get_serializer().dumps({"msg": "Passwords do not match", "t": int(time.time())}), httponly=True, samesite="strict", max_age=60, path="/reset-password")
-        return response
-
-    login_email = _consume_reset_token(token)
-    if not login_email:
-        return TEMPLATES.TemplateResponse(
-            request,
-            "reset_password.html",
-            {"request": request, "token": "", "error": "Reset link is invalid or has expired. Please request a new one.", "success": False},
-        )
-
-    new_hash = build_password_hash(new_password)
-    env_updates = {"DASHBOARD_PASSWORD_HASH": new_hash, "DASHBOARD_PASSWORD": ""}
-
-    try:
-        _update_env_file(env_updates)
-    except OSError as exc:
-        LOGGER.error("Failed to persist password reset: %s", exc)
-        return TEMPLATES.TemplateResponse(
-            request,
-            "reset_password.html",
-            {"request": request, "token": "", "error": "Failed to save new password.", "success": False},
-        )
-
-    _apply_runtime_env(env_updates)
-
-    global SESSION_VERSION
-    with SESSION_VERSION_LOCK:
-        SESSION_VERSION = bump_session_version()
-    LOGGER.info("Password reset completed for login email '%s' — all sessions invalidated", login_email)
-
-    return TEMPLATES.TemplateResponse(
-        request,
-        "reset_password.html",
-        {"request": request, "token": "", "error": None, "success": True},
-    )
-
-
-@APP.get("/", response_class=HTMLResponse)
-def dashboard_page(request: Request) -> HTMLResponse:
-    session = current_session(request)
-    if not session:
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-
-    config = load_config()
-    account = config.get("account", {})
-    detected_identity = _detected_account_network_identity(config)
-
-    response = TEMPLATES.TemplateResponse(
-        request,
-        "dashboard.html",
-        {
-            "request": request,
-            "login_email": session["login_email"],
-            "account_name": account.get("name", "N/A"),
-            "account_number": account.get("number", "N/A"),
-            "account_provider": detected_identity["provider"],
-            "account_ip_address": detected_identity["ip_address"],
-            "csrf_token": session["csrf"],
-            "github_url": _github_project_url(config),
-            "github_sponsors_url": _github_sponsors_url(config),
-            "ui_theme": _ui_theme_preferences(config),
-        },
-    )
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-@APP.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request) -> HTMLResponse:
-    session = current_session(request)
-    if not session:
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
-
-    config = load_config()
-    account = config.get("account", {})
-    detected_identity = _detected_account_network_identity(config)
-
-    response = TEMPLATES.TemplateResponse(
-        request,
-        "settings.html",
-        {
-            "request": request,
-            "login_email": session["login_email"],
-            "account_name": account.get("name", "N/A"),
-            "account_number": account.get("number", "N/A"),
-            "account_provider": detected_identity["provider"],
-            "account_ip_address": detected_identity["ip_address"],
-            "csrf_token": session["csrf"],
-            "github_url": _github_project_url(config),
-            "github_sponsors_url": _github_sponsors_url(config),
-            "ui_theme": _ui_theme_preferences(config),
-        },
-    )
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-@APP.get("/api/metrics")
-def metrics(request: Request, days: int = 30, mode: str = "days") -> JSONResponse:
-    require_session(request)
-    if mode not in {"days", "today"}:
-        raise HTTPException(status_code=400, detail="mode must be 'days' or 'today'")
-    if mode == "days" and (days < 1 or days > 365):
-        raise HTTPException(status_code=400, detail="days must be between 1 and 365")
-
-    payload = build_dashboard_payload(days, mode=mode)
-    return JSONResponse(payload)
-
-
-@APP.get("/api/reports/download")
-def download_range_report(
-    request: Request,
-    mode: str = "today",
-    days: int = 30,
-    format: str = "html",
-    theme_id: str = "",
-) -> Response:
-    require_session(request)
-
-    report_format = str(format or "html").strip().lower()
-    if report_format != "html":
-        raise HTTPException(status_code=400, detail="Only HTML export is enabled right now.")
-
-    if mode not in {"days", "today"}:
-        raise HTTPException(status_code=400, detail="mode must be 'days' or 'today'")
-    if mode == "days" and (days < 1 or days > 365):
-        raise HTTPException(status_code=400, detail="days must be between 1 and 365")
-
-    config = load_config()
-    now = datetime.now()
-    log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
-    all_entries = load_all_log_entries(log_dir)
-    selected_entries = _filter_entries_for_mode(all_entries, now, days, mode)
-
-    if mode == "today":
-        yesterday = now - timedelta(days=1)
-        previous_entries = [entry for entry in all_entries if entry["timestamp"].date() == yesterday.date()]
-        range_label = "Today"
-        range_slug = "today"
-    else:
-        previous_start = now - timedelta(days=days * 2)
-        previous_end = now - timedelta(days=days)
-        previous_entries = [
-            entry for entry in all_entries if previous_start <= entry["timestamp"] < previous_end
-        ]
-        range_label = f"Last {days} days"
-        range_slug = f"{days}d"
-
-    resolved_theme = _clean_theme_id(theme_id, resolve_report_theme_id(config))
-    report_html = build_report_html(
-        config,
-        selected_entries,
-        report_title="SpeedPulse Performance Report",
-        range_label=range_label,
-        theme_id=resolved_theme,
-        previous_entries=previous_entries,
-    )
-    filename = f"speedpulse-report-{range_slug}-{now.strftime('%Y%m%d-%H%M')}.html"
-
-    return Response(
-        content=report_html,
-        media_type="text/html; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 @APP.get("/api/settings/server")
@@ -2221,6 +1794,42 @@ async def update_server_settings(request: Request) -> JSONResponse:
 def get_notification_settings(request: Request) -> JSONResponse:
     require_session(request)
     return JSONResponse(dashboard_settings_payload())
+
+
+@APP.post("/api/settings/appearance")
+async def update_appearance_settings(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    ui_theme_payload = payload.get("ui_theme", {})
+    ui_theme_mode = _clean_theme_mode(
+        ui_theme_payload.get("mode", payload.get("ui_theme_mode", "system")),
+        "system",
+    )
+    ui_theme_light = _clean_theme_id(
+        ui_theme_payload.get("light", payload.get("ui_theme_light", "github-light")),
+        "github-light",
+    )
+    ui_theme_dark = _clean_theme_id(
+        ui_theme_payload.get("dark", payload.get("ui_theme_dark", "github-dark")),
+        "github-dark",
+    )
+    report_theme_id = _clean_theme_id(payload.get("report_theme_id", "default-dark"))
+
+    config = load_config()
+    app_cfg = config.setdefault("app", {})
+    notifications_cfg = config.setdefault("notifications", {})
+    app_cfg["ui_theme_mode"] = ui_theme_mode
+    app_cfg["ui_theme_light"] = ui_theme_light
+    app_cfg["ui_theme_dark"] = ui_theme_dark
+    notifications_cfg["report_theme_id"] = report_theme_id
+    save_config(config)
+
+    response_payload = dashboard_settings_payload(config)
+    response_payload["message"] = "Appearance saved."
+    response_payload["restart_required"] = False
+    return JSONResponse(response_payload)
 
 
 @APP.post("/api/settings/notifications")
@@ -2402,7 +2011,17 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         "EMAIL_FROM": email_from,
     }
     if smtp_password.strip():
-        env_updates["SMTP_PASSWORD"] = smtp_password
+        if encrypted_secret_store_enabled():
+            try:
+                set_app_secret("smtp_password", smtp_password)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to store SMTP password securely: {exc}",
+                ) from exc
+            env_updates["SMTP_PASSWORD"] = ""
+        else:
+            env_updates["SMTP_PASSWORD"] = smtp_password
     if backup_password.strip():
         env_updates["BACKUP_PASSWORD"] = backup_password
 
@@ -2685,9 +2304,7 @@ def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:
     except ValueError:
         return {"error": "Invalid end date"}
 
-    log_dir = resolve_path(config.get("paths", {}).get("log_directory", "Log"))
-    entries = load_all_log_entries(log_dir)
-    filtered = [e for e in entries if start_date <= e["timestamp"] <= end_date]
+    filtered = load_measurement_entries_in_range(config, start_date, end_date)
 
     if not filtered:
         return {
@@ -2793,234 +2410,3 @@ async def end_current_contract(request: Request) -> JSONResponse:
         "message": "Contract ended and archived.",
         "archived": archived,
     })
-
-
-@APP.get("/api/run/speedtest/status")
-def speedtest_run_status(request: Request) -> JSONResponse:
-    require_session(request)
-    cooldown_seconds = _env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 300)
-    remaining = max(0, int((LAST_MANUAL_SPEEDTEST_AT + cooldown_seconds) - time.time()))
-
-    payload = _manual_run_snapshot()
-    payload["cooldown_remaining_seconds"] = remaining
-    return JSONResponse(payload)
-
-
-@APP.get("/api/run/speedtest/completion")
-def speedtest_completion_status(request: Request) -> JSONResponse:
-    require_session(request)
-    state = load_speedtest_completion_state()
-    return JSONResponse(
-        {
-            "sequence": int(state.get("sequence", 0)),
-            "status": str(state.get("status", "unknown")),
-            "source": str(state.get("source", "unknown")),
-            "completed_at": _iso_from_epoch(state.get("completed_at")),
-            "updated_at": _iso_from_epoch(state.get("updated_at")),
-        }
-    )
-
-
-@APP.post("/api/run/speedtest")
-async def run_speedtest_now(request: Request) -> JSONResponse:
-    global LAST_MANUAL_SPEEDTEST_AT
-
-    session = require_session(request)
-    require_csrf(request, session)
-
-    payload = {}
-    if request.headers.get("content-type", "").startswith("application/json"):
-        payload = await request.json()
-
-    selected_id = str(payload.get("server_id", "") or "").strip()
-    if selected_id and not selected_id.isdigit():
-        raise HTTPException(status_code=400, detail="server_id must be numeric or empty")
-
-    config = load_config()
-    selected_label = _resolve_server_label(selected_id, config=config)
-
-    cooldown_seconds = _env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 300)
-    now = time.time()
-    remaining = int((LAST_MANUAL_SPEEDTEST_AT + cooldown_seconds) - now)
-    if remaining > 0:
-        return JSONResponse(
-            {
-                "status": "cooldown",
-                "message": f"Manual speed test cooldown active. Retry in {remaining}s.",
-                "cooldown_remaining_seconds": remaining,
-            },
-            status_code=429,
-        )
-
-    if not MANUAL_SPEEDTEST_LOCK.acquire(blocking=False):
-        payload = _manual_run_snapshot()
-        payload["message"] = payload.get("message") or "A speed test is already running."
-        return JSONResponse(payload, status_code=409)
-
-    LAST_MANUAL_SPEEDTEST_AT = now
-    _start_manual_run_state(selected_server_id=selected_id, selected_server_label=selected_label)
-
-    worker = threading.Thread(
-        target=_manual_speedtest_worker,
-        kwargs={"selected_server_id": selected_id},
-        name="manual-speedtest",
-        daemon=True,
-    )
-    try:
-        worker.start()
-    except Exception:
-        MANUAL_SPEEDTEST_LOCK.release()
-        _update_manual_run_state(
-            status="failed",
-            stage="Failed",
-            message="Unable to start manual speed test worker.",
-            completed_at=_iso_now(),
-            exit_code=-1,
-        )
-        LOGGER.exception("Failed to start manual speed test worker")
-        return JSONResponse(_manual_run_snapshot(), status_code=500)
-
-    payload = _manual_run_snapshot()
-    payload["message"] = "Manual speed test started."
-    return JSONResponse(payload, status_code=202)
-
-
-# ── Backup & Restore ────────────────────────────────────────────
-
-_MAX_BACKUP_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
-
-
-@APP.post("/api/backup/create")
-async def api_backup_create(request: Request):
-    session = require_session(request)
-    require_csrf(request, session)
-
-    body = await request.json()
-    entered_password = str(body.get("password", "")).strip()
-    stored_password = os.getenv("BACKUP_PASSWORD", "").strip()
-    password = entered_password or stored_password
-    include_logs = bool(body.get("include_logs", True))
-    download = bool(body.get("download", False))
-
-    if entered_password and len(entered_password) < 6:
-        raise HTTPException(status_code=400, detail="Backup password must be at least 6 characters.")
-    if not password or len(password) < 6:
-        raise HTTPException(
-            status_code=400,
-            detail="Enter a backup password, or save one first in Scheduled backups.",
-        )
-
-    config = load_config()
-    encrypted, filename = create_backup(password, include_logs=include_logs)
-    try:
-        dest = save_backup_to_path(encrypted, filename, config)
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Backup created but could not be saved to disk: {exc}",
-        ) from exc
-
-    if not download:
-        return JSONResponse({
-            "message": "Backup saved to the configured backup directory.",
-            "filename": dest.name,
-            "size_bytes": len(encrypted),
-        })
-
-    return Response(
-        content=encrypted,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@APP.get("/api/backup/list")
-async def api_backup_list(request: Request):
-    require_session(request)
-    config = load_config()
-    return JSONResponse({"backups": list_backups(config)})
-
-
-@APP.get("/api/backup/download/{filename}")
-async def api_backup_download(request: Request, filename: str):
-    require_session(request)
-    config = load_config()
-    path = get_backup_path(filename, config)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Backup not found.")
-    data = path.read_bytes()
-    return Response(
-        content=data,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@APP.post("/api/backup/preview")
-async def api_backup_preview(request: Request):
-    session = require_session(request)
-    require_csrf(request, session)
-
-    form = await request.form()
-    password = str(form.get("password", "")).strip()
-    upload = form.get("file")
-
-    if not password:
-        raise HTTPException(status_code=400, detail="Backup password is required.")
-    if upload is None or not hasattr(upload, "read"):
-        raise HTTPException(status_code=400, detail="No backup file uploaded.")
-
-    data = await upload.read()
-    if len(data) > _MAX_BACKUP_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail="Backup file is too large (max 100 MB).")
-
-    try:
-        manifest = validate_backup(data, password)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    return JSONResponse({"manifest": manifest})
-
-
-@APP.post("/api/backup/restore")
-async def api_backup_restore(request: Request):
-    session = require_session(request)
-    require_csrf(request, session)
-
-    form = await request.form()
-    password = str(form.get("password", "")).strip()
-    upload = form.get("file")
-
-    if not password:
-        raise HTTPException(status_code=400, detail="Backup password is required.")
-
-    if upload is None or not hasattr(upload, "read"):
-        raise HTTPException(status_code=400, detail="No backup file uploaded.")
-
-    data = await upload.read()
-    if len(data) > _MAX_BACKUP_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail="Backup file is too large (max 100 MB).")
-
-    try:
-        summary = restore_backup(data, password)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    LOGGER.info("Backup restored: %s", summary.get("restored", []))
-    return JSONResponse({
-        "message": "Backup restored successfully.",
-        "restored": summary.get("restored", []),
-        "warnings": summary.get("warnings", []),
-        "restart_required": True,
-    })
-
-
-@APP.delete("/api/backup/{filename}")
-async def api_backup_delete(request: Request, filename: str):
-    session = require_session(request)
-    require_csrf(request, session)
-
-    config = load_config()
-    if not delete_backup(filename, config):
-        raise HTTPException(status_code=404, detail="Backup not found.")
-    return JSONResponse({"message": "Backup deleted."})

@@ -8,12 +8,12 @@ import sys
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 
 from config_loader import load_json_config
-from log_parser import parse_weekly_log_file
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
+from measurement_repository import load_measurement_entries
+from measurement_store import record_notification_event
 from push_notifications import send_ntfy_event, send_webhook_event
 from reporting import build_report_html, resolve_report_theme_id
 
@@ -30,7 +30,7 @@ def load_config() -> dict:
     return load_json_config(__file__)
 
 
-def _load_previous_week_entries(log_dir: Path, current_week: int) -> list[dict]:
+def _load_previous_week_entries(entries: list[dict], current_week: int) -> list[dict]:
     candidates: list[int]
     if current_week <= 1:
         candidates = [53, 52]
@@ -38,10 +38,9 @@ def _load_previous_week_entries(log_dir: Path, current_week: int) -> list[dict]:
         candidates = [current_week - 1]
 
     for week in candidates:
-        path = log_dir / f"speed_log_week_{week}.txt"
-        entries = parse_weekly_log_file(path)
-        if entries:
-            return entries
+        matching = [entry for entry in entries if entry["timestamp"].isocalendar()[1] == week]
+        if matching:
+            return matching
     return []
 
 
@@ -59,6 +58,7 @@ def send_email(config: dict, subject: str, body_html: str) -> bool:
     message.attach(MIMEText(body_html, "html", "utf-8"))
 
     try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         if mail.smtp_port == 465:
             server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
         else:
@@ -81,16 +81,15 @@ def send_email(config: dict, subject: str, body_html: str) -> bool:
 
 def main() -> int:
     config = load_config()
-    script_dir = Path(__file__).parent
-    log_dir = script_dir / config.get("paths", {}).get("log_directory", "Log")
+    all_entries = load_measurement_entries(config)
 
     week_num = get_iso_week()
-    entries = parse_weekly_log_file(log_dir / f"speed_log_week_{week_num}.txt")
+    entries = [entry for entry in all_entries if entry["timestamp"].isocalendar()[1] == week_num]
     if not entries:
         log.warning("No speed test data found for week %s", week_num)
         return 1
 
-    previous_entries = _load_previous_week_entries(log_dir, week_num)
+    previous_entries = _load_previous_week_entries(all_entries, week_num)
     theme_id = resolve_report_theme_id(config)
 
     report_title = f"Weekly Speed Report - Week {week_num}"
@@ -116,6 +115,7 @@ def main() -> int:
         from state_store import log_notification
 
         log_notification("email", "weekly_report", summary)
+        record_notification_event("email", "weekly_report", summary)
 
         webhook_success = send_webhook_event(
             config,
@@ -137,8 +137,10 @@ def main() -> int:
 
         if webhook_success:
             log_notification("webhook", "weekly_report", summary)
+            record_notification_event("webhook", "weekly_report", summary)
         if ntfy_success:
             log_notification("ntfy", "weekly_report", summary)
+            record_notification_event("ntfy", "weekly_report", summary)
     except Exception:
         pass
 

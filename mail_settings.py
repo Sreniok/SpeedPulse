@@ -6,6 +6,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from measurement_store import get_app_secret
+
 
 @dataclass
 class MailSettings:
@@ -24,12 +26,12 @@ def load_mail_settings(config: dict) -> MailSettings:
     smtp_server = os.getenv("SMTP_SERVER", email_cfg.get("smtp_server", ""))
     smtp_port = int(os.getenv("SMTP_PORT", str(email_cfg.get("smtp_port", 465))))
     smtp_username = os.getenv("SMTP_USERNAME", email_cfg.get("from", ""))
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    smtp_password = get_app_secret("smtp_password") or os.getenv("SMTP_PASSWORD", "")
     from_addr = os.getenv("EMAIL_FROM", email_cfg.get("from", smtp_username))
     to_addr = os.getenv("EMAIL_TO", email_cfg.get("to", ""))
 
     if not smtp_password:
-        raise RuntimeError("SMTP_PASSWORD is required (set it in .env)")
+        raise RuntimeError("SMTP password is required (set it in Settings or SMTP_PASSWORD in .env)")
 
     if not smtp_username:
         raise RuntimeError("SMTP_USERNAME is required (set it in .env)")

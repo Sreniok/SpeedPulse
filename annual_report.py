@@ -14,7 +14,8 @@ from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
-from log_parser import load_all_log_entries
+from config_loader import resolve_config_path, resolve_runtime_path
+from measurement_repository import load_measurement_entries
 
 try:
     import matplotlib.dates as mdates
@@ -30,9 +31,9 @@ except ImportError as e:
 
 # Configuration
 SCRIPT_DIR: Path = Path(__file__).parent.absolute()
-LOG_DIR: Path = SCRIPT_DIR / "Log"
-IMAGES_DIR: Path = SCRIPT_DIR / "Images"
-CONFIG_FILE: Path = SCRIPT_DIR / "config.json"
+LOG_DIR: Path = resolve_runtime_path(__file__, "Log")
+IMAGES_DIR: Path = resolve_runtime_path(__file__, "Images")
+CONFIG_FILE: Path = resolve_config_path(__file__)
 
 # Colors
 GREEN = '\033[0;32m'
@@ -72,7 +73,8 @@ def load_all_logs() -> pd.DataFrame:
     """Load all available log files."""
     print_info("Loading log files...")
 
-    all_entries: list[dict] = load_all_log_entries(LOG_DIR)
+    config = load_config()
+    all_entries: list[dict] = load_measurement_entries(config)
     if not all_entries:
         print("No valid data found in logs!")
         return pd.DataFrame()

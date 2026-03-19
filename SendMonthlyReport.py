@@ -8,12 +8,12 @@ import sys
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 
 from config_loader import load_json_config
-from log_parser import load_all_log_entries
 from logger_setup import get_logger
 from mail_settings import load_mail_settings
+from measurement_repository import load_measurement_entries
+from measurement_store import record_notification_event
 from push_notifications import send_ntfy_event, send_webhook_event
 from reporting import build_report_html, resolve_report_theme_id
 
@@ -56,6 +56,7 @@ def send_email(config: dict, subject: str, body_html: str) -> bool:
     message.attach(MIMEText(body_html, "html", "utf-8"))
 
     try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         if mail.smtp_port == 465:
             server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
         else:
@@ -78,10 +79,8 @@ def send_email(config: dict, subject: str, body_html: str) -> bool:
 
 def main() -> int:
     config = load_config()
-    script_dir = Path(__file__).parent
-    log_dir = script_dir / config.get("paths", {}).get("log_directory", "Log")
 
-    all_entries = load_all_log_entries(log_dir)
+    all_entries = load_measurement_entries(config)
     month_start, month_end = _month_window()
     previous_start, previous_end = _previous_month_window(month_start)
 
@@ -113,6 +112,7 @@ def main() -> int:
         from state_store import log_notification
 
         log_notification("email", "monthly_report", summary)
+        record_notification_event("email", "monthly_report", summary)
 
         webhook_success = send_webhook_event(
             config,
@@ -134,8 +134,10 @@ def main() -> int:
 
         if webhook_success:
             log_notification("webhook", "monthly_report", summary)
+            record_notification_event("webhook", "monthly_report", summary)
         if ntfy_success:
             log_notification("ntfy", "monthly_report", summary)
+            record_notification_event("ntfy", "monthly_report", summary)
     except Exception:
         pass
 

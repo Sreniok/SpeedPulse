@@ -404,7 +404,11 @@
   --chart-loss: color-mix(in srgb, var(--theme-secondary) 30%, #ffd46b 70%);
   --chart-loss-fill: color-mix(in srgb, var(--chart-loss) 10%, transparent);
   --chart-label: var(--muted);
-  --chart-label-strong: color-mix(in srgb, var(--theme-text) 84%, var(--theme-bg) 16%);
+  --chart-label-strong: color-mix(
+    in srgb,
+    var(--theme-text) 84%,
+    var(--theme-bg) 16%
+  );
   --chart-grid: color-mix(in srgb, var(--theme-text) 5%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 5%, transparent);
   --hover-accent-strength: 20%;
@@ -471,7 +475,11 @@
   --chart-loss: color-mix(in srgb, var(--theme-secondary) 22%, #ca8a04 78%);
   --chart-loss-fill: color-mix(in srgb, var(--chart-loss) 10%, transparent);
   --chart-label: var(--muted);
-  --chart-label-strong: color-mix(in srgb, var(--theme-text) 76%, var(--theme-bg) 24%);
+  --chart-label-strong: color-mix(
+    in srgb,
+    var(--theme-text) 76%,
+    var(--theme-bg) 24%
+  );
   --chart-grid: color-mix(in srgb, var(--theme-text) 6%, transparent);
   --thead: color-mix(in srgb, var(--theme-text) 4%, transparent);
   --hover-accent-strength: 14%;
@@ -735,8 +743,7 @@
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color:
-    color-mix(in srgb, var(--accent) 42%, var(--surface-strong))
+  scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--surface-strong))
     color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
 }
 
@@ -753,21 +760,19 @@
 *::-webkit-scrollbar-thumb {
   border-radius: 999px;
   border: 2px solid color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent) 58%, var(--theme-secondary) 42%),
-      color-mix(in srgb, var(--accent) 42%, var(--surface-strong) 58%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 58%, var(--theme-secondary) 42%),
+    color-mix(in srgb, var(--accent) 42%, var(--surface-strong) 58%)
+  );
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent) 72%, var(--theme-secondary) 28%),
-      color-mix(in srgb, var(--accent) 54%, var(--surface-strong) 46%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 72%, var(--theme-secondary) 28%),
+    color-mix(in srgb, var(--accent) 54%, var(--surface-strong) 46%)
+  );
 }
 
 *::-webkit-scrollbar-corner {
@@ -789,17 +794,30 @@ body {
   background:
     repeating-linear-gradient(
       -32deg,
-      color-mix(in srgb, var(--muted) var(--premium-texture-opacity), transparent) 0 1px,
+      color-mix(
+          in srgb,
+          var(--muted) var(--premium-texture-opacity),
+          transparent
+        )
+        0 1px,
       transparent 1px 11px
     ),
     radial-gradient(
       900px 500px at 0% 0%,
-      color-mix(in srgb, var(--chart-download) var(--premium-glow-soft), transparent),
+      color-mix(
+        in srgb,
+        var(--chart-download) var(--premium-glow-soft),
+        transparent
+      ),
       transparent 45%
     ),
     radial-gradient(
       820px 420px at 100% 0%,
-      color-mix(in srgb, var(--accent) var(--premium-glow-strength), transparent),
+      color-mix(
+        in srgb,
+        var(--accent) var(--premium-glow-strength),
+        transparent
+      ),
       transparent 40%
     ),
     linear-gradient(180deg, var(--bg), var(--bg-alt));
@@ -979,13 +997,21 @@ select {
   background:
     radial-gradient(
       120% 85% at -8% 0%,
-      color-mix(in srgb, var(--accent) var(--premium-glow-strength), transparent),
+      color-mix(
+        in srgb,
+        var(--accent) var(--premium-glow-strength),
+        transparent
+      ),
       transparent 52%
     ),
     linear-gradient(
       180deg,
       color-mix(in srgb, var(--surface) 86%, var(--bg) 14%),
-      color-mix(in srgb, var(--surface-soft) 92%, var(--bg) var(--premium-surface-depth))
+      color-mix(
+        in srgb,
+        var(--surface-soft) 92%,
+        var(--bg) var(--premium-surface-depth)
+      )
     );
   backdrop-filter: blur(18px);
   display: flex;
@@ -1009,12 +1035,15 @@ select {
       var(--border-strong) var(--premium-border-strong-mix),
       transparent
     );
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface) 95%, white var(--premium-sheen-strength)),
-      color-mix(in srgb, var(--surface) 92%, var(--bg) var(--premium-surface-depth))
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 95%, white var(--premium-sheen-strength)),
+    color-mix(
+      in srgb,
+      var(--surface) 92%,
+      var(--bg) var(--premium-surface-depth)
+    )
+  );
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
   transition:
@@ -1045,11 +1074,8 @@ select {
     );
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
-      0 18px 38px color-mix(
-        in srgb,
-        var(--bg) var(--hover-shadow-alpha),
-        transparent
-      );
+      0 18px 38px
+        color-mix(in srgb, var(--bg) var(--hover-shadow-alpha), transparent);
   }
 
   .btn-primary:hover,
@@ -1311,11 +1337,8 @@ select {
     var(--surface-soft) var(--hover-surface-strength),
     var(--surface)
   );
-  box-shadow: 0 8px 18px color-mix(
-    in srgb,
-    var(--bg) var(--hover-nav-shadow-alpha),
-    transparent
-  );
+  box-shadow: 0 8px 18px
+    color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
   transform: translateY(-0.5px);
 }
 
@@ -1324,7 +1347,8 @@ select {
   box-shadow:
     0 0 0 3px var(--focus-ring-glow),
     0 0 0 1px var(--focus-ring),
-    0 8px 18px color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
+    0 8px 18px
+      color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
 }
 
 .nav-link.active {
@@ -1534,17 +1558,34 @@ select {
   background:
     radial-gradient(
       110% 120% at 100% 0%,
-      color-mix(in srgb, var(--accent) var(--premium-glow-strength), transparent),
+      color-mix(
+        in srgb,
+        var(--accent) var(--premium-glow-strength),
+        transparent
+      ),
       transparent 55%
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface) 95%, white var(--premium-sheen-strength)),
-      color-mix(in srgb, var(--surface) 92%, var(--bg) var(--premium-surface-depth))
+      color-mix(
+        in srgb,
+        var(--surface) 95%,
+        white var(--premium-sheen-strength)
+      ),
+      color-mix(
+        in srgb,
+        var(--surface) 92%,
+        var(--bg) var(--premium-surface-depth)
+      )
     );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
-    0 16px 34px color-mix(in srgb, var(--bg) var(--premium-elev-shadow-alpha), transparent);
+    0 16px 34px
+      color-mix(
+        in srgb,
+        var(--bg) var(--premium-elev-shadow-alpha),
+        transparent
+      );
 }
 
 .topbar-compact {
@@ -1772,8 +1813,16 @@ select {
   -moz-appearance: none;
   padding-right: 2.15rem;
   background-image:
-    linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%),
-    linear-gradient(135deg, color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%, transparent 50%),
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text) 70%, var(--accent) 30%) 50%,
+      transparent 50%
+    ),
     linear-gradient(
       180deg,
       color-mix(in srgb, var(--surface-strong) 94%, white 6%),
@@ -2140,7 +2189,7 @@ input:hover {
     var(--accent) 52%,
     var(--accent-strong)
   );
-  font-weight: 820;
+  font-weight: 750;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
     0 16px 32px color-mix(in srgb, var(--accent) 24%, transparent);
@@ -2669,7 +2718,12 @@ button:active,
     var(--surface);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 7%, transparent),
-    0 14px 30px color-mix(in srgb, var(--bg) var(--premium-elev-shadow-alpha), transparent);
+    0 14px 30px
+      color-mix(
+        in srgb,
+        var(--bg) var(--premium-elev-shadow-alpha),
+        transparent
+      );
   transition:
     border-color var(--motion-duration-base) var(--motion-ease-standard),
     transform var(--motion-duration-base) var(--motion-ease-standard),
@@ -2819,7 +2873,8 @@ button:active,
     );
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
-      0 16px 30px color-mix(in srgb, var(--bg) var(--hover-shadow-alpha), transparent);
+      0 16px 30px
+        color-mix(in srgb, var(--bg) var(--hover-shadow-alpha), transparent);
   }
 }
 
@@ -3163,12 +3218,11 @@ button:active,
   padding: var(--space-4);
   border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--border-strong) 84%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-strong) 95%, white 5%),
-      color-mix(in srgb, var(--surface) 94%, var(--bg) 6%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 95%, white 5%),
+    color-mix(in srgb, var(--surface) 94%, var(--bg) 6%)
+  );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
     0 10px 22px color-mix(in srgb, var(--bg) 16%, transparent);
@@ -3357,7 +3411,12 @@ button:active,
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, white calc(var(--premium-sheen-strength) + 2%), transparent) 0%,
+      color-mix(
+          in srgb,
+          white calc(var(--premium-sheen-strength) + 2%),
+          transparent
+        )
+        0%,
       transparent 32%
     ),
     radial-gradient(
@@ -3534,12 +3593,11 @@ button:active,
   left: 0.55rem;
   width: 3px;
   border-radius: 999px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent) 86%, white 14%),
-      color-mix(in srgb, var(--chart-download) 72%, var(--accent) 28%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 86%, white 14%),
+    color-mix(in srgb, var(--chart-download) 72%, var(--accent) 28%)
+  );
   opacity: 0;
   transform: scaleY(0.25);
   transform-origin: top;
@@ -3951,11 +4009,8 @@ button:active,
     var(--surface-soft) var(--hover-surface-strength),
     var(--surface)
   );
-  box-shadow: 0 8px 18px color-mix(
-    in srgb,
-    var(--bg) var(--hover-nav-shadow-alpha),
-    transparent
-  );
+  box-shadow: 0 8px 18px
+    color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
 }
 
 .nav-link-section:focus-visible {
@@ -3963,7 +4018,8 @@ button:active,
   box-shadow:
     0 0 0 3px var(--focus-ring-glow),
     0 0 0 1px var(--focus-ring),
-    0 8px 18px color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
+    0 8px 18px
+      color-mix(in srgb, var(--bg) var(--hover-nav-shadow-alpha), transparent);
 }
 
 .nav-link-section.active {
@@ -4243,6 +4299,13 @@ button:active,
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.panel-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .panel-head-clickable {
@@ -4658,15 +4721,19 @@ button:active,
   -webkit-overflow-scrolling: touch;
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-strong) 96%, white 4%),
-      color-mix(in srgb, var(--surface) 96%, var(--bg) 4%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 96%, white 4%),
+    color-mix(in srgb, var(--surface) 96%, var(--bg) 4%)
+  );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
-    0 14px 30px color-mix(in srgb, var(--bg) var(--premium-elev-shadow-alpha), transparent);
+    0 14px 30px
+      color-mix(
+        in srgb,
+        var(--bg) var(--premium-elev-shadow-alpha),
+        transparent
+      );
 }
 
 table {
@@ -4708,7 +4775,8 @@ th.sortable.sort-desc::after {
 td {
   font-size: 0.94rem;
   color: var(--text);
-  transition: background-color var(--motion-duration-fast) var(--motion-ease-standard);
+  transition: background-color var(--motion-duration-fast)
+    var(--motion-ease-standard);
 }
 
 tbody tr:hover td {
