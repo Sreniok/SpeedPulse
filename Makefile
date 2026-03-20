@@ -7,9 +7,9 @@ up: setup
 # Create missing files so Docker bind mounts work correctly
 setup:
 	@[ -f .env ] || (cp .env.example .env && echo "✔ Created .env from .env.example — edit it with your credentials")
-	@[ -f config.json ] || (cp config.example.json config.json && echo "✔ Created config.json from config.example.json")
-	@mkdir -p Log Images Archive
-	@touch cron.log errors.log last_alert.txt chart_base64.txt
+	@mkdir -p data/Log data/Images data/Archive data/Backups
+	@[ -f data/config.json ] || (cp config.example.json data/config.json && echo "✔ Created data/config.json from config.example.json")
+	@touch data/cron.log data/errors.log data/last_alert.txt data/chart_base64.txt
 
 # Stop services
 down:
@@ -26,5 +26,5 @@ password:
 # Remove all runtime data (keeps config and .env)
 clean:
 	docker compose down -v
-	rm -rf Log/* Images/* Archive/*
-	rm -f cron.log errors.log last_alert.txt chart_base64.txt
+	rm -rf data/Log/* data/Images/* data/Archive/* data/Backups/*
+	rm -f data/cron.log data/errors.log data/last_alert.txt data/chart_base64.txt

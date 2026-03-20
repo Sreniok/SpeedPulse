@@ -1,18 +1,16 @@
 #!/bin/bash
-# Cross-Platform Deployment Script
-# Deploy Speedtest project from NAS to Ubuntu Server
-# Works on: macOS, Linux (Ubuntu), Windows (Git Bash/WSL)
+# Cross-platform Docker-first deployment script for SpeedPulse.
 
-set -e  # Exit on error
+set -euo pipefail
 
 # ============================================================================
 # CONFIGURATION - Edit these variables for your setup
 # ============================================================================
 
-# Ubuntu server details (override via env vars or be prompted)
+# Remote server details (override via env vars or be prompted)
 SERVER_USER="${DEPLOY_USER:-}"
 SERVER_HOST="${DEPLOY_HOST:-}"
-SERVER_PATH="${DEPLOY_PATH:-~/scripts/Speedtest}"
+SERVER_PATH="${DEPLOY_PATH:-~/speedpulse}"
 
 # Source path (current directory)
 SOURCE_PATH="$(cd "$(dirname "$0")" && pwd)"
@@ -21,6 +19,14 @@ SOURCE_PATH="$(cd "$(dirname "$0")" && pwd)"
 EXCLUDE_PATTERNS=(
     "__pycache__"
     "*.pyc"
+    ".git"
+    ".venv"
+    ".venv-*"
+    ".mypy_cache"
+    ".pytest_cache"
+    ".ruff_cache"
+    ".env"
+    ".env.*"
     ".encryption_key"
     "credentials.enc"
     "*.log"
@@ -30,8 +36,11 @@ EXCLUDE_PATTERNS=(
     ".DS_Store"
     "*.bak"
     "config.json.bak"
+    "data/"
     "Log/"
     "Images/"
+    "Archive/"
+    "docker-compose.yml.save"
 )
 
 # ============================================================================
@@ -49,7 +58,7 @@ NC='\033[0m' # No Color
 
 print_header() {
     echo -e "\n${BLUE}========================================${NC}"
-    echo -e "${BLUE}  Speedtest Deployment Tool${NC}"
+    echo -e "${BLUE}  SpeedPulse Deployment Tool${NC}"
     echo -e "${BLUE}========================================${NC}\n"
 }
 
@@ -189,6 +198,10 @@ show_next_steps() {
     echo -e "${GREEN}========================================${NC}"
     echo ""
     echo "Files synchronized to: ${SERVER_USER}@${SERVER_HOST}:${SERVER_PATH}"
+    echo ""
+    echo "Next steps on the server:"
+    echo "  cd ${SERVER_PATH}"
+    echo "  ./quickstart.sh"
     echo ""
 }
 

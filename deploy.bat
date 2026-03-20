@@ -3,7 +3,7 @@ REM Windows Deployment Script (Wrapper)
 REM This script runs deploy.sh using Git Bash or WSL
 
 echo ========================================
-echo   Speedtest Deployment Tool (Windows)
+echo   SpeedPulse Deployment Tool (Windows)
 echo ========================================
 echo.
 

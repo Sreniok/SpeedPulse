@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-label="SpeedPulse architecture diagram">
+  <style>
+    .bg { fill: #f5f7fb; }
+    .title { font: 700 28px sans-serif; fill: #132238; }
+    .subtitle { font: 400 15px sans-serif; fill: #41556f; }
+    .box { fill: #ffffff; stroke: #204a78; stroke-width: 2; rx: 18; }
+    .accent { fill: #eaf4ff; stroke: #2d6fb7; stroke-width: 2; rx: 18; }
+    .label { font: 700 18px sans-serif; fill: #15304d; }
+    .copy { font: 400 14px sans-serif; fill: #425a73; }
+    .arrow { stroke: #2d6fb7; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2d6fb7" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="980" height="560" />
+  <text class="title" x="52" y="56">SpeedPulse Architecture</text>
+  <text class="subtitle" x="52" y="84">Docker-first self-hosted internet monitoring with FastAPI, APScheduler, and PostgreSQL.</text>
+
+  <rect class="accent" x="70" y="140" width="220" height="100" rx="18" />
+  <text class="label" x="98" y="180">init</text>
+  <text class="copy" x="98" y="208">Creates .env and data/</text>
+
+  <rect class="box" x="380" y="140" width="220" height="100" rx="18" />
+  <text class="label" x="408" y="180">postgres</text>
+  <text class="copy" x="408" y="208">Measurements and runtime state</text>
+
+  <rect class="box" x="690" y="140" width="220" height="100" rx="18" />
+  <text class="label" x="718" y="180">migrate</text>
+  <text class="copy" x="718" y="208">Schema setup and log import</text>
+
+  <rect class="box" x="220" y="340" width="240" height="110" rx="18" />
+  <text class="label" x="248" y="382">dashboard</text>
+  <text class="copy" x="248" y="410">FastAPI UI, health, auth, settings</text>
+
+  <rect class="box" x="540" y="340" width="240" height="110" rx="18" />
+  <text class="label" x="568" y="382">scheduler</text>
+  <text class="copy" x="568" y="410">Scheduled tests, reports, maintenance</text>
+
+  <rect class="accent" x="360" y="470" width="280" height="60" rx="18" />
+  <text class="label" x="388" y="507">host data/</text>
+  <text class="copy" x="508" y="507">config, logs, images, archives, backups</text>
+
+  <path class="arrow" d="M290 190 L380 190" />
+  <path class="arrow" d="M600 190 L690 190" />
+  <path class="arrow" d="M490 240 L490 340" />
+  <path class="arrow" d="M740 240 L740 340" />
+  <path class="arrow" d="M340 450 L440 470" />
+  <path class="arrow" d="M660 450 L560 470" />
+</svg>

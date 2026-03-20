@@ -2,12 +2,27 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/Sreniok/speedpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/Sreniok/speedpulse/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Sreniok/SpeedPulse)](https://github.com/Sreniok/SpeedPulse/releases)
+[![GHCR](https://img.shields.io/badge/GHCR-package-2088FF?logo=github)](https://github.com/Sreniok/SpeedPulse/pkgs/container/speedpulse)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org)
 
 SpeedPulse is a self-hosted internet monitoring tool with a FastAPI dashboard, scheduled speed tests, alerts, weekly/monthly reporting, encrypted backups, and a Docker-first deployment model.
 
 It is designed as a strong portfolio project for Cloud / Platform / DevOps-style roles: containerized services, health semantics, CI quality gates, non-root runtime, and explicit data persistence.
+
+## Who It Is For
+
+- Self-hosters who want a small dashboard for internet quality monitoring
+- People who want scheduled speed tests with history and reporting
+- Recruiters, hiring managers, or engineers reviewing a Docker-first portfolio project
+
+## What It Does Not Do
+
+- It is not a multi-tenant SaaS product
+- It is not a large-scale observability platform
+- It does not include cloud-managed deployment templates by default
+- It does not send email until SMTP is configured
 
 ## What It Does
 
@@ -24,8 +39,11 @@ It is designed as a strong portfolio project for Cloud / Platform / DevOps-style
 ```bash
 mkdir speedpulse && cd speedpulse
 curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
+export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.1.9
 docker compose up -d
 ```
+
+Skip `export SPEEDPULSE_IMAGE=...` if you want the latest published image instead of a pinned release tag.
 
 ### Option B: Build from source
 
@@ -51,6 +69,12 @@ The stack now also starts:
 - `postgres`: measurement database
 - `migrate`: schema + legacy log importer
 
+If you cloned this repo locally, you can also use:
+
+```bash
+./quickstart.sh
+```
+
 ## First-Time Setup
 
 1. Open `http://localhost:8000`
@@ -58,6 +82,21 @@ The stack now also starts:
 3. Go to `Settings`
 4. Configure thresholds, schedule, account details, and notifications
 5. Set `SMTP_PASSWORD` in `.env` if you want email alerts/reports
+
+## Demo
+
+Suggested screenshots to add before broad public sharing:
+
+- Login page
+- Dashboard overview
+- Historical charts
+- Settings page
+
+If you add images later, place them in a small `docs/` or `assets/` folder and link them from this section.
+
+Architecture diagram:
+
+![SpeedPulse architecture](docs/architecture.svg)
 
 ## Architecture
 
@@ -165,6 +204,27 @@ make logs
 make password
 ```
 
+## Troubleshooting
+
+- If `docker compose up -d` fails on first run, run `make setup` and try again
+- If `/ready` shows an email warning, set `SMTP_PASSWORD` in `.env` or configure it in Settings
+- If the dashboard is not reachable, check `docker compose logs -f dashboard`
+- If database startup is slow on first boot, wait for `postgres` and `migrate` to finish before retrying
+
+## Upgrading
+
+- Back up your `data/` directory and `.env` before changing versions
+- Pull the new code or deployment file
+- Rebuild and restart with `docker compose up -d --build`
+- Check `http://localhost:8000/ready` after upgrade
+
+## Releases
+
+- Current release target: `v1.1.9`
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Release draft: [RELEASE_NOTES_v1.1.9.md](RELEASE_NOTES_v1.1.9.md)
+- Short GitHub release body: [RELEASE_DESCRIPTION_v1.1.9.md](RELEASE_DESCRIPTION_v1.1.9.md)
+
 ## Important Files
 
 - `.env`: auth, secrets, SMTP password, deployment overrides
@@ -188,10 +248,9 @@ python3 rotate_logs.py
 
 ## Roadmap
 
-- Split `web/app.py` into route/service/storage modules
-- Replace the lightweight migration runner with a fuller migration workflow if schema complexity grows
-- Add OpenTelemetry / structured metrics export
-- Add Kubernetes manifests / Helm chart for cluster deployment
+- `v1.2.x`: split `web/app.py` into smaller route/service/storage modules
+- `v1.3.x`: improve migrations and backup/restore ergonomics as schema complexity grows
+- `v1.4.x`: add structured metrics and broader deployment targets such as Kubernetes or Helm
 
 ## License
 

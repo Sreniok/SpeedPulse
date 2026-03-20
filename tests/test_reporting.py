@@ -47,12 +47,14 @@ def test_build_report_html_includes_inline_charts() -> None:
         generated_at=datetime(2026, 3, 19, 16, 41),
     )
 
-    assert 'class="chart-grid"' in html
-    assert "Throughput trend" in html
-    assert "Latency trend" in html
+    assert 'class="charts-grid"' in html
+    assert "Download / Upload" in html
+    assert "Ping / Jitter" in html
+    assert "Threshold breaches" in html
     assert 'class="report-chart"' in html
     assert "Download floor" in html
     assert "Ping ceiling" in html
+    assert "Theme github-dark" not in html
 
 
 def test_build_report_html_shows_empty_chart_state_without_entries() -> None:
@@ -74,5 +76,5 @@ def test_build_report_html_shows_empty_chart_state_without_entries() -> None:
         generated_at=datetime(2026, 3, 19, 16, 41),
     )
 
-    assert html.count("No test data available for this range.") == 2
+    assert html.count("No test data available for this range.") == 3
     assert "No test data in this range yet." in html

@@ -4,9 +4,17 @@ __pycache__/
 *.pyd
 .git/
 .gitignore
+.DS_Store
 .env
+.env.*
+.venv/
+.venv-*/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 credentials.enc
 .encryption_key
+data/
 Log/
 Images/
 Archive/

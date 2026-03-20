@@ -3,6 +3,7 @@
 # Quick start:
 #   mkdir speedpulse && cd speedpulse
 #   curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
+#   export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.1.9   # optional: pin a specific tag
 #   docker compose up -d
 #
 # The "init" service runs once to create .env, data/config.json, etc.
@@ -10,7 +11,7 @@
 
 services:
   init:
-    image: ghcr.io/sreniok/speedpulse:latest
+    image: ${SPEEDPULSE_IMAGE:-ghcr.io/sreniok/speedpulse:latest}
     container_name: speedpulse-init
     restart: "no"
     entrypoint: ["/bin/sh", "/app/init.sh", "/workspace"]
@@ -26,14 +27,12 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
-    env_file:
-      - path: ./.env
-        required: false
+    entrypoint: ["/bin/sh", "-lc", "set -a; . /app/.env; set +a; exec docker-entrypoint.sh postgres"]
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB",
+          ". /app/.env && pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB",
         ]
       interval: 10s
       timeout: 5s
@@ -41,9 +40,10 @@ services:
       start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./.env:/app/.env
 
   migrate:
-    image: ghcr.io/sreniok/speedpulse:latest
+    image: ${SPEEDPULSE_IMAGE:-ghcr.io/sreniok/speedpulse:latest}
     container_name: speedpulse-migrate
     restart: "no"
     depends_on:
@@ -51,19 +51,17 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-    env_file:
-      - path: ./.env
-        required: false
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
       - APP_DATA_DIR=/app/data
-    command: ["python", "db_migrate.py", "--import-logs"]
+    command: ["sh", "-lc", "set -a; . /app/.env; set +a; exec python db_migrate.py --import-logs"]
     volumes:
       - ./data:/app/data
+      - ./.env:/app/.env
 
   dashboard:
-    image: ghcr.io/sreniok/speedpulse:latest
+    image: ${SPEEDPULSE_IMAGE:-ghcr.io/sreniok/speedpulse:latest}
     container_name: speedpulse-dashboard
     restart: unless-stopped
     user: "1000:1000"
@@ -83,13 +81,11 @@ services:
         limits:
           cpus: "1"
           memory: 512M
-    env_file:
-      - path: ./.env
-        required: false
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
       - APP_DATA_DIR=/app/data
+    command: ["sh", "-lc", "set -a; . /app/.env; set +a; exec uvicorn web.app:APP --host 0.0.0.0 --port 8000"]
     ports:
       - "${DASHBOARD_PORT:-8000}:8000"
     healthcheck:
@@ -109,7 +105,7 @@ services:
       - ./.env:/app/.env
 
   scheduler:
-    image: ghcr.io/sreniok/speedpulse:latest
+    image: ${SPEEDPULSE_IMAGE:-ghcr.io/sreniok/speedpulse:latest}
     container_name: speedpulse-scheduler
     restart: unless-stopped
     user: "1000:1000"
@@ -129,9 +125,6 @@ services:
         limits:
           cpus: "1"
           memory: 512M
-    env_file:
-      - path: ./.env
-        required: false
     environment:
       - TZ=${TZ:-UTC}
       - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
@@ -139,7 +132,7 @@ services:
       - HEALTH_CHECK_TIME=${HEALTH_CHECK_TIME:-07:00}
       - LOG_ROTATION_TIME=${LOG_ROTATION_TIME:-02:00}
       - RUN_STARTUP_SPEEDTEST=${RUN_STARTUP_SPEEDTEST:-false}
-    command: ["python", "scheduler_service.py"]
+    command: ["sh", "-lc", "set -a; . /app/.env; set +a; exec python scheduler_service.py"]
     volumes:
       - ./data:/app/data
       - ./.env:/app/.env

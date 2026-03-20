@@ -21,13 +21,12 @@ RUN apt-get update \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN groupadd --gid 1000 appgroup \
+    && useradd --uid 1000 --gid appgroup --create-home appuser
+
+COPY --chown=appuser:appgroup . .
 
 RUN chmod +x /app/docker-entrypoint.sh
-
-RUN groupadd --gid 1000 appgroup \
-    && useradd --uid 1000 --gid appgroup --create-home appuser \
-    && chown -R appuser:appgroup /app
 
 EXPOSE 8000
 

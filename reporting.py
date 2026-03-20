@@ -162,7 +162,44 @@ def _chart_polyline(values: list[float], left: float, top: float, width: float, 
     return " ".join(points)
 
 
+def _rolling_average(values: list[float], window: int = 5) -> list[float]:
+    if not values:
+        return []
+    safe_window = max(1, int(window))
+    averaged: list[float] = []
+    for index in range(len(values)):
+        start = max(0, index - safe_window + 1)
+        slice_values = values[start : index + 1]
+        averaged.append(round(sum(slice_values) / len(slice_values), 2))
+    return averaged
+
+
+def _chart_area_path(values: list[float], left: float, top: float, width: float, height: float, y_max: float) -> str:
+    if not values:
+        return ""
+
+    safe_y_max = max(y_max, 1.0)
+    if len(values) == 1:
+        x = left + (width / 2)
+        y = top + height - ((values[0] / safe_y_max) * height)
+        return (
+            f"M {x:.1f} {top + height:.1f} "
+            f"L {x:.1f} {y:.1f} "
+            f"L {x:.1f} {top + height:.1f} Z"
+        )
+
+    commands = [f"M {left:.1f} {top + height:.1f}"]
+    for index, value in enumerate(values):
+        x = left + (index * width / (len(values) - 1))
+        y = top + height - ((value / safe_y_max) * height)
+        commands.append(f"L {x:.1f} {y:.1f}")
+    commands.append(f"L {left + width:.1f} {top + height:.1f}")
+    commands.append("Z")
+    return " ".join(commands)
+
+
 def _build_chart_card(
+    eyebrow: str,
     title: str,
     subtitle: str,
     rows: list[dict],
@@ -173,8 +210,9 @@ def _build_chart_card(
 ) -> str:
     if not rows:
         return (
-            "<section class=\"chart-card\">"
-            f"<div class=\"chart-card-head\"><h3>{escape(title)}</h3><p>{escape(subtitle)}</p></div>"
+            "<section class=\"panel chart-panel\">"
+            f"<div class=\"panel-head\"><p class=\"eyebrow\">{escape(eyebrow)}</p><h2>{escape(title)}</h2>"
+            f"<p class=\"panel-subtext\">{escape(subtitle)}</p></div>"
             "<div class=\"chart-empty\">No test data available for this range.</div>"
             "</section>"
         )
@@ -238,11 +276,16 @@ def _build_chart_card(
     threshold_lines: list[str] = []
     legend_items: list[str] = []
     series_lines: list[str] = []
+    series_fills: list[str] = []
     for spec in plotted_series:
         color = str(spec["color"])
         label = str(spec["label"])
         values = list(spec["values"])
         polyline = _chart_polyline(values, left, top, width, height, y_max)
+        series_fills.append(
+            f"<path d=\"{_chart_area_path(values, left, top, width, height, y_max)}\" "
+            f"fill=\"{color}\" opacity=\"0.08\"></path>"
+        )
         series_lines.append(
             f"<polyline points=\"{polyline}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"3\" "
             "stroke-linecap=\"round\" stroke-linejoin=\"round\"></polyline>"
@@ -277,6 +320,20 @@ def _build_chart_card(
                 "</span>"
             )
 
+        trend_values = _rolling_average(values, 5)
+        if len(values) >= 3:
+            series_lines.append(
+                f"<polyline points=\"{_chart_polyline(trend_values, left, top, width, height, y_max)}\" "
+                f"fill=\"none\" stroke=\"{color}\" stroke-width=\"1.8\" stroke-dasharray=\"8 6\" "
+                "stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.7\"></polyline>"
+            )
+            legend_items.append(
+                "<span class=\"chart-legend-item\">"
+                f"<span class=\"chart-legend-swatch chart-legend-swatch-trend\" style=\"color:{color}\"></span>"
+                f"{escape(label)} trend"
+                "</span>"
+            )
+
     note = ""
     if len(rows) > sampled_count:
         note = f"Showing {sampled_count} sampled points from {len(rows)} tests."
@@ -287,15 +344,111 @@ def _build_chart_card(
         + "".join(grid_lines)
         + f"<line x1=\"{left:.1f}\" y1=\"{top + height:.1f}\" x2=\"{left + width:.1f}\" y2=\"{top + height:.1f}\" class=\"chart-axis\"></line>"
         + "".join(threshold_lines)
+        + "".join(series_fills)
         + "".join(series_lines)
         + "".join(x_labels)
         + "</svg>"
     )
 
     return (
-        "<section class=\"chart-card\">"
-        f"<div class=\"chart-card-head\"><h3>{escape(title)}</h3><p>{escape(subtitle)}</p></div>"
-        f"{svg}"
+        "<section class=\"panel chart-panel\">"
+        f"<div class=\"panel-head\"><p class=\"eyebrow\">{escape(eyebrow)}</p><h2>{escape(title)}</h2>"
+        f"<p class=\"panel-subtext\">{escape(subtitle)}</p></div>"
+        f"<div class=\"chart-wrap\">{svg}</div>"
+        f"<div class=\"chart-legend\">{''.join(legend_items)}</div>"
+        f"<p class=\"chart-note\">{escape(note)}</p>"
+        "</section>"
+    )
+
+
+def _build_breach_chart_card(
+    rows: list[dict],
+    *,
+    palette: dict[str, str],
+    items: list[dict[str, object]],
+) -> str:
+    if not rows:
+        return (
+            "<section class=\"panel chart-panel panel-wide\">"
+            "<div class=\"panel-head\"><p class=\"eyebrow\">Reliability</p><h2>Threshold breaches</h2>"
+            "<p class=\"panel-subtext\">Counts of tests outside your configured minimum and maximum values.</p></div>"
+            "<div class=\"chart-empty\">No test data available for this range.</div>"
+            "</section>"
+        )
+
+    left = 54.0
+    top = 18.0
+    width = 458.0
+    height = 172.0
+    total = max(1, len(items))
+    max_value = max((_as_number(item.get("value")) for item in items), default=0.0)
+    y_max = max(1.0, max_value * 1.25)
+
+    grid_lines: list[str] = []
+    for step in range(5):
+        ratio = step / 4
+        y = top + (height * ratio)
+        value = y_max * (1 - ratio)
+        grid_lines.append(
+            f"<line x1=\"{left:.1f}\" y1=\"{y:.1f}\" x2=\"{left + width:.1f}\" y2=\"{y:.1f}\" class=\"chart-grid-line\"></line>"
+        )
+        grid_lines.append(
+            f"<text x=\"{left - 10:.1f}\" y=\"{y + 4:.1f}\" class=\"chart-axis-label chart-axis-label-y\">{escape(_fmt(value, 0))}</text>"
+        )
+
+    step_width = width / total
+    bar_width = min(76.0, step_width * 0.58)
+    bars: list[str] = []
+    x_labels: list[str] = []
+    legend_items: list[str] = []
+    total_breaches = 0
+    for index, item in enumerate(items):
+        value = _as_number(item.get("value"))
+        color = str(item.get("color") or palette["accent"])
+        label = str(item.get("label") or "")
+        short_label = str(item.get("short_label") or label)
+        total_breaches += int(value)
+        x = left + (index * step_width) + ((step_width - bar_width) / 2)
+        bar_height = (value / y_max) * height if y_max > 0 else 0.0
+        y = top + height - bar_height
+        bars.append(
+            f"<rect x=\"{x:.1f}\" y=\"{y:.1f}\" width=\"{bar_width:.1f}\" height=\"{max(bar_height, 1.5):.1f}\" "
+            f"rx=\"12\" fill=\"{color}\" opacity=\"0.3\" stroke=\"{color}\" stroke-width=\"1.4\"></rect>"
+        )
+        bars.append(
+            f"<text x=\"{x + (bar_width / 2):.1f}\" y=\"{max(top + 12, y - 8):.1f}\" text-anchor=\"middle\" class=\"chart-axis-label chart-value-label\">{int(value)}</text>"
+        )
+        x_labels.append(
+            f"<text x=\"{x + (bar_width / 2):.1f}\" y=\"{top + height + 24:.1f}\" text-anchor=\"middle\" class=\"chart-axis-label\">{escape(short_label)}</text>"
+        )
+        legend_items.append(
+            "<span class=\"chart-legend-item\">"
+            f"<span class=\"chart-legend-swatch\" style=\"background:{color}\"></span>"
+            f"{escape(label)}"
+            "</span>"
+        )
+
+    note = (
+        f"{total_breaches} total breach event{'s' if total_breaches != 1 else ''} across this report window."
+        if total_breaches
+        else "No threshold breaches recorded in this range."
+    )
+
+    svg = (
+        "<svg class=\"report-chart\" viewBox=\"0 0 540 258\" role=\"img\" aria-label=\"Threshold breaches\">"
+        "<rect x=\"0.5\" y=\"0.5\" width=\"539\" height=\"257\" rx=\"16\" class=\"chart-frame\"></rect>"
+        + "".join(grid_lines)
+        + f"<line x1=\"{left:.1f}\" y1=\"{top + height:.1f}\" x2=\"{left + width:.1f}\" y2=\"{top + height:.1f}\" class=\"chart-axis\"></line>"
+        + "".join(bars)
+        + "".join(x_labels)
+        + "</svg>"
+    )
+
+    return (
+        "<section class=\"panel chart-panel panel-wide\">"
+        "<div class=\"panel-head\"><p class=\"eyebrow\">Reliability</p><h2>Threshold breaches</h2>"
+        "<p class=\"panel-subtext\">Counts of tests outside your configured minimum and maximum values.</p></div>"
+        f"<div class=\"chart-wrap\">{svg}</div>"
         f"<div class=\"chart-legend\">{''.join(legend_items)}</div>"
         f"<p class=\"chart-note\">{escape(note)}</p>"
         "</section>"
@@ -357,22 +510,23 @@ def build_report_html(
     ping_change_text, ping_change_tone = _metric_change(ping_avg, prev_ping_avg, False)
 
     throughput_chart = _build_chart_card(
-        "Throughput trend",
-        "Download and upload speeds across the selected report window.",
+        "Speed",
+        "Download / Upload",
+        "Download and upload speeds across the selected report window, with rolling trend lines and threshold markers.",
         rows,
         palette=palette,
         series=[
             {
                 "key": "download_mbps",
                 "label": "Download",
-                "color": palette["accent"],
+                "color": palette["good"],
                 "threshold": _as_number(thresholds.get("download_mbps")),
                 "threshold_label": "Download floor",
             },
             {
                 "key": "upload_mbps",
                 "label": "Upload",
-                "color": palette["good"],
+                "color": palette["accent"],
                 "threshold": _as_number(thresholds.get("upload_mbps")),
                 "threshold_label": "Upload floor",
             },
@@ -380,8 +534,9 @@ def build_report_html(
         y_unit=" Mbps",
     )
     latency_chart = _build_chart_card(
-        "Latency trend",
-        "Ping and jitter over time for the same report window.",
+        "Latency",
+        "Ping / Jitter",
+        "Ping and jitter readings across the same report window, with the configured ping ceiling overlaid.",
         rows,
         palette=palette,
         series=[
@@ -401,6 +556,36 @@ def build_report_html(
             },
         ],
         y_unit=" ms",
+    )
+    breach_chart = _build_breach_chart_card(
+        rows,
+        palette=palette,
+        items=[
+            {
+                "label": "Download below minimum",
+                "short_label": "Download",
+                "value": breaches_download,
+                "color": palette["good"],
+            },
+            {
+                "label": "Upload below minimum",
+                "short_label": "Upload",
+                "value": breaches_upload,
+                "color": palette["accent"],
+            },
+            {
+                "label": "Ping above maximum",
+                "short_label": "Ping",
+                "value": breaches_ping,
+                "color": palette["bad"],
+            },
+            {
+                "label": "Loss above maximum",
+                "short_label": "Loss",
+                "value": breaches_loss,
+                "color": palette["warn"],
+            },
+        ],
     )
 
     newest_first = list(reversed(rows[-rows_limit:]))
@@ -436,11 +621,45 @@ def build_report_html(
         )
 
     tests_displayed = min(len(rows), rows_limit)
-    rows_note = ""
-    if len(rows) > rows_limit:
-        rows_note = (
-            f"Showing the newest {tests_displayed} of {len(rows)} tests."
-        )
+    rows_note = f"Showing the newest {tests_displayed} measurement{'s' if tests_displayed != 1 else ''}."
+    if not rows:
+        rows_note = "No measurements logged in this report window yet."
+    elif len(rows) > rows_limit:
+        rows_note = f"Showing the newest {tests_displayed} of {len(rows)} tests."
+
+    account_name = escape(str(account.get("name", "N/A")))
+    account_number = str(account.get("number", "") or "").strip() or "N/A"
+    account_provider = str(account.get("provider", "") or "").strip() or "Provider not detected yet"
+    account_ip = str(account.get("ip_address", "") or "").strip() or "Not detected yet"
+    account_identity = (
+        f"{escape(account_provider)} · IP {escape(account_ip)} · Account {escape(account_number)}"
+    )
+    compliance_tone = "tone-good" if compliance >= 95 else "tone-muted" if compliance >= 80 else "tone-bad"
+    total_breaches = breaches_download + breaches_upload + breaches_ping + breaches_loss
+    breach_tone = "tone-good" if total_breaches == 0 else "tone-bad"
+    range_summary = f"{escape(range_label)} with {len(rows)} logged test{'s' if len(rows) != 1 else ''}."
+
+    threshold_chips = "".join(
+        [
+            f"<span class=\"info-chip\">DL min {_fmt(_as_number(thresholds.get('download_mbps')))} Mbps</span>",
+            f"<span class=\"info-chip\">UL min {_fmt(_as_number(thresholds.get('upload_mbps')))} Mbps</span>",
+            f"<span class=\"info-chip\">Ping max {_fmt(_as_number(thresholds.get('ping_ms')))} ms</span>",
+            f"<span class=\"info-chip\">Loss max {_fmt(_as_number(thresholds.get('packet_loss_percent')))}%</span>",
+        ]
+    )
+    breach_chips = "".join(
+        [
+            f"<span class=\"info-chip {('info-chip-good' if breaches_download == 0 else 'info-chip-bad')}\">Download {breaches_download}</span>",
+            f"<span class=\"info-chip {('info-chip-good' if breaches_upload == 0 else 'info-chip-bad')}\">Upload {breaches_upload}</span>",
+            f"<span class=\"info-chip {('info-chip-good' if breaches_ping == 0 else 'info-chip-bad')}\">Ping {breaches_ping}</span>",
+            f"<span class=\"info-chip {('info-chip-good' if breaches_loss == 0 else 'info-chip-bad')}\">Loss {breaches_loss}</span>",
+        ]
+    )
+    report_summary = (
+        f"{len(rows)} test{'s' if len(rows) != 1 else ''} recorded · "
+        f"{_fmt(compliance, 1)}% within your thresholds · "
+        f"{total_breaches} breach event{'s' if total_breaches != 1 else ''}"
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -451,107 +670,259 @@ def build_report_html(
   <style>
     :root {{
       color-scheme: light dark;
+      --bg: {palette['bg']};
+      --surface: {palette['surface']};
+      --surface-alt: {palette['surface_alt']};
+      --text: {palette['text']};
+      --muted: {palette['muted']};
+      --accent: {palette['accent']};
+      --good: {palette['good']};
+      --warn: {palette['warn']};
+      --bad: {palette['bad']};
+      --border: {palette['border']};
+      --shadow: {palette['shadow']};
+    }}
+    * {{
+      box-sizing: border-box;
+    }}
+    html {{
+      font-size: 16px;
     }}
     body {{
       margin: 0;
       padding: 24px;
-      background: radial-gradient(circle at top right, {palette['surface_alt']} 0%, {palette['bg']} 42%);
-      color: {palette['text']};
-      font: 15px/1.45 "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
+      background:
+        radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--good) 10%, transparent), transparent 48%),
+        radial-gradient(820px 420px at 100% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 44%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg) 96%, black 4%), var(--bg));
+      color: var(--text);
+      font: 15px/1.5 "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
     }}
-    .wrap {{
-      max-width: 1120px;
+    .report-shell {{
+      max-width: 1280px;
       margin: 0 auto;
-      background: linear-gradient(180deg, {palette['surface']} 0%, {palette['surface_alt']} 100%);
-      border: 1px solid {palette['border']};
-      border-radius: 20px;
-      padding: 24px;
-      box-shadow: {palette['shadow']};
+    }}
+    .topbar,
+    .panel,
+    .metric-card {{
+      background:
+        radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 58%),
+        linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white 4%), color-mix(in srgb, var(--surface) 92%, var(--bg) 8%));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }}
+    .topbar {{
+      border-radius: 26px;
+      padding: 22px 24px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
     }}
     .eyebrow {{
       margin: 0;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: {palette['muted']};
+      color: var(--muted);
     }}
-    h1 {{
-      margin: 6px 0 8px;
-      font-size: 34px;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
+    .topbar-copy {{
+      flex: 1 1 420px;
+      min-width: 0;
     }}
-    .meta {{
-      margin: 0 0 18px;
-      color: {palette['muted']};
-      font-size: 13px;
-    }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
-    }}
-    .card {{
-      border: 1px solid {palette['border']};
-      border-radius: 14px;
-      padding: 12px;
-      background: {palette['surface_alt']};
-    }}
-    .card h2 {{
+    .topbar-copy h1,
+    .panel-head h2 {{
       margin: 0;
-      font-size: 12px;
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+      font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+    }}
+    .topbar-copy h1 {{
+      margin-top: 8px;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      font-weight: 820;
+    }}
+    .topbar-text {{
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }}
+    .topbar-summary {{
+      margin: 12px 0 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 100%;
+      padding: 8px 12px;
+      border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface-alt) 82%, transparent);
+      color: var(--text);
+      font-size: 0.82rem;
       font-weight: 700;
-      color: {palette['muted']};
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }}
+    .topbar-meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-start;
+      justify-content: flex-end;
+      flex: 0 1 340px;
+      min-width: 0;
+    }}
+    .stat-pill {{
+      min-width: 150px;
+      padding: 12px 14px;
+      border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--surface-alt) 82%, transparent);
+    }}
+    .stat-pill span {{
+      display: block;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }}
-    .card p {{
+    .stat-pill strong {{
+      display: block;
+      margin-top: 6px;
+      font-size: 1.5rem;
+      font-weight: 820;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }}
+    .layout-stack {{
+      display: grid;
+      gap: 16px;
+      margin-top: 16px;
+    }}
+    .panel {{
+      border-radius: 24px;
+      padding: 20px;
+      min-width: 0;
+    }}
+    .panel-head {{
+      min-width: 0;
+    }}
+    .panel-head h2 {{
+      font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+      font-weight: 780;
+    }}
+    .panel-subtext {{
       margin: 8px 0 0;
-      font-size: 24px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      overflow-wrap: anywhere;
+    }}
+    .panel-head-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }}
+    .hero-metrics {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }}
+    .metric-card {{
+      border-radius: 22px;
+      padding: 16px;
+      min-width: 0;
+    }}
+    .metric-card h3 {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
     }}
-    .trend {{
-      margin-top: 5px;
-      font-size: 12px;
-      font-weight: 600;
+    .metric-value {{
+      margin: 10px 0 4px;
+      font-size: clamp(1.7rem, 2.8vw, 2.45rem);
+      font-weight: 820;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
     }}
-    .good {{ color: {palette['good']}; }}
-    .bad {{ color: {palette['bad']}; }}
-    .muted {{ color: {palette['muted']}; }}
-    .summary {{
-      border: 1px solid {palette['border']};
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 14px;
-      background: {palette['surface_alt']};
+    .metric-note {{
+      margin: 0;
+      font-size: 0.84rem;
+      font-weight: 700;
     }}
-    .chart-grid {{
+    .good,
+    .ok,
+    .tone-good {{ color: var(--good); }}
+    .bad,
+    .tone-bad {{ color: var(--bad); }}
+    .muted,
+    .tone-muted {{ color: var(--muted); }}
+    .account-grid {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
-      margin-bottom: 14px;
+      margin-top: 16px;
     }}
-    .chart-card {{
-      border: 1px solid {palette['border']};
-      border-radius: 14px;
-      padding: 12px;
-      background: {palette['surface_alt']};
+    .account-block {{
+      padding: 14px;
+      border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--surface-alt) 82%, transparent);
     }}
-    .chart-card-head {{
-      margin-bottom: 10px;
+    .account-label {{
+      display: block;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
     }}
-    .chart-card-head h3 {{
-      margin: 0;
-      font-size: 15px;
-      letter-spacing: -0.01em;
+    .account-copy {{
+      margin: 8px 0 0;
+      font-size: 0.96rem;
     }}
-    .chart-card-head p {{
-      margin: 4px 0 0;
-      color: {palette['muted']};
-      font-size: 12px;
+    .chip-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }}
+    .info-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+      background: color-mix(in srgb, var(--surface) 74%, transparent);
+      color: var(--text);
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }}
+    .info-chip-good {{
+      color: var(--good);
+    }}
+    .info-chip-bad {{
+      color: var(--bad);
+    }}
+    .charts-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }}
+    .panel-wide {{
+      grid-column: 1 / -1;
+    }}
+    .chart-wrap {{
+      margin-top: 14px;
     }}
     .report-chart {{
       width: 100%;
@@ -559,29 +930,33 @@ def build_report_html(
       display: block;
     }}
     .chart-frame {{
-      fill: {palette['surface']};
-      stroke: {palette['border']};
+      fill: color-mix(in srgb, var(--surface-alt) 92%, transparent);
+      stroke: var(--border);
     }}
     .chart-grid-line {{
-      stroke: {palette['border']};
+      stroke: var(--border);
       stroke-width: 1;
       opacity: 0.8;
     }}
     .chart-axis {{
-      stroke: {palette['muted']};
+      stroke: var(--muted);
       stroke-width: 1.2;
       opacity: 0.75;
     }}
     .chart-axis-label {{
-      fill: {palette['muted']};
+      fill: var(--muted);
       font-size: 11px;
       font-family: "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
     }}
     .chart-axis-label-y {{
       text-anchor: end;
     }}
+    .chart-value-label {{
+      fill: var(--text);
+      font-weight: 700;
+    }}
     .chart-legend {{
-      margin-top: 10px;
+      margin-top: 12px;
       display: flex;
       flex-wrap: wrap;
       gap: 8px 12px;
@@ -601,6 +976,13 @@ def build_report_html(
       display: inline-block;
       flex: 0 0 auto;
     }}
+    .chart-legend-swatch-trend {{
+      width: 14px;
+      height: 0;
+      border-top: 2px dashed currentColor;
+      border-radius: 0;
+      background: transparent !important;
+    }}
     .chart-legend-swatch-threshold {{
       width: 12px;
       height: 0;
@@ -610,7 +992,7 @@ def build_report_html(
     }}
     .chart-note {{
       margin: 10px 0 0;
-      color: {palette['muted']};
+      color: var(--muted);
       font-size: 12px;
     }}
     .chart-note:empty {{
@@ -618,45 +1000,49 @@ def build_report_html(
     }}
     .chart-empty {{
       min-height: 258px;
-      border: 1px dashed {palette['border']};
-      border-radius: 14px;
+      border: 1px dashed var(--border);
+      border-radius: 18px;
       display: grid;
       place-items: center;
-      color: {palette['muted']};
+      color: var(--muted);
       font-size: 13px;
       text-align: center;
       padding: 12px;
     }}
-    .summary b {{
-      color: {palette['accent']};
+    .table-wrap {{
+      margin-top: 14px;
+      overflow-x: auto;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-alt) 90%, transparent);
     }}
     table {{
       width: 100%;
       border-collapse: collapse;
-      overflow: hidden;
-      border-radius: 14px;
-      border: 1px solid {palette['border']};
       font-size: 13px;
     }}
     th, td {{
       text-align: left;
-      padding: 8px 10px;
-      border-bottom: 1px solid {palette['border']};
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
       vertical-align: top;
     }}
     th {{
-      background: {palette['accent_soft']};
-      color: {palette['text']};
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+      color: var(--text);
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }}
     tr:nth-child(even) td {{
-      background: {palette['surface_alt']};
+      background: color-mix(in srgb, var(--surface-alt) 72%, transparent);
+    }}
+    tr:last-child td {{
+      border-bottom: 0;
     }}
     .foot {{
       margin-top: 12px;
-      color: {palette['muted']};
+      color: var(--muted);
       font-size: 12px;
       display: flex;
       justify-content: space-between;
@@ -664,81 +1050,143 @@ def build_report_html(
       flex-wrap: wrap;
     }}
     @media (max-width: 900px) {{
-      body {{ padding: 10px; }}
-      .wrap {{ padding: 14px; border-radius: 16px; }}
-      .grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-      .chart-grid {{ grid-template-columns: 1fr; }}
-      h1 {{ font-size: 27px; }}
+      body {{ padding: 12px; }}
+      .topbar {{ padding: 18px; }}
+      .account-grid,
+      .charts-grid {{
+        grid-template-columns: 1fr;
+      }}
+      .panel-wide {{
+        grid-column: auto;
+      }}
+      .topbar-meta {{
+        justify-content: flex-start;
+      }}
     }}
   </style>
 </head>
 <body>
-  <article class="wrap">
-    <p class="eyebrow">SpeedPulse report</p>
-    <h1>{escape(report_title)}</h1>
-    <p class="meta">
-      {escape(range_label)} · Generated {escape(generated.strftime("%Y-%m-%d %H:%M"))} · Theme {escape(theme)}
-    </p>
-
-    <section class="grid">
-      <div class="card">
-        <h2>Total tests</h2>
-        <p>{len(rows)}</p>
+  <main class="report-shell">
+    <header class="topbar">
+      <div class="topbar-copy">
+        <p class="eyebrow">Performance report</p>
+        <h1>{escape(report_title)}</h1>
+        <p class="topbar-text">{escape(range_label)} · Generated {escape(generated.strftime("%Y-%m-%d %H:%M"))}</p>
+        <p class="topbar-summary">{escape(report_summary)}</p>
       </div>
-      <div class="card">
-        <h2>Download avg</h2>
-        <p>{_fmt(download_avg)} Mbps</p>
-        <div class="trend {dl_change_tone}">{escape(dl_change_text)}</div>
+      <div class="topbar-meta">
+        <div class="stat-pill">
+          <span>Total tests</span>
+          <strong>{len(rows)}</strong>
+        </div>
+        <div class="stat-pill">
+          <span>Compliance</span>
+          <strong class="{compliance_tone}">{_fmt(compliance, 1)}%</strong>
+        </div>
       </div>
-      <div class="card">
-        <h2>Upload avg</h2>
-        <p>{_fmt(upload_avg)} Mbps</p>
-        <div class="trend {ul_change_tone}">{escape(ul_change_text)}</div>
+    </header>
+
+    <div class="layout-stack">
+      <section class="panel account-panel">
+        <div class="panel-head">
+          <p class="eyebrow">Account</p>
+          <h2>{account_name}</h2>
+          <p class="panel-subtext">{account_identity}</p>
+        </div>
+        <div class="account-grid">
+          <div class="account-block">
+            <span class="account-label">Thresholds</span>
+            <div class="chip-row">{threshold_chips}</div>
+          </div>
+          <div class="account-block">
+            <span class="account-label">Breach counts</span>
+            <div class="chip-row">{breach_chips}</div>
+          </div>
+          <div class="account-block">
+            <span class="account-label">Latency quality</span>
+            <p class="account-copy">Jitter average {_fmt(jitter_avg)} ms · Packet loss average {_fmt(loss_avg)}%</p>
+          </div>
+          <div class="account-block">
+            <span class="account-label">Report window</span>
+            <p class="account-copy">{range_summary}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="hero-metrics">
+        <article class="metric-card">
+          <h3>Download average</h3>
+          <p class="metric-value">{_fmt(download_avg)} Mbps</p>
+          <p class="metric-note {dl_change_tone}">{escape(dl_change_text)}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Upload average</h3>
+          <p class="metric-value">{_fmt(upload_avg)} Mbps</p>
+          <p class="metric-note {ul_change_tone}">{escape(ul_change_text)}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Ping average</h3>
+          <p class="metric-value">{_fmt(ping_avg)} ms</p>
+          <p class="metric-note {ping_change_tone}">{escape(ping_change_text)}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Total breaches</h3>
+          <p class="metric-value">{total_breaches}</p>
+          <p class="metric-note {breach_tone}">{'No breach events recorded' if total_breaches == 0 else 'Threshold exceptions detected'}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Average jitter</h3>
+          <p class="metric-value">{_fmt(jitter_avg)} ms</p>
+          <p class="metric-note tone-muted">Packet loss average {_fmt(loss_avg)}%</p>
+        </article>
+      </section>
+
+      <section class="charts-grid">
+        {throughput_chart}
+        {latency_chart}
+        {breach_chart}
+      </section>
+
+      <section class="panel results-panel">
+        <div class="panel-head panel-head-row">
+          <div>
+            <p class="eyebrow">Measurements</p>
+            <h2>Logged results</h2>
+            <p class="panel-subtext">{escape(rows_note)}</p>
+          </div>
+          <div class="stat-pill">
+            <span>Status</span>
+            <strong class="{compliance_tone}">{_fmt(compliance, 1)}% within threshold</strong>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Source</th>
+                <th>Server</th>
+                <th>Download</th>
+                <th>Upload</th>
+                <th>Ping</th>
+                <th>Jitter</th>
+                <th>Loss</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table_rows}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="foot">
+        <span>{escape(range_label)} report export</span>
+        <span>Generated by SpeedPulse</span>
       </div>
-      <div class="card">
-        <h2>Ping avg</h2>
-        <p>{_fmt(ping_avg)} ms</p>
-        <div class="trend {ping_change_tone}">{escape(ping_change_text)}</div>
-      </div>
-    </section>
-
-    <section class="summary">
-      <div><b>Account:</b> {escape(str(account.get("name", "N/A")))} ({escape(str(account.get("number", "N/A")))})</div>
-      <div><b>Compliance:</b> {_fmt(compliance, 1)}%</div>
-      <div><b>Thresholds:</b> DL ≥ {_fmt(_as_number(thresholds.get("download_mbps")))} Mbps · UL ≥ {_fmt(_as_number(thresholds.get("upload_mbps")))} Mbps · Ping ≤ {_fmt(_as_number(thresholds.get("ping_ms")))} ms · Loss ≤ {_fmt(_as_number(thresholds.get("packet_loss_percent")))}%</div>
-      <div><b>Breaches:</b> Download {breaches_download} · Upload {breaches_upload} · Ping {breaches_ping} · Loss {breaches_loss}</div>
-      <div><b>Latency quality:</b> Jitter avg {_fmt(jitter_avg)} ms · Packet loss avg {_fmt(loss_avg)}%</div>
-    </section>
-
-    <section class="chart-grid">
-      {throughput_chart}
-      {latency_chart}
-    </section>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Timestamp</th>
-          <th>Source</th>
-          <th>Server</th>
-          <th>Download</th>
-          <th>Upload</th>
-          <th>Ping</th>
-          <th>Jitter</th>
-          <th>Loss</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {table_rows}
-      </tbody>
-    </table>
-
-    <div class="foot">
-      <span>{escape(rows_note)}</span>
-      <span>Generated by SpeedPulse</span>
     </div>
-  </article>
+  </main>
 </body>
 </html>
 """
