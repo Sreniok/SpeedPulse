@@ -1005,6 +1005,20 @@ function formatSettingsClockDateTime(date, timezone) {
   }
 }
 
+function formatSettingsClockTime(date, timezone) {
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  } catch {
+    return "";
+  }
+}
+
 function buildSettingsAppTimeText(nowDisplay, timezone, utcOffset) {
   if (nowDisplay && timezone && utcOffset) {
     return `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
@@ -1018,14 +1032,38 @@ function buildSettingsAppTimeText(nowDisplay, timezone, utcOffset) {
   return "App time: --";
 }
 
+function buildSettingsClockZoneText(timezone, utcOffset) {
+  if (timezone && utcOffset) {
+    return `${timezone} • UTC${utcOffset}`;
+  }
+  if (timezone) {
+    return timezone;
+  }
+  if (utcOffset) {
+    return `UTC${utcOffset}`;
+  }
+  return "Timezone";
+}
+
 function paintSettingsClockPreview() {
   const previewNode = byId("settings-app-time-preview");
-  if (!previewNode) {
+  const sidebarTimeNode = byId("settings-sidebar-clock-time");
+  const sidebarZoneNode = byId("settings-sidebar-clock-zone");
+  if (!previewNode && (!sidebarTimeNode || !sidebarZoneNode)) {
     stopSettingsClockTicker();
     return;
   }
+
   if (!settingsClockState) {
-    previewNode.textContent = "App time: --";
+    if (previewNode) {
+      previewNode.textContent = "App time: --";
+    }
+    if (sidebarTimeNode) {
+      sidebarTimeNode.textContent = "--:--:--";
+    }
+    if (sidebarZoneNode) {
+      sidebarZoneNode.textContent = "Timezone";
+    }
     return;
   }
 
@@ -1036,11 +1074,27 @@ function paintSettingsClockPreview() {
     formatSettingsClockDateTime(currentDate, "UTC") ||
     settingsClockState.fallbackDisplay ||
     "";
-  previewNode.textContent = buildSettingsAppTimeText(
-    nowDisplay,
+  const nowTime =
+    formatSettingsClockTime(currentDate, settingsClockState.timezone) ||
+    formatSettingsClockTime(currentDate, "UTC") ||
+    "--:--:--";
+  const zoneText = buildSettingsClockZoneText(
     settingsClockState.timezone,
     settingsClockState.utcOffset,
   );
+  if (previewNode) {
+    previewNode.textContent = buildSettingsAppTimeText(
+      nowDisplay,
+      settingsClockState.timezone,
+      settingsClockState.utcOffset,
+    );
+  }
+  if (sidebarTimeNode) {
+    sidebarTimeNode.textContent = nowTime;
+  }
+  if (sidebarZoneNode) {
+    sidebarZoneNode.textContent = zoneText;
+  }
 }
 
 function timezonePathValue(timezoneName) {
@@ -1068,6 +1122,8 @@ function renderTimezoneInfo(payload) {
   const applicationTime = payload?.application_time || {};
   const timezoneInput = byId("settings-app-timezone");
   const previewNode = byId("settings-app-time-preview");
+  const sidebarTimeNode = byId("settings-sidebar-clock-time");
+  const sidebarZoneNode = byId("settings-sidebar-clock-zone");
   const sourceNode = byId("settings-timezone-source");
 
   const timezone = String(
@@ -1090,7 +1146,7 @@ function renderTimezoneInfo(payload) {
 
   syncTimezoneCheckLink();
   const parsedNowMs = Date.parse(nowIso);
-  if (!previewNode) return;
+  if (!previewNode && (!sidebarTimeNode || !sidebarZoneNode)) return;
 
   if (Number.isFinite(parsedNowMs)) {
     settingsClockState = {
@@ -1108,11 +1164,25 @@ function renderTimezoneInfo(payload) {
 
   stopSettingsClockTicker();
   settingsClockState = null;
-  previewNode.textContent = buildSettingsAppTimeText(
-    fallbackDisplay,
-    timezone,
-    utcOffset,
-  );
+  if (previewNode) {
+    previewNode.textContent = buildSettingsAppTimeText(
+      fallbackDisplay,
+      timezone,
+      utcOffset,
+    );
+  }
+  if (sidebarTimeNode) {
+    sidebarTimeNode.textContent =
+      (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(fallbackDisplay)
+        ? fallbackDisplay.slice(-8)
+        : "") || "--:--:--";
+  }
+  if (sidebarZoneNode) {
+    sidebarZoneNode.textContent = buildSettingsClockZoneText(
+      timezone,
+      utcOffset,
+    );
+  }
 }
 
 function syncScheduledServerSelect() {
