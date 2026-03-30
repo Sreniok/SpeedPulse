@@ -19,6 +19,8 @@ let completionWatchId = null;
 let completionWatchRequestInFlight = false;
 let lastSeenCompletionSequence = 0;
 let initialMetricsLoaded = false;
+let applicationClockTimerId = null;
+let applicationClockState = null;
 let currentServerLabel = "Auto (nearest server)";
 let serverSettingsLoading = false;
 let serverSettingsSaving = false;
@@ -642,28 +644,115 @@ function setStatus(text) {
   byId("status").textContent = text;
 }
 
+function stopApplicationClockTicker() {
+  if (!applicationClockTimerId) return;
+  window.clearInterval(applicationClockTimerId);
+  applicationClockTimerId = null;
+}
+
+function buildApplicationClockText(nowDisplay, timezone, utcOffset) {
+  if (nowDisplay && timezone && utcOffset) {
+    return `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
+  }
+  if (nowDisplay && timezone) {
+    return `App time: ${nowDisplay} (${timezone})`;
+  }
+  if (nowDisplay) {
+    return `App time: ${nowDisplay}`;
+  }
+  if (timezone) {
+    return `App time zone: ${timezone}`;
+  }
+  return "App time: --";
+}
+
+function formatClockDateTime(date, timezone) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+    const getPart = (type) =>
+      parts.find((entry) => entry.type === type)?.value || "";
+    const year = getPart("year");
+    const month = getPart("month");
+    const day = getPart("day");
+    const hour = getPart("hour");
+    const minute = getPart("minute");
+    const second = getPart("second");
+    if (!year || !month || !day || !hour || !minute || !second) {
+      return "";
+    }
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  } catch {
+    return "";
+  }
+}
+
+function paintApplicationClock() {
+  const clockNode = byId("application-clock");
+  if (!clockNode) {
+    stopApplicationClockTicker();
+    return;
+  }
+
+  if (!applicationClockState) {
+    clockNode.textContent = "App time: --";
+    return;
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - applicationClockState.anchorSystemMs);
+  const currentDate = new Date(applicationClockState.anchorTimestampMs + elapsedMs);
+  const nowDisplay =
+    formatClockDateTime(currentDate, applicationClockState.timezone) ||
+    formatClockDateTime(currentDate, "UTC") ||
+    applicationClockState.fallbackDisplay ||
+    "";
+  clockNode.textContent = buildApplicationClockText(
+    nowDisplay,
+    applicationClockState.timezone,
+    applicationClockState.utcOffset,
+  );
+}
+
 function renderApplicationClock(data) {
   const clockNode = byId("application-clock");
-  if (!clockNode) return;
+  if (!clockNode) {
+    stopApplicationClockTicker();
+    applicationClockState = null;
+    return;
+  }
 
   const applicationTime = data?.application_time || {};
   const nowDisplay = String(applicationTime.now_display || "").trim();
+  const nowIso = String(applicationTime.now_iso || "").trim();
   const timezone = String(applicationTime.timezone || "").trim();
   const utcOffset = String(applicationTime.utc_offset || "").trim();
+  const parsedNowMs = Date.parse(nowIso);
 
-  if (nowDisplay && timezone && utcOffset) {
-    clockNode.textContent = `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
+  if (Number.isFinite(parsedNowMs)) {
+    applicationClockState = {
+      anchorTimestampMs: parsedNowMs,
+      anchorSystemMs: Date.now(),
+      timezone,
+      utcOffset,
+      fallbackDisplay: nowDisplay,
+    };
+    paintApplicationClock();
+    stopApplicationClockTicker();
+    applicationClockTimerId = window.setInterval(paintApplicationClock, 1000);
     return;
   }
-  if (nowDisplay && timezone) {
-    clockNode.textContent = `App time: ${nowDisplay} (${timezone})`;
-    return;
-  }
-  if (timezone) {
-    clockNode.textContent = `App time zone: ${timezone}`;
-    return;
-  }
-  clockNode.textContent = "App time: --";
+
+  stopApplicationClockTicker();
+  applicationClockState = null;
+  clockNode.textContent = buildApplicationClockText(nowDisplay, timezone, utcOffset);
 }
 
 let messageTimeoutId = 0;

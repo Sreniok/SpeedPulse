@@ -79,7 +79,13 @@
         </a>
 
         <section class="sidebar-card sidebar-card-account">
-          <p class="eyebrow">Account</p>
+          <div class="sidebar-account-user">
+            <p class="eyebrow">User</p>
+            <p class="sidebar-account-user-name" title="{{ login_email }}">
+              {{ login_email }}
+            </p>
+          </div>
+          <p class="eyebrow sidebar-account-label">Account</p>
           <strong>{{ account_name }}</strong>
           <p id="sidebar-account-provider">
             {{ account_provider or "Provider not detected yet" }}
@@ -258,9 +264,6 @@
                 </g>
               </svg>
             </button>
-            <p class="topbar-account-email" title="{{ login_email }}">
-              {{ login_email }}
-            </p>
             <a href="/logout" class="btn-ghost">Logout</a>
           </div>
         </header>

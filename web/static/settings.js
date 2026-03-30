@@ -9,6 +9,8 @@ let originalUserAccount = {
   loginEmail: "",
   notificationEmail: "",
 };
+let settingsClockTimerId = null;
+let settingsClockState = null;
 const animatedSelectSyncMap = new WeakMap();
 const animatedSelectRenderMap = new WeakMap();
 const MAX_SCAN_CUSTOM_DAY = 31;
@@ -968,6 +970,147 @@ function buildWeeklySchedule() {
 
 function renderSettingsHero(payload) {}
 
+function stopSettingsClockTicker() {
+  if (!settingsClockTimerId) return;
+  window.clearInterval(settingsClockTimerId);
+  settingsClockTimerId = null;
+}
+
+function formatSettingsClockDateTime(date, timezone) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+    const getPart = (type) =>
+      parts.find((entry) => entry.type === type)?.value || "";
+    const year = getPart("year");
+    const month = getPart("month");
+    const day = getPart("day");
+    const hour = getPart("hour");
+    const minute = getPart("minute");
+    const second = getPart("second");
+    if (!year || !month || !day || !hour || !minute || !second) {
+      return "";
+    }
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  } catch {
+    return "";
+  }
+}
+
+function buildSettingsAppTimeText(nowDisplay, timezone, utcOffset) {
+  if (nowDisplay && timezone && utcOffset) {
+    return `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
+  }
+  if (nowDisplay && timezone) {
+    return `App time: ${nowDisplay} (${timezone})`;
+  }
+  if (nowDisplay) {
+    return `App time: ${nowDisplay}`;
+  }
+  return "App time: --";
+}
+
+function paintSettingsClockPreview() {
+  const previewNode = byId("settings-app-time-preview");
+  if (!previewNode) {
+    stopSettingsClockTicker();
+    return;
+  }
+  if (!settingsClockState) {
+    previewNode.textContent = "App time: --";
+    return;
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - settingsClockState.anchorSystemMs);
+  const currentDate = new Date(settingsClockState.anchorTimestampMs + elapsedMs);
+  const nowDisplay =
+    formatSettingsClockDateTime(currentDate, settingsClockState.timezone) ||
+    formatSettingsClockDateTime(currentDate, "UTC") ||
+    settingsClockState.fallbackDisplay ||
+    "";
+  previewNode.textContent = buildSettingsAppTimeText(
+    nowDisplay,
+    settingsClockState.timezone,
+    settingsClockState.utcOffset,
+  );
+}
+
+function timezonePathValue(timezoneName) {
+  return String(timezoneName || "UTC")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function syncTimezoneCheckLink() {
+  const linkNode = byId("settings-timezone-check-link");
+  const timezoneInput = byId("settings-app-timezone");
+  if (!linkNode || !timezoneInput) return;
+
+  const timezone = String(timezoneInput.value || "").trim() || "UTC";
+  linkNode.href = `https://time.is/${timezonePathValue(timezone)}`;
+}
+
+function renderTimezoneInfo(payload) {
+  const app = payload?.app || {};
+  const applicationTime = payload?.application_time || {};
+  const timezoneInput = byId("settings-app-timezone");
+  const previewNode = byId("settings-app-time-preview");
+  const sourceNode = byId("settings-timezone-source");
+
+  const timezone = String(
+    app.timezone || applicationTime.timezone || timezoneInput?.value || "UTC",
+  ).trim() || "UTC";
+  const nowIso = String(applicationTime.now_iso || "").trim();
+  const utcOffset = String(applicationTime.utc_offset || "").trim();
+  const fallbackDisplay = String(applicationTime.now_display || "").trim();
+  const sourceRaw = String(app.timezone_source || "default").trim();
+  const sourceLabel =
+    sourceRaw === "settings"
+      ? "Settings"
+      : sourceRaw === "env"
+        ? "Environment"
+        : "Default (UTC)";
+
+  if (sourceNode) {
+    sourceNode.textContent = `Timezone source: ${sourceLabel}`;
+  }
+
+  syncTimezoneCheckLink();
+  const parsedNowMs = Date.parse(nowIso);
+  if (!previewNode) return;
+
+  if (Number.isFinite(parsedNowMs)) {
+    settingsClockState = {
+      anchorTimestampMs: parsedNowMs,
+      anchorSystemMs: Date.now(),
+      timezone,
+      utcOffset,
+      fallbackDisplay,
+    };
+    paintSettingsClockPreview();
+    stopSettingsClockTicker();
+    settingsClockTimerId = window.setInterval(paintSettingsClockPreview, 1000);
+    return;
+  }
+
+  stopSettingsClockTicker();
+  settingsClockState = null;
+  previewNode.textContent = buildSettingsAppTimeText(
+    fallbackDisplay,
+    timezone,
+    utcOffset,
+  );
+}
+
 function syncScheduledServerSelect() {
   const select = byId("settings-schedule-server");
   if (!select) return;
@@ -1045,6 +1188,7 @@ function populateSettingsForm(payload) {
   byId("settings-monthly-time").value =
     notifications.monthly_report_time || "08:00";
   byId("settings-app-timezone").value = app.timezone || "UTC";
+  renderTimezoneInfo(payload);
   renderDailyScanTimes(notifications.test_times || []);
   byId("settings-scan-enabled").checked =
     notifications.scan_enabled !== false;
@@ -2121,6 +2265,9 @@ function bindEvents() {
   byId("settings-scan-frequency").addEventListener("change", () => {
     syncScanFrequencySummary();
     syncScanScheduleState();
+  });
+  byId("settings-app-timezone").addEventListener("input", () => {
+    syncTimezoneCheckLink();
   });
   byId("settings-add-scan-time").addEventListener("click", () => {
     addDailyScanTimeRow();
