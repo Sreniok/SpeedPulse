@@ -1044,11 +1044,10 @@ function paintSettingsClockPreview() {
 }
 
 function timezonePathValue(timezoneName) {
-  const normalized = String(timezoneName || "UTC")
-    .trim()
-    .replace(/\//g, "_")
-    .replace(/\s+/g, "_");
-  return normalized
+  const normalized = String(timezoneName || "UTC").trim();
+  const locationPart = normalized.split("/").filter(Boolean).pop() || "UTC";
+  return locationPart
+    .replace(/\s+/g, "_")
     .split("_")
     .filter(Boolean)
     .map((part) => encodeURIComponent(part))
