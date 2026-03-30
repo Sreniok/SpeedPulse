@@ -21,6 +21,7 @@ SCRIPT_DIR = Path(__file__).parent
 CONFIG_PATH = resolve_config_path(__file__)
 CRON_LOG = resolve_runtime_path(__file__, "cron.log")
 CONFIG_CHECK_INTERVAL = 10  # seconds between config change checks
+WEEKDAY_KEYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
 def log(message: str) -> None:
@@ -42,13 +43,19 @@ def load_config() -> dict:
 def parse_hhmm(value: str, default: str) -> tuple[int, int]:
     source = value.strip() if value else default
     hour_str, minute_str = source.split(":", 1)
-    return int(hour_str), int(minute_str)
+    hour = int(hour_str)
+    minute = int(minute_str)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("time must be between 00:00 and 23:59")
+    return hour, minute
 
 
 def parse_weekly_schedule(value: str) -> tuple[str, int, int]:
     # Expected format: "Monday 08:00"
     day_part, time_part = value.strip().split(" ", 1)
     day_key = day_part.lower()[:3]
+    if day_key not in WEEKDAY_KEYS:
+        raise ValueError("day must be a weekday name")
     hour, minute = parse_hhmm(time_part, "08:00")
     return day_key, hour, minute
 
@@ -105,7 +112,8 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     notifications = config.get("notifications", {})
 
     for job in scheduler.get_jobs():
-        if str(job.id).startswith("speedtest_"):
+        job_id = str(job.id)
+        if job_id.startswith("speedtest_") or job_id in {"weekly_report", "monthly_report"}:
             scheduler.remove_job(job.id)
 
     scan_enabled = bool(scheduling.get("scan_enabled", True))
@@ -156,9 +164,17 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
 
     # Weekly report schedule.
     if notifications.get("weekly_report_enabled", True):
-        weekly_report = scheduling.get("weekly_report_time", "Monday 08:00")
-        day_of_week, hour, minute = parse_weekly_schedule(weekly_report)
-        scheduler.add_job(
+        weekly_report_raw = str(scheduling.get("weekly_report_time", "Monday 08:00") or "").strip()
+        try:
+            day_of_week, hour, minute = parse_weekly_schedule(weekly_report_raw)
+        except Exception as exc:
+            log(
+                f"Invalid weekly_report_time '{weekly_report_raw}' ({exc}) — "
+                "falling back to Monday 08:00"
+            )
+            day_of_week, hour, minute = parse_weekly_schedule("Monday 08:00")
+
+        weekly_job = scheduler.add_job(
             run_script,
             trigger=CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute),
             args=["SendWeeklyReport.py"],
@@ -168,15 +184,24 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
             coalesce=True,
             misfire_grace_time=21600,
         )
-        log(f"Scheduled weekly report on {day_of_week} at {hour:02d}:{minute:02d}")
+        next_run = weekly_job.next_run_time.strftime("%Y-%m-%d %H:%M:%S %Z") if weekly_job.next_run_time else "n/a"
+        log(f"Scheduled weekly report on {day_of_week} at {hour:02d}:{minute:02d} (next run: {next_run})")
     else:
         log("Weekly report schedule is disabled in settings")
 
     # Monthly report schedule (runs on day 1 at configured time).
     if notifications.get("monthly_report_enabled", False):
-        monthly_time = scheduling.get("monthly_report_time", "08:00")
-        hour, minute = parse_hhmm(monthly_time, "08:00")
-        scheduler.add_job(
+        monthly_time_raw = str(scheduling.get("monthly_report_time", "08:00") or "").strip()
+        try:
+            hour, minute = parse_hhmm(monthly_time_raw, "08:00")
+        except Exception as exc:
+            log(
+                f"Invalid monthly_report_time '{monthly_time_raw}' ({exc}) — "
+                "falling back to 08:00"
+            )
+            hour, minute = parse_hhmm("08:00", "08:00")
+
+        monthly_job = scheduler.add_job(
             run_script,
             trigger=CronTrigger(day=1, hour=hour, minute=minute),
             args=["SendMonthlyReport.py"],
@@ -186,7 +211,8 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
             coalesce=True,
             misfire_grace_time=21600,
         )
-        log(f"Scheduled monthly report on day 1 at {hour:02d}:{minute:02d}")
+        next_run = monthly_job.next_run_time.strftime("%Y-%m-%d %H:%M:%S %Z") if monthly_job.next_run_time else "n/a"
+        log(f"Scheduled monthly report on day 1 at {hour:02d}:{minute:02d} (next run: {next_run})")
     else:
         log("Monthly report schedule is disabled in settings")
 
