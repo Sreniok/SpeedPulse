@@ -650,80 +650,64 @@ function stopApplicationClockTicker() {
   applicationClockTimerId = null;
 }
 
-function buildApplicationClockText(nowDisplay, timezone, utcOffset) {
-  if (nowDisplay && timezone && utcOffset) {
-    return `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
-  }
-  if (nowDisplay && timezone) {
-    return `App time: ${nowDisplay} (${timezone})`;
-  }
-  if (nowDisplay) {
-    return `App time: ${nowDisplay}`;
+function buildApplicationClockZoneText(timezone, utcOffset) {
+  if (timezone && utcOffset) {
+    return `${timezone} • UTC${utcOffset}`;
   }
   if (timezone) {
-    return `App time zone: ${timezone}`;
+    return timezone;
   }
-  return "App time: --";
+  if (utcOffset) {
+    return `UTC${utcOffset}`;
+  }
+  return "Timezone";
 }
 
-function formatClockDateTime(date, timezone) {
+function formatClockTime(date, timezone) {
   try {
-    const parts = new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat("en-GB", {
       timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hourCycle: "h23",
-    }).formatToParts(date);
-    const getPart = (type) =>
-      parts.find((entry) => entry.type === type)?.value || "";
-    const year = getPart("year");
-    const month = getPart("month");
-    const day = getPart("day");
-    const hour = getPart("hour");
-    const minute = getPart("minute");
-    const second = getPart("second");
-    if (!year || !month || !day || !hour || !minute || !second) {
-      return "";
-    }
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+    }).format(date);
   } catch {
     return "";
   }
 }
 
 function paintApplicationClock() {
-  const clockNode = byId("application-clock");
-  if (!clockNode) {
+  const clockTimeNode = byId("application-clock-time");
+  const clockZoneNode = byId("application-clock-zone");
+  if (!clockTimeNode || !clockZoneNode) {
     stopApplicationClockTicker();
     return;
   }
 
   if (!applicationClockState) {
-    clockNode.textContent = "App time: --";
+    clockTimeNode.textContent = "--:--:--";
+    clockZoneNode.textContent = "Timezone";
     return;
   }
 
   const elapsedMs = Math.max(0, Date.now() - applicationClockState.anchorSystemMs);
   const currentDate = new Date(applicationClockState.anchorTimestampMs + elapsedMs);
-  const nowDisplay =
-    formatClockDateTime(currentDate, applicationClockState.timezone) ||
-    formatClockDateTime(currentDate, "UTC") ||
-    applicationClockState.fallbackDisplay ||
-    "";
-  clockNode.textContent = buildApplicationClockText(
-    nowDisplay,
+  const nowTime =
+    formatClockTime(currentDate, applicationClockState.timezone) ||
+    formatClockTime(currentDate, "UTC") ||
+    "--:--:--";
+  clockTimeNode.textContent = nowTime;
+  clockZoneNode.textContent = buildApplicationClockZoneText(
     applicationClockState.timezone,
     applicationClockState.utcOffset,
   );
 }
 
 function renderApplicationClock(data) {
-  const clockNode = byId("application-clock");
-  if (!clockNode) {
+  const clockTimeNode = byId("application-clock-time");
+  const clockZoneNode = byId("application-clock-zone");
+  if (!clockTimeNode || !clockZoneNode) {
     stopApplicationClockTicker();
     applicationClockState = null;
     return;
@@ -752,7 +736,11 @@ function renderApplicationClock(data) {
 
   stopApplicationClockTicker();
   applicationClockState = null;
-  clockNode.textContent = buildApplicationClockText(nowDisplay, timezone, utcOffset);
+  clockTimeNode.textContent =
+    (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(nowDisplay)
+      ? nowDisplay.slice(-8)
+      : "") || "--:--:--";
+  clockZoneNode.textContent = buildApplicationClockZoneText(timezone, utcOffset);
 }
 
 let messageTimeoutId = 0;

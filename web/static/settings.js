@@ -1044,10 +1044,15 @@ function paintSettingsClockPreview() {
 }
 
 function timezonePathValue(timezoneName) {
-  return String(timezoneName || "UTC")
-    .split("/")
+  const normalized = String(timezoneName || "UTC")
+    .trim()
+    .replace(/\//g, "_")
+    .replace(/\s+/g, "_");
+  return normalized
+    .split("_")
+    .filter(Boolean)
     .map((part) => encodeURIComponent(part))
-    .join("/");
+    .join("_");
 }
 
 function syncTimezoneCheckLink() {
