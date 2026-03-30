@@ -7,6 +7,7 @@
   },
   "app": {
     "github_url": "https://github.com/Sreniok/SpeedPulse",
+    "timezone": "UTC",
     "ui_theme_mode": "system",
     "ui_theme_light": "default-light",
     "ui_theme_dark": "default-dark"

@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from pathlib import Path
 from urllib.parse import quote, urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -746,6 +747,7 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
     )
     if not scan_custom_days:
         scan_custom_days = [scan_monthly_day]
+    app_timezone, app_timezone_source = _resolve_app_timezone(loaded)
 
     return {
         "login_email": login_email,
@@ -787,6 +789,11 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "ntfy_server": str(notifications_cfg.get("ntfy_server", "https://ntfy.sh")),
             "ntfy_topic": str(notifications_cfg.get("ntfy_topic", "")),
         },
+        "app": {
+            "timezone": app_timezone,
+            "timezone_source": app_timezone_source,
+        },
+        "application_time": _application_time_payload(loaded),
         "ui_theme": ui_theme,
         "thresholds": {
             "download_mbps": _safe_float(thresholds_cfg.get("download_mbps", 0), 0.0),
@@ -837,6 +844,52 @@ def _validate_hhmm(value: str) -> bool:
     hour = int(hour_text)
     minute = int(minute_text)
     return 0 <= hour <= 23 and 0 <= minute <= 59
+
+
+def _is_valid_timezone(value: object) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+    try:
+        ZoneInfo(candidate)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
+
+def _resolve_app_timezone(config: dict | None = None) -> tuple[str, str]:
+    loaded = config or load_config()
+    configured = str(loaded.get("app", {}).get("timezone", "") or "").strip()
+    if _is_valid_timezone(configured):
+        return configured, "settings"
+
+    app_timezone_env = str(os.getenv("APP_TIMEZONE", "") or "").strip()
+    if _is_valid_timezone(app_timezone_env):
+        return app_timezone_env, "env"
+
+    tz_env = str(os.getenv("TZ", "") or "").strip()
+    if _is_valid_timezone(tz_env):
+        return tz_env, "env"
+
+    return "UTC", "default"
+
+
+def _application_time_payload(config: dict | None = None) -> dict[str, str]:
+    timezone_name, source = _resolve_app_timezone(config)
+    now_local = datetime.now(ZoneInfo(timezone_name))
+    offset_raw = now_local.strftime("%z")
+    utc_offset = (
+        f"{offset_raw[:3]}:{offset_raw[3:]}"
+        if len(offset_raw) == 5
+        else offset_raw
+    )
+    return {
+        "timezone": timezone_name,
+        "timezone_source": source,
+        "now_iso": now_local.isoformat(timespec="seconds"),
+        "now_display": now_local.strftime("%Y-%m-%d %H:%M:%S"),
+        "utc_offset": utc_offset,
+    }
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -1641,7 +1694,8 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
     scheduling = config.get("scheduling", {})
     entries = load_measurement_entries(config)
     detected_identity = _detected_account_network_identity(config, entries=entries)
-    now = datetime.now()
+    application_time = _application_time_payload(config)
+    now = datetime.now(ZoneInfo(application_time["timezone"])).replace(tzinfo=None)
     scan_enabled = bool(scheduling.get("scan_enabled", True))
     scan_frequency = _clean_scan_frequency(scheduling.get("scan_frequency", "daily"), "daily")
     scheduled_tests_per_day = len(scheduling.get("test_times", [])) if scan_enabled else 0
@@ -1777,6 +1831,7 @@ def build_dashboard_payload(days: int = 30, mode: str = "days") -> dict:
         "sla": sla,
         "server_selection_id": server_settings["selected_id"],
         "server_selection_label": server_settings["selected_label"],
+        "application_time": application_time,
     }
 
 
@@ -1889,6 +1944,7 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     email_from = _clean_env_value(payload.get("email_from", ""))
     weekly_report_time = _clean_env_value(payload.get("weekly_report_time", "Monday 08:00"))
     monthly_report_time = _clean_env_value(payload.get("monthly_report_time", "08:00"))
+    app_timezone = _clean_env_value(payload.get("app_timezone", ""))
     scan_enabled = bool(payload.get("scan_enabled", True))
     scan_frequency = _clean_scan_frequency(payload.get("scan_frequency", "daily"), "daily")
     scan_weekly_day = _clean_weekday_name(payload.get("scan_weekly_day", "Monday"), "Monday")
@@ -1936,6 +1992,13 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Select at least one custom scan day")
 
     config = load_config()
+    if not app_timezone:
+        app_timezone, _ = _resolve_app_timezone(config)
+    if not _is_valid_timezone(app_timezone):
+        raise HTTPException(
+            status_code=400,
+            detail="Application timezone must be a valid IANA timezone (for example: Europe/Warsaw).",
+        )
     account_cfg = config.setdefault("account", {})
     email_cfg = config.setdefault("email", {})
     scheduling_cfg = config.setdefault("scheduling", {})
@@ -1978,6 +2041,7 @@ async def update_notification_settings(request: Request) -> JSONResponse:
     app_cfg["ui_theme_mode"] = ui_theme_mode
     app_cfg["ui_theme_light"] = ui_theme_light
     app_cfg["ui_theme_dark"] = ui_theme_dark
+    app_cfg["timezone"] = app_timezone
 
     contract_payload = payload.get("contract", {})
     if contract_payload:
@@ -2050,6 +2114,8 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         "SMTP_PORT": str(smtp_port),
         "SMTP_USERNAME": smtp_username,
         "EMAIL_FROM": email_from,
+        "APP_TIMEZONE": app_timezone,
+        "TZ": app_timezone,
     }
     if smtp_password.strip():
         if encrypted_secret_store_enabled():

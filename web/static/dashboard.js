@@ -642,6 +642,30 @@ function setStatus(text) {
   byId("status").textContent = text;
 }
 
+function renderApplicationClock(data) {
+  const clockNode = byId("application-clock");
+  if (!clockNode) return;
+
+  const applicationTime = data?.application_time || {};
+  const nowDisplay = String(applicationTime.now_display || "").trim();
+  const timezone = String(applicationTime.timezone || "").trim();
+  const utcOffset = String(applicationTime.utc_offset || "").trim();
+
+  if (nowDisplay && timezone && utcOffset) {
+    clockNode.textContent = `App time: ${nowDisplay} (${timezone}, UTC${utcOffset})`;
+    return;
+  }
+  if (nowDisplay && timezone) {
+    clockNode.textContent = `App time: ${nowDisplay} (${timezone})`;
+    return;
+  }
+  if (timezone) {
+    clockNode.textContent = `App time zone: ${timezone}`;
+    return;
+  }
+  clockNode.textContent = "App time: --";
+}
+
 let messageTimeoutId = 0;
 
 function showMessage(text, kind = "info") {
@@ -2774,6 +2798,7 @@ async function loadMetrics() {
     currentServerLabel = data.server_selection_label || currentServerLabel;
 
     renderDetectedConnectionInfo(data);
+    renderApplicationClock(data);
     renderScheduleNote(data);
     renderHeroMetrics(data);
     initPremiumDepth();

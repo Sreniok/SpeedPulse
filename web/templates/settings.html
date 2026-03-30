@@ -732,6 +732,36 @@
                   <span>Enable scheduled scans</span>
                 </label>
               </div>
+              <div class="settings-fields settings-fields-schedule">
+                <div class="settings-field-group">
+                  <label for="settings-app-timezone">Application timezone</label>
+                  <input
+                    id="settings-app-timezone"
+                    type="text"
+                    list="settings-timezone-options"
+                    placeholder="Europe/Warsaw"
+                    autocomplete="off"
+                  />
+                  <datalist id="settings-timezone-options">
+                    <option value="UTC"></option>
+                    <option value="Europe/Warsaw"></option>
+                    <option value="Europe/London"></option>
+                    <option value="Europe/Dublin"></option>
+                    <option value="Europe/Berlin"></option>
+                    <option value="America/New_York"></option>
+                    <option value="America/Chicago"></option>
+                    <option value="America/Denver"></option>
+                    <option value="America/Los_Angeles"></option>
+                    <option value="Asia/Tokyo"></option>
+                    <option value="Australia/Sydney"></option>
+                  </datalist>
+                  <p class="panel-subtext">
+                    Use an IANA timezone name. This value overrides
+                    <code>TZ</code> and <code>APP_TIMEZONE</code> in
+                    <code>.env</code>.
+                  </p>
+                </div>
+              </div>
               <div class="settings-fields settings-fields-schedule settings-scan-frequency-row">
                 <div class="settings-field-group">
                   <label for="settings-scan-frequency">Scheduled scan frequency</label>

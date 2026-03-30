@@ -354,6 +354,69 @@ def test_appearance_settings_persist_theme_preferences(api_client):
     assert saved_config["notifications"]["report_theme_id"] == "tokyo-night"
 
 
+def test_notification_settings_timezone_persist_to_config_and_env(api_client):
+    client, _, config_path, env_path, csrf_token = api_client
+
+    current_settings = client.get("/api/settings/notifications")
+    assert current_settings.status_code == 200
+    settings_payload = current_settings.json()
+
+    response = client.post(
+        "/api/settings/notifications",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "account_name": settings_payload["account"]["name"],
+            "broadband_provider": settings_payload["account"]["provider"],
+            "broadband_account_number": settings_payload["account"]["number"],
+            "smtp_server": settings_payload["email"]["smtp_server"],
+            "smtp_port": settings_payload["email"]["smtp_port"],
+            "smtp_username": settings_payload["email"]["smtp_username"],
+            "smtp_password": "",
+            "email_from": settings_payload["email"]["from"],
+            "app_timezone": "Europe/Warsaw",
+            "send_realtime_alerts": settings_payload["email"]["send_realtime_alerts"],
+            "weekly_report_enabled": settings_payload["notifications"]["weekly_report_enabled"],
+            "weekly_report_time": settings_payload["notifications"]["weekly_report_time"],
+            "monthly_report_enabled": settings_payload["notifications"]["monthly_report_enabled"],
+            "monthly_report_time": settings_payload["notifications"]["monthly_report_time"],
+            "scan_enabled": settings_payload["notifications"]["scan_enabled"],
+            "scan_frequency": settings_payload["notifications"]["scan_frequency"],
+            "scan_weekly_day": settings_payload["notifications"]["scan_weekly_day"],
+            "scan_monthly_day": settings_payload["notifications"]["scan_monthly_day"],
+            "scan_custom_days": settings_payload["notifications"]["scan_custom_days"],
+            "test_times": settings_payload["notifications"]["test_times"],
+            "server_id": settings_payload["server_selection_id"],
+            "push_events": settings_payload["notifications"]["push_events"],
+            "ui_theme": settings_payload["ui_theme"],
+            "report_theme_id": settings_payload["notifications"]["report_theme_id"],
+            "webhook_enabled": settings_payload["notifications"]["webhook_enabled"],
+            "webhook_url": settings_payload["notifications"]["webhook_url"],
+            "ntfy_enabled": settings_payload["notifications"]["ntfy_enabled"],
+            "ntfy_server": settings_payload["notifications"]["ntfy_server"],
+            "ntfy_topic": settings_payload["notifications"]["ntfy_topic"],
+            "thresholds": settings_payload["thresholds"],
+            "contract": settings_payload["contract"],
+            "backup": settings_payload["backup"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["app"]["timezone"] == "Europe/Warsaw"
+    assert payload["application_time"]["timezone"] == "Europe/Warsaw"
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["app"]["timezone"] == "Europe/Warsaw"
+
+    env_text = env_path.read_text(encoding="utf-8")
+    assert 'APP_TIMEZONE="Europe/Warsaw"' in env_text
+    assert 'TZ="Europe/Warsaw"' in env_text
+
+    metrics_response = client.get("/api/metrics?mode=today")
+    assert metrics_response.status_code == 200
+    assert metrics_response.json()["application_time"]["timezone"] == "Europe/Warsaw"
+
+
 def test_notification_settings_store_smtp_password_encrypted(api_client):
     client, _, _, env_path, csrf_token = api_client
 

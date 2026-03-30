@@ -9,6 +9,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -38,6 +39,34 @@ def load_config() -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Config must be a JSON object")
     return payload
+
+
+def is_valid_timezone(value: object) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+    try:
+        ZoneInfo(candidate)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
+
+def resolve_timezone_name(config: dict | None = None) -> str:
+    loaded = config or {}
+    configured = str(loaded.get("app", {}).get("timezone", "") or "").strip()
+    if is_valid_timezone(configured):
+        return configured
+
+    app_timezone_env = str(os.getenv("APP_TIMEZONE", "") or "").strip()
+    if is_valid_timezone(app_timezone_env):
+        return app_timezone_env
+
+    tz_env = str(os.getenv("TZ", "") or "").strip()
+    if is_valid_timezone(tz_env):
+        return tz_env
+
+    return "UTC"
 
 
 def parse_hhmm(value: str, default: str) -> tuple[int, int]:
@@ -110,6 +139,9 @@ def run_script(script_name: str) -> None:
 def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     scheduling = config.get("scheduling", {})
     notifications = config.get("notifications", {})
+    timezone_name = resolve_timezone_name(config)
+    timezone = ZoneInfo(timezone_name)
+    log(f"Applying scheduler jobs (timezone={timezone_name})")
 
     for job in scheduler.get_jobs():
         job_id = str(job.id)
@@ -139,7 +171,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
                 trigger_kwargs["day"] = ",".join(str(day) for day in custom_days)
             scheduler.add_job(
                 run_script,
-                trigger=CronTrigger(**trigger_kwargs),
+                trigger=CronTrigger(**trigger_kwargs, timezone=timezone),
                 args=["CheckSpeed.py"],
                 id=f"speedtest_{index}",
                 replace_existing=True,
@@ -176,7 +208,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
 
         weekly_job = scheduler.add_job(
             run_script,
-            trigger=CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute),
+            trigger=CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute, timezone=timezone),
             args=["SendWeeklyReport.py"],
             id="weekly_report",
             replace_existing=True,
@@ -203,7 +235,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
 
         monthly_job = scheduler.add_job(
             run_script,
-            trigger=CronTrigger(day=1, hour=hour, minute=minute),
+            trigger=CronTrigger(day=1, hour=hour, minute=minute, timezone=timezone),
             args=["SendMonthlyReport.py"],
             id="monthly_report",
             replace_existing=True,
@@ -221,7 +253,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     health_hour, health_minute = parse_hhmm(health_time, "07:00")
     scheduler.add_job(
         run_script,
-        trigger=CronTrigger(hour=health_hour, minute=health_minute),
+        trigger=CronTrigger(hour=health_hour, minute=health_minute, timezone=timezone),
         args=["health_check.py"],
         id="health_check",
         replace_existing=True,
@@ -236,7 +268,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     rotation_hour, rotation_minute = parse_hhmm(rotation_time, "02:00")
     scheduler.add_job(
         run_script,
-        trigger=CronTrigger(day=1, hour=rotation_hour, minute=rotation_minute),
+        trigger=CronTrigger(day=1, hour=rotation_hour, minute=rotation_minute, timezone=timezone),
         args=["rotate_logs.py"],
         id="rotate_logs",
         replace_existing=True,
@@ -265,7 +297,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
 
         scheduler.add_job(
             _run_backup_job,
-            trigger=CronTrigger(**backup_trigger_kwargs),
+            trigger=CronTrigger(**backup_trigger_kwargs, timezone=timezone),
             id="scheduled_backup",
             replace_existing=True,
             max_instances=1,
@@ -290,7 +322,8 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
                 reminder_dt = end_dt - timedelta(days=reminder_days)
                 # Set to 09:00 on the reminder date.
                 reminder_dt = reminder_dt.replace(hour=9, minute=0, second=0)
-                if reminder_dt > datetime.now():
+                reminder_dt = reminder_dt.replace(tzinfo=timezone)
+                if reminder_dt > datetime.now(tz=timezone):
                     scheduler.add_job(
                         run_script,
                         trigger=DateTrigger(run_date=reminder_dt),
@@ -317,10 +350,9 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
 
 
 def main() -> None:
-    timezone = os.getenv("APP_TIMEZONE", os.getenv("TZ", "UTC"))
-    log(f"Starting scheduler service (timezone={timezone})")
-
     config = load_config()
+    timezone = resolve_timezone_name(config)
+    log(f"Starting scheduler service (timezone={timezone})")
     scheduler = BlockingScheduler(timezone=timezone)
     configure_scheduler(scheduler, config)
 

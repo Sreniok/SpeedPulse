@@ -2304,6 +2304,14 @@ button:active,
 .status-line {
   padding: 0 0.15rem;
   font-size: 0.92rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.status-muted {
+  color: var(--text-muted);
 }
 
 .message {

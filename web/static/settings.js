@@ -978,6 +978,7 @@ function populateSettingsForm(payload) {
   applyThemePreferencesFromPayload(payload);
 
   const account = payload.account || {};
+  const app = payload.app || {};
   const email = payload.email || {};
   const notifications = payload.notifications || {};
   const thresholds = payload.thresholds || {};
@@ -1043,6 +1044,7 @@ function populateSettingsForm(payload) {
   );
   byId("settings-monthly-time").value =
     notifications.monthly_report_time || "08:00";
+  byId("settings-app-timezone").value = app.timezone || "UTC";
   renderDailyScanTimes(notifications.test_times || []);
   byId("settings-scan-enabled").checked =
     notifications.scan_enabled !== false;
@@ -1140,6 +1142,7 @@ function collectSettingsPayload() {
     smtp_username: byId("settings-smtp-username").value.trim(),
     smtp_password: byId("settings-smtp-password").value,
     email_from: byId("settings-email-from").value.trim(),
+    app_timezone: byId("settings-app-timezone").value.trim(),
     send_realtime_alerts: byId("settings-realtime-alerts").checked,
     weekly_report_enabled: byId("settings-weekly-enabled").checked,
     weekly_report_time: buildWeeklySchedule(),
