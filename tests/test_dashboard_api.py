@@ -444,6 +444,46 @@ def test_manual_speedtest_start_and_status_endpoint(api_client, monkeypatch: pyt
     assert status_payload["selected_server_id"] == "41075"
 
 
+def test_manual_weekly_report_send_now_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):
+    client, webapp, _, _, csrf_token = api_client
+
+    monkeypatch.setattr(
+        webapp,
+        "run_weekly_report_now",
+        lambda: (True, "Weekly report email sent.", 200),
+    )
+
+    response = client.post(
+        "/api/reports/weekly/send-now",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["message"] == "Weekly report email sent."
+
+
+def test_manual_weekly_report_send_now_endpoint_returns_failure(api_client, monkeypatch: pytest.MonkeyPatch):
+    client, webapp, _, _, csrf_token = api_client
+
+    monkeypatch.setattr(
+        webapp,
+        "run_weekly_report_now",
+        lambda: (False, "Weekly report was not sent because no data was found for the last completed week.", 409),
+    )
+
+    response = client.post(
+        "/api/reports/weekly/send-now",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["ok"] is False
+    assert "no data" in payload["message"].lower()
+
+
 def test_manual_backup_create_saves_to_backup_directory(api_client):
     client, _, config_path, _, csrf_token = api_client
 

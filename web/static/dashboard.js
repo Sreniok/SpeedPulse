@@ -8,6 +8,7 @@ let currentPayload = null;
 let currentPage = 1;
 let currentSort = { key: "timestamp_iso", direction: "desc" };
 let manualRunInFlight = false;
+let weeklyReportInFlight = false;
 let runModalTimerId = null;
 let runModalStartedAt = 0;
 let runModalAutoCloseId = null;
@@ -2705,6 +2706,44 @@ async function generateRangeReport() {
   }
 }
 
+async function sendWeeklyReportNow() {
+  const button = byId("send-weekly-report");
+  if (!button || weeklyReportInFlight) return;
+
+  weeklyReportInFlight = true;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+
+  try {
+    const response = await fetch("/api/reports/weekly/send-now", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: "{}",
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.detail || payload.message || "Unable to send weekly report.");
+    }
+
+    showMessage(payload.message || "Weekly report email sent.", "success");
+  } catch (error) {
+    showMessage(error.message || "Unable to send weekly report.", "error");
+  } finally {
+    weeklyReportInFlight = false;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+}
+
 async function loadMetrics() {
   setStatus("Loading metrics...");
   const isInitialLoad = !initialMetricsLoaded;
@@ -3226,15 +3265,22 @@ function bindEvents() {
   }
   const reportButton = byId("generate-report");
   const runButton = byId("run-test");
+  const weeklyReportButton = byId("send-weekly-report");
   if (reportButton) {
     reportButton.setAttribute("title", "Generate report (Shortcut: G)");
   }
   if (runButton) {
     runButton.setAttribute("title", "Manual speed test (Shortcut: R)");
   }
+  if (weeklyReportButton) {
+    weeklyReportButton.setAttribute("title", "Send weekly report email now (Shortcut: W)");
+  }
   byId("range").addEventListener("change", loadMetrics);
   reportButton?.addEventListener("click", () => {
     void generateRangeReport();
+  });
+  weeklyReportButton?.addEventListener("click", () => {
+    void sendWeeklyReportNow();
   });
   const defaultServerSelect = byId("server-select");
   if (defaultServerSelect) {
@@ -3315,6 +3361,12 @@ function bindEvents() {
       if (!event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         void generateRangeReport();
+      }
+    }
+    if (event.key === "w" || event.key === "W") {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        void sendWeeklyReportNow();
       }
     }
     const rangeKeys = { 1: "today", 2: "7", 3: "30", 4: "90", 5: "365" };

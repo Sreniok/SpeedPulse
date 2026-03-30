@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project uses `vMAJOR.MINOR.PATCH` tags.
 
+## [v1.2.0] - 2026-03-30
+
+### Added
+
+- Manual "Send weekly email" action in the dashboard top bar (next to manual speed test)
+- New authenticated endpoint `POST /api/reports/weekly/send-now` for immediate weekly report delivery
+- Focused tests for the manual weekly-report API flow
+
+### Changed
+
+- Weekly report selection now uses the last fully completed ISO week window
+- Weekly report labels now include ISO week year context to avoid ambiguity around year boundaries
+
+### Fixed
+
+- Weekly report runs outside Monday no longer risk selecting an incorrect week bucket
+
 ## [v1.1.9] - 2026-03-20
 
 ### Added

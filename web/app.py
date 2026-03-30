@@ -478,6 +478,45 @@ def _start_manual_speedtest_thread(selected_server_id: str) -> None:
     worker.start()
 
 
+def run_weekly_report_now() -> tuple[bool, str, int]:
+    script_path = SCRIPT_DIR / "SendWeeklyReport.py"
+    if not script_path.exists():
+        return (False, "Weekly report script is missing.", 500)
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=SCRIPT_DIR,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+    except Exception:
+        LOGGER.exception("Failed to run manual weekly report")
+        return (False, "Failed to start weekly report job.", 500)
+
+    transcript = "\n".join(
+        part.strip()
+        for part in (result.stdout or "", result.stderr or "")
+        if part and part.strip()
+    ).strip()
+    normalized = transcript.lower()
+
+    if result.returncode == 0:
+        return (True, "Weekly report email sent.", 200)
+
+    if "no speed test data found" in normalized:
+        return (False, "Weekly report was not sent because no data was found for the last completed week.", 409)
+
+    if "failed to load mail settings" in normalized:
+        return (False, "Weekly report failed: check SMTP settings in Settings.", 400)
+
+    if transcript:
+        last_line = transcript.splitlines()[-1].strip()
+        return (False, f"Weekly report failed: {last_line}", 500)
+    return (False, "Weekly report failed. Check scheduler logs for details.", 500)
+
+
 def load_config() -> dict:
     with _config_path().open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -1402,12 +1441,14 @@ APP.include_router(
         github_sponsors_url=_github_sponsors_url,
         ui_theme_preferences=_ui_theme_preferences,
         require_session=require_session,
+        require_csrf=require_csrf,
         build_dashboard_payload_fn=lambda days, mode: build_dashboard_payload(days, mode=mode),
         load_measurement_entries_fn=load_measurement_entries,
         filter_entries_for_mode_fn=lambda entries, now, days, mode: _filter_entries_for_mode(entries, now, days, mode),
         clean_theme_id_fn=_clean_theme_id,
         resolve_report_theme_id_fn=resolve_report_theme_id,
         build_report_html_fn=build_report_html,
+        run_weekly_report_now_fn=lambda: run_weekly_report_now(),
     )
 )
 APP.include_router(

@@ -20,12 +20,14 @@ def build_dashboard_router(
     github_sponsors_url: Callable[[dict | None], str],
     ui_theme_preferences: Callable[[dict | None], dict[str, str]],
     require_session: Callable[[Request], dict],
+    require_csrf: Callable[[Request, dict], None],
     build_dashboard_payload_fn: Callable[[int, str], dict],
     load_measurement_entries_fn: Callable[[dict], list[dict]],
     filter_entries_for_mode_fn: Callable[[list[dict], datetime, int, str], list[dict]],
     clean_theme_id_fn: Callable[[object, str], str],
     resolve_report_theme_id_fn: Callable[[dict], str],
     build_report_html_fn: Callable[..., str],
+    run_weekly_report_now_fn: Callable[[], tuple[bool, str, int]],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -132,5 +134,13 @@ def build_dashboard_router(
             media_type="text/html; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
         )
+
+    @router.post("/api/reports/weekly/send-now")
+    def send_weekly_report_now(request: Request) -> JSONResponse:
+        session = require_session(request)
+        require_csrf(request, session)
+
+        ok, message, status_code = run_weekly_report_now_fn()
+        return JSONResponse({"ok": ok, "message": message}, status_code=status_code)
 
     return router
