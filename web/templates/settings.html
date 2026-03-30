@@ -99,7 +99,7 @@
           <a class="nav-link-section" data-settings-section-link href="#section-appearance">Appearance</a>
           <a class="nav-link-section" data-settings-section-link href="#section-user">User account</a>
           <a class="nav-link-section" data-settings-section-link href="#section-broadband">Broadband</a>
-          <a class="nav-link-section" data-settings-section-link href="#section-schedule">Schedule</a>
+          <a class="nav-link-section" data-settings-section-link href="#section-schedule">Automation</a>
           <a class="nav-link-section" data-settings-section-link href="#section-email">Email (SMTP)</a>
           <a class="nav-link-section" data-settings-section-link href="#section-push">Push alerts</a>
           <a class="nav-link-section" data-settings-section-link href="#section-backup">Backup</a>
@@ -237,7 +237,7 @@
               class="nav-link nav-link-inline settings-jump-link"
               data-settings-section-link
               href="#section-schedule"
-              >Schedule</a
+              >Automation</a
             >
             <a
               class="nav-link nav-link-inline settings-jump-link"
@@ -706,10 +706,10 @@
             <div class="panel-head panel-head-row">
               <div>
                 <p class="eyebrow">Schedule</p>
-                <h2>Automation schedule</h2>
+                <h2>Automation schedule &amp; notifications</h2>
                 <p class="panel-subtext">
-                  Control whether scheduled scans run, choose frequency, and
-                  set exact scan times.
+                  Configure scheduled scans plus weekly/monthly report
+                  automation.
                 </p>
               </div>
               <button
@@ -832,6 +832,50 @@
                   </p>
                 </div>
               </section>
+
+              <section class="settings-schedule-block">
+                <div class="settings-section-head">
+                  <div>
+                    <h3>Report notifications</h3>
+                    <p class="panel-subtext">
+                      Choose whether weekly/monthly report jobs run and at what
+                      time.
+                    </p>
+                  </div>
+                </div>
+                <div class="toggle-grid">
+                  <label class="toggle-row" for="settings-weekly-enabled">
+                    <input id="settings-weekly-enabled" type="checkbox" />
+                    <span>Enable weekly email report job</span>
+                  </label>
+                  <label class="toggle-row" for="settings-monthly-enabled">
+                    <input id="settings-monthly-enabled" type="checkbox" />
+                    <span>Enable monthly email report job (runs on day 1)</span>
+                  </label>
+                </div>
+                <div class="settings-fields settings-fields-schedule">
+                  <div class="settings-field-group">
+                    <label for="settings-weekly-day">Weekly report day</label>
+                    <select id="settings-weekly-day">
+                      <option value="Monday">Monday</option>
+                      <option value="Tuesday">Tuesday</option>
+                      <option value="Wednesday">Wednesday</option>
+                      <option value="Thursday">Thursday</option>
+                      <option value="Friday">Friday</option>
+                      <option value="Saturday">Saturday</option>
+                      <option value="Sunday">Sunday</option>
+                    </select>
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-weekly-time">Weekly report time</label>
+                    <input id="settings-weekly-time" type="time" step="60" />
+                  </div>
+                  <div class="settings-field-group">
+                    <label for="settings-monthly-time">Monthly report time</label>
+                    <input id="settings-monthly-time" type="time" step="60" />
+                  </div>
+                </div>
+              </section>
               </div>
               <div class="settings-actions">
                 <button
@@ -840,7 +884,7 @@
                   type="button"
                   data-save-settings
                 >
-                  Save schedule
+                  Save automation
                 </button>
               </div>
             </div>
@@ -912,43 +956,6 @@
                   <input id="settings-realtime-alerts" type="checkbox" />
                   <span>Enable realtime email alerts</span>
                 </label>
-                <label class="toggle-row" for="settings-weekly-enabled">
-                  <input id="settings-weekly-enabled" type="checkbox" />
-                  <span>Enable weekly email report job</span>
-                </label>
-                <label class="toggle-row" for="settings-monthly-enabled">
-                  <input id="settings-monthly-enabled" type="checkbox" />
-                  <span>Enable monthly email report job (runs on day 1)</span>
-                </label>
-              </div>
-              <div class="settings-fields settings-fields-split">
-                <div class="settings-field-group">
-                  <label for="settings-weekly-day">Weekly report day</label>
-                  <select id="settings-weekly-day">
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
-                    <option value="Saturday">Saturday</option>
-                    <option value="Sunday">Sunday</option>
-                  </select>
-                </div>
-                <div class="settings-field-group">
-                  <label for="settings-weekly-time">Weekly report time</label>
-                  <input id="settings-weekly-time" type="time" step="60" />
-                  <p class="panel-subtext">
-                    Weekly report emails run at the selected day and time.
-                  </p>
-                </div>
-                <div class="settings-field-group">
-                  <label for="settings-monthly-time">Monthly report time</label>
-                  <input id="settings-monthly-time" type="time" step="60" />
-                  <p class="panel-subtext">
-                    Monthly report emails run on the first day of each month at
-                    this time.
-                  </p>
-                </div>
               </div>
               <div class="settings-actions">
                 <button
