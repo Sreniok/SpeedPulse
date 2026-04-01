@@ -996,6 +996,14 @@ select {
 }
 
 .sidebar {
+  --sidebar-eyebrow-size: 0.72rem;
+  --sidebar-copy-size: 0.84rem;
+  --sidebar-meta-size: 0.82rem;
+  --sidebar-strong-size: 1.02rem;
+  --sidebar-nav-size: 0.9rem;
+  --sidebar-chip-size: 0.84rem;
+  --sidebar-footer-note-size: 0.76rem;
+  --sidebar-footer-title-size: 0.74rem;
   padding: var(--space-5);
   border-right: 1px solid var(--border);
   background:
@@ -1311,7 +1319,7 @@ select {
 .brand-user {
   margin: 0.35rem 0 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--sidebar-copy-size);
   overflow-wrap: anywhere;
 }
 
@@ -1322,6 +1330,14 @@ select {
   letter-spacing: 0.1em;
   font-size: var(--type-label);
   font-weight: 700;
+}
+
+.sidebar .eyebrow {
+  font-size: var(--sidebar-eyebrow-size);
+}
+
+.sidebar .sidebar-card p {
+  font-size: var(--sidebar-copy-size);
 }
 
 .nav-block {
@@ -1410,7 +1426,7 @@ select {
 .sidebar > .nav-block:not(.nav-block-sections) .nav-link {
   padding: 0.88rem 0.98rem;
   border-radius: 15px;
-  font-size: 0.9rem;
+  font-size: var(--sidebar-nav-size);
 }
 
 .section-jumpbar-wrap {
@@ -1461,6 +1477,7 @@ select {
 .sidebar-card strong {
   display: block;
   margin: 0;
+  font-size: var(--sidebar-strong-size);
 }
 
 .sidebar-card-account {
@@ -1519,7 +1536,7 @@ select {
 
 .sidebar-clock-zone {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--sidebar-meta-size);
   font-weight: 700;
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
@@ -1538,7 +1555,7 @@ select {
 .sidebar-card-account .sidebar-account-user-name {
   margin: 0;
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 0.96rem;
   font-weight: 700;
   line-height: 1.34;
   overflow-wrap: anywhere;
@@ -1549,12 +1566,13 @@ select {
 }
 
 .sidebar-card-account strong {
-  font-size: 1.08rem;
+  font-size: 1.1rem;
   letter-spacing: -0.02em;
 }
 
 .sidebar-card-account p {
   margin-top: 0.2rem;
+  font-size: var(--sidebar-copy-size);
 }
 
 .schedule-chip-group {
@@ -1573,7 +1591,7 @@ select {
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text);
-  font-size: 0.84rem;
+  font-size: var(--sidebar-chip-size);
   font-weight: 700;
 }
 
@@ -1582,7 +1600,7 @@ select {
 }
 
 .sidebar-card-schedule #scan-plan {
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   line-height: 1.2;
 }
 
@@ -1601,7 +1619,7 @@ select {
 
 .schedule-detail-label {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1609,6 +1627,7 @@ select {
 
 .schedule-detail-value {
   color: var(--text);
+  font-size: 0.92rem;
   line-height: 1.28;
   font-weight: 700;
   min-width: 0;
@@ -4202,7 +4221,7 @@ button:active,
 
 .sidebar-footer-note {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--sidebar-footer-note-size);
   line-height: 1.45;
 }
 
@@ -4253,7 +4272,7 @@ button:active,
 }
 
 .sidebar-footer-link-title {
-  font-size: 0.72rem;
+  font-size: var(--sidebar-footer-title-size);
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -4278,6 +4297,14 @@ button:active,
 @media (min-width: 1081px) and (max-height: 1040px) {
   .sidebar,
   .dashboard-page .sidebar {
+    --sidebar-eyebrow-size: 0.64rem;
+    --sidebar-copy-size: 0.78rem;
+    --sidebar-meta-size: 0.76rem;
+    --sidebar-strong-size: 0.94rem;
+    --sidebar-nav-size: 0.78rem;
+    --sidebar-chip-size: 0.68rem;
+    --sidebar-footer-note-size: 0.7rem;
+    --sidebar-footer-title-size: 0.62rem;
     padding: 0.78rem;
     gap: 0.58rem;
   }
@@ -4300,14 +4327,18 @@ button:active,
 
   .eyebrow {
     margin-bottom: 0.18rem;
-    font-size: 0.64rem;
+    font-size: var(--type-label);
+  }
+
+  .sidebar .eyebrow {
+    font-size: var(--sidebar-eyebrow-size);
   }
 
   .brand-user,
   .sidebar-card p {
     margin-top: 0.14rem;
     line-height: 1.28;
-    font-size: 0.78rem;
+    font-size: var(--sidebar-copy-size);
   }
 
   .sidebar-clock-card {
@@ -4321,7 +4352,7 @@ button:active,
   }
 
   .sidebar-clock-zone {
-    font-size: 0.72rem;
+    font-size: var(--sidebar-meta-size);
   }
 
   .sidebar-account-user {
@@ -4330,11 +4361,11 @@ button:active,
   }
 
   .sidebar-card-account .sidebar-account-user-name {
-    font-size: 0.78rem;
+    font-size: 0.82rem;
   }
 
   .sidebar-card-account strong {
-    font-size: 0.94rem;
+    font-size: 0.98rem;
   }
 
   .nav-block {
@@ -4345,7 +4376,7 @@ button:active,
   .nav-link-section {
     padding: 0.48rem 0.62rem;
     border-radius: 11px;
-    font-size: 0.78rem;
+    font-size: var(--sidebar-nav-size);
   }
 
   .schedule-chip-group {
@@ -4356,7 +4387,7 @@ button:active,
   .schedule-chip {
     min-height: 24px;
     padding: 0.16rem 0.42rem;
-    font-size: 0.68rem;
+    font-size: var(--sidebar-chip-size);
   }
 
   .sidebar-card-schedule {
@@ -4364,7 +4395,7 @@ button:active,
   }
 
   .sidebar-card-schedule #scan-plan {
-    font-size: 0.8rem;
+    font-size: 0.84rem;
     line-height: 1.1;
   }
 
@@ -4380,11 +4411,11 @@ button:active,
   }
 
   .schedule-detail-label {
-    font-size: 0.64rem;
+    font-size: 0.68rem;
   }
 
   .schedule-detail-value {
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     line-height: 1.12;
   }
 
@@ -4399,7 +4430,7 @@ button:active,
   .sidebar-contract-detail,
   .sidebar-contract-remaining {
     margin-top: 0.12rem;
-    font-size: 0.7rem;
+    font-size: 0.76rem;
     line-height: 1.16;
   }
 
@@ -4421,10 +4452,6 @@ button:active,
     font-size: 0.92rem;
   }
 
-  .sidebar-footer-note {
-    display: none;
-  }
-
   .sidebar-footer-action {
     min-height: 30px;
     padding: 0.3rem 0.4rem;
@@ -4436,7 +4463,7 @@ button:active,
   }
 
   .sidebar-footer-link-title {
-    font-size: 0.62rem;
+    font-size: var(--sidebar-footer-title-size);
   }
 
   .sidebar-footer-link-icon {
