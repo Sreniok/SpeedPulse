@@ -201,24 +201,55 @@ function closeServerModal() {
 }
 
 function runStageProgress(status) {
+  const logs = status.logs || [];
   const stage = String(status.stage || "").toLowerCase();
   if (status.status === "completed") return 100;
   if (status.status === "failed") return 100;
+
+  const pingProgress = extractLatestProgressPercent(
+    logs,
+    /Idle\s+Latency:.*\((\d{1,3})%\)/i,
+  );
+  const downloadProgress = extractLatestProgressPercent(
+    logs,
+    /Download:.*\((\d{1,3})%\)/i,
+  );
+  const uploadProgress = extractLatestProgressPercent(
+    logs,
+    /Upload:.*\((\d{1,3})%\)/i,
+  );
+
+  // Use the phase percentages emitted by Ookla CLI.
+  if (uploadProgress !== null) return 70 + uploadProgress * 0.3;
+  if (downloadProgress !== null) return 15 + downloadProgress * 0.55;
+  if (pingProgress !== null) return 5 + pingProgress * 0.1;
+
   if (stage.includes("upload")) return 78;
   if (stage.includes("download")) return 58;
-  if (stage.includes("latency")) return 42;
+  if (stage.includes("latency")) return 28;
   if (
     stage.includes("rendering") ||
     stage.includes("checking") ||
     stage.includes("saving")
   )
-    return 90;
-  if (stage.includes("reading")) return 76;
+    return 96;
+  if (stage.includes("reading")) return 92;
   if (stage.includes("measuring")) return 58;
   if (stage.includes("connecting")) return 36;
   if (stage.includes("selecting")) return 22;
   if (stage.includes("preparing") || stage.includes("launching")) return 12;
   return 8;
+}
+
+function extractLatestProgressPercent(logs, pattern) {
+  for (let index = logs.length - 1; index >= 0; index -= 1) {
+    const match = String(logs[index] || "").match(pattern);
+    if (!match) continue;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) continue;
+    return Math.max(0, Math.min(100, value));
+  }
+  return null;
 }
 
 function parseRunMetrics(status) {
@@ -329,13 +360,20 @@ function renderRunModal(status) {
         : "Running speed test";
   byId("run-modal-copy").textContent =
     status.message ||
-    "Testing your line now. This window closes automatically when the result is ready.";
+    "Testing your line now. Review the result and close this window when you are ready.";
   byId("run-modal-stage").textContent = status.stage || "Preparing test";
   byId("run-modal-server-pill").textContent =
     status.selected_server_label || findServerLabel(status.selected_server_id);
   byId("run-modal-progress-bar").style.width = `${runStageProgress(status)}%`;
   byId("run-modal-log").textContent =
     (status.logs || []).join("\n") || "Waiting for speed test output...";
+  const closeButton = byId("run-modal-close-action");
+  if (closeButton) {
+    const canClose = status.status === "completed" || status.status === "failed";
+    closeButton.classList.toggle("hidden", !canClose);
+    closeButton.disabled = !canClose;
+    closeButton.textContent = status.status === "completed" ? "OK" : "Close";
+  }
   renderRunLiveMetrics(status);
 }
 
@@ -554,7 +592,6 @@ async function syncRunStatus(announceFinal = false) {
 
       renderRunModal(payload);
       openRunModal(payload.started_at);
-      runModalAutoCloseId = window.setTimeout(closeRunModal, 1600);
       return;
     }
 
@@ -3421,6 +3458,7 @@ function bindEvents() {
   byId("server-modal-start")?.addEventListener("click", () => {
     void runSpeedtestNow(currentManualServerId());
   });
+  byId("run-modal-close-action")?.addEventListener("click", closeRunModal);
   byId("server-modal-cancel")?.addEventListener("click", closeServerModal);
   byId("server-modal-close")?.addEventListener("click", closeServerModal);
   byId("server-modal")?.addEventListener("close", syncBodyModalState);

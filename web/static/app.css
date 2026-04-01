@@ -2727,6 +2727,11 @@ button:active,
   font-weight: 700;
 }
 
+.run-modal-actions {
+  margin-top: 0.95rem;
+  justify-content: flex-end;
+}
+
 .run-modal-dot,
 .run-pulse {
   display: inline-block;

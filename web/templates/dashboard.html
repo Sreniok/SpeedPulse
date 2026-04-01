@@ -356,8 +356,8 @@
               <span id="run-modal-server-pill" class="server-pill">Auto</span>
             </div>
             <p id="run-modal-copy" class="run-modal-copy">
-              Testing your line now. This window closes automatically when the
-              result is ready.
+              Testing your line now. Review the result and close this window
+              when you are ready.
             </p>
             <p id="run-modal-stage" class="run-modal-stage">Preparing test</p>
             <div class="run-modal-progress">
@@ -367,6 +367,13 @@
               ></span>
             </div>
             <div class="run-live-grid">
+              <article class="run-live-card">
+                <span class="run-live-label">Latency</span>
+                <strong id="run-live-ping">-- ms</strong>
+                <span id="run-live-ping-note" class="run-live-note"
+                  >Waiting for connection</span
+                >
+              </article>
               <article class="run-live-card">
                 <span class="run-live-label">Download</span>
                 <strong id="run-live-download">-- Mbps</strong>
@@ -381,17 +388,19 @@
                   >Waiting for measurement</span
                 >
               </article>
-              <article class="run-live-card">
-                <span class="run-live-label">Latency</span>
-                <strong id="run-live-ping">-- ms</strong>
-                <span id="run-live-ping-note" class="run-live-note"
-                  >Waiting for connection</span
-                >
-              </article>
             </div>
             <div class="run-modal-status">
               <span class="run-modal-dot" aria-hidden="true"></span>
               <span id="run-modal-timer">Elapsed 0s</span>
+            </div>
+            <div class="dialog-actions run-modal-actions">
+              <button
+                id="run-modal-close-action"
+                class="btn-primary hidden"
+                type="button"
+              >
+                Close
+              </button>
             </div>
             <div
               id="run-modal-log"
