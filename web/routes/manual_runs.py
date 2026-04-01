@@ -35,7 +35,7 @@ def build_manual_runs_router(
     @router.get("/api/run/speedtest/status")
     def speedtest_run_status(request: Request) -> JSONResponse:
         require_session(request)
-        cooldown_seconds = env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 300)
+        cooldown_seconds = env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 0)
         remaining = max(0, int((get_last_manual_speedtest_at() + cooldown_seconds) - time.time()))
 
         payload = manual_run_snapshot()
@@ -72,7 +72,7 @@ def build_manual_runs_router(
         config = load_config()
         selected_label = resolve_server_label(selected_id, config)
 
-        cooldown_seconds = env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 300)
+        cooldown_seconds = env_int("MANUAL_SPEEDTEST_COOLDOWN_SECONDS", 0)
         now = time.time()
         remaining = int((get_last_manual_speedtest_at() + cooldown_seconds) - now)
         if remaining > 0:

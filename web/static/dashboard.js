@@ -264,15 +264,21 @@ function renderRunLiveMetrics(status) {
   let upload = parsed.upload;
   let ping = parsed.ping;
   let downloadNote =
-    parsed.download !== null ? "Measured result" : "Waiting for measurement";
+    parsed.download !== null ? "Measured result" : "Waiting for latency";
   let uploadNote =
-    parsed.upload !== null ? "Measured result" : "Waiting for measurement";
+    parsed.upload !== null ? "Measured result" : "Waiting for download";
   let pingNote =
     parsed.ping !== null ? "Measured result" : "Waiting for connection";
 
   if (status.status === "running") {
     if (stage.includes("latency")) {
       pingNote = parsed.ping !== null ? "Live measurement" : "Measuring latency";
+      if (parsed.download === null) {
+        downloadNote = "Download starts after latency";
+      }
+      if (parsed.upload === null) {
+        uploadNote = "Upload starts after download";
+      }
     } else if (
       parsed.ping === null &&
       (stage.includes("connect") ||
@@ -285,6 +291,9 @@ function renderRunLiveMetrics(status) {
     if (stage.includes("download")) {
       downloadNote =
         parsed.download !== null ? "Live measurement" : "Measuring download";
+      if (parsed.upload === null) {
+        uploadNote = "Upload starts after download";
+      }
     }
 
     if (stage.includes("upload")) {
@@ -356,8 +365,6 @@ async function loadServerSettings() {
   try {
     const response = await fetch("/api/settings/server");
     if (response.status === 401) {
-      manualRunStartInFlight = false;
-      setRunButtonState(false);
       window.location.href = "/login";
       return;
     }

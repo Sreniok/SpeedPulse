@@ -339,7 +339,10 @@ def run_speedtest_with_retry(config):
                 attempt,
                 max_retries,
             )
-            log.info("Measuring download and upload throughput...")
+            if live_progress:
+                log.info("Starting live Ookla progress stream...")
+            else:
+                log.info("Measuring download and upload throughput...")
 
             if live_progress:
                 returncode, raw_data, raw_output = _run_ookla_speedtest_with_progress(cmd, timeout)
