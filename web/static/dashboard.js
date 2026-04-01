@@ -198,6 +198,9 @@ function runStageProgress(status) {
   const stage = String(status.stage || "").toLowerCase();
   if (status.status === "completed") return 100;
   if (status.status === "failed") return 100;
+  if (stage.includes("upload")) return 78;
+  if (stage.includes("download")) return 58;
+  if (stage.includes("latency")) return 42;
   if (
     stage.includes("rendering") ||
     stage.includes("checking") ||
@@ -212,45 +215,31 @@ function runStageProgress(status) {
   return 8;
 }
 
-function latestBaselineMetrics() {
-  const latest = currentPayload?.latest_tests?.[0];
-  const averages = currentPayload?.averages || {};
-
-  return {
-    download: latest?.download_mbps ?? averages.download_mbps ?? 0,
-    upload: latest?.upload_mbps ?? averages.upload_mbps ?? 0,
-    ping: latest?.ping_ms ?? averages.ping_ms ?? 0,
-  };
-}
-
 function parseRunMetrics(status) {
   const logs = status.logs || [];
   const patterns = {
-    download: /Download:\s+([\d.]+)\s*Mbps/i,
-    upload: /Upload:\s+([\d.]+)\s*Mbps/i,
-    ping: /Ping:\s+([\d.]+)\s*ms/i,
+    download: [/Download:\s+([\d.]+)\s*Mbps/i],
+    upload: [/Upload:\s+([\d.]+)\s*Mbps/i],
+    ping: [/Idle\s+Latency:\s+([\d.]+)\s*ms/i, /Ping:\s+([\d.]+)\s*ms/i],
   };
 
   const metrics = { download: null, upload: null, ping: null };
-  for (const [key, pattern] of Object.entries(patterns)) {
-    for (let index = logs.length - 1; index >= 0; index -= 1) {
-      const match = String(logs[index] || "").match(pattern);
-      if (match) {
-        metrics[key] = Number(match[1]);
+  for (const [key, keyPatterns] of Object.entries(patterns)) {
+    for (const pattern of keyPatterns) {
+      for (let index = logs.length - 1; index >= 0; index -= 1) {
+        const match = String(logs[index] || "").match(pattern);
+        if (match) {
+          metrics[key] = Number(match[1]);
+          break;
+        }
+      }
+      if (metrics[key] !== null) {
         break;
       }
     }
   }
 
   return metrics;
-}
-
-function estimatedMetric(base, amplitude, elapsedMs, divisor, offset = 0) {
-  const seed = (elapsedMs + offset) / divisor;
-  return Math.max(
-    0,
-    base + Math.sin(seed) * amplitude + Math.cos(seed / 1.7) * amplitude * 0.35,
-  );
 }
 
 function renderLiveMetric(id, value, unit, note) {
@@ -263,8 +252,6 @@ function renderLiveMetric(id, value, unit, note) {
 
 function renderRunLiveMetrics(status) {
   const parsed = parseRunMetrics(status);
-  const baseline = latestBaselineMetrics();
-  const elapsedMs = Math.max(0, Date.now() - runModalStartedAt);
   const stage = String(status.stage || "").toLowerCase();
 
   let download = parsed.download;
@@ -278,41 +265,25 @@ function renderRunLiveMetrics(status) {
     parsed.ping !== null ? "Measured result" : "Waiting for connection";
 
   if (status.status === "running") {
-    if (
+    if (stage.includes("latency")) {
+      pingNote = parsed.ping !== null ? "Live measurement" : "Measuring latency";
+    } else if (
       parsed.ping === null &&
       (stage.includes("connect") ||
         stage.includes("select") ||
         stage.includes("prepar"))
     ) {
-      ping = estimatedMetric(
-        baseline.ping || 12,
-        Math.max(1.2, (baseline.ping || 12) * 0.12),
-        elapsedMs,
-        520,
-        160,
-      );
       pingNote = "Connecting to server";
     }
 
-    if (parsed.download === null && stage.includes("measuring")) {
-      download = estimatedMetric(
-        baseline.download || 90,
-        Math.max(10, (baseline.download || 90) * 0.18),
-        elapsedMs,
-        440,
-      );
-      downloadNote = "Live estimate from current stage";
+    if (stage.includes("download")) {
+      downloadNote =
+        parsed.download !== null ? "Live measurement" : "Measuring download";
     }
 
-    if (parsed.upload === null && stage.includes("measuring")) {
-      upload = estimatedMetric(
-        (baseline.upload || 20) * 0.72,
-        Math.max(3, (baseline.upload || 20) * 0.15),
-        elapsedMs,
-        620,
-        260,
-      );
-      uploadNote = "Upload starts after download";
+    if (stage.includes("upload")) {
+      uploadNote =
+        parsed.upload !== null ? "Live measurement" : "Measuring upload";
     }
 
     if (
@@ -321,9 +292,6 @@ function renderRunLiveMetrics(status) {
       stage.includes("checking") ||
       stage.includes("rendering")
     ) {
-      download = download ?? baseline.download ?? null;
-      upload = upload ?? baseline.upload ?? null;
-      ping = ping ?? baseline.ping ?? null;
       downloadNote =
         parsed.download !== null ? "Measured result" : "Finalizing result";
       uploadNote =

@@ -10,6 +10,7 @@ Supports:
 import json
 import os
 import shutil
+import select
 import subprocess
 import sys
 import time
@@ -123,10 +124,17 @@ def resolve_server_id(config):
     return raw_value
 
 
-def build_speedtest_command(speedtest_exe, provider, server_id=None):
+def build_speedtest_command(speedtest_exe, provider, server_id=None, live_progress=False):
     """Build command for the selected speedtest binary."""
     if provider == "ookla":
-        cmd = [speedtest_exe, "--accept-license", "--accept-gdpr", "--format=json"]
+        cmd = [
+            speedtest_exe,
+            "--accept-license",
+            "--accept-gdpr",
+            "--format=json",
+        ]
+        if live_progress:
+            cmd.append("--progress=yes")
         if server_id:
             cmd.extend(["--server-id", server_id])
         return cmd
@@ -184,6 +192,113 @@ def normalize_speedtest_result(raw_data):
     raise ValueError("Unsupported speedtest JSON format")
 
 
+def _format_progress_percent(value):
+    try:
+        progress = max(0.0, min(1.0, float(value or 0.0)))
+    except (TypeError, ValueError):
+        return 0
+    return int(round(progress * 100))
+
+
+def _maybe_log_ookla_progress(event, progress_state):
+    event_type = str(event.get("type", "") or "")
+    if event_type == "testStart":
+        server = event.get("server", {})
+        server_name = str(server.get("name", "Unknown") or "Unknown")
+        server_location = str(server.get("location") or server.get("country") or "Unknown")
+        server_id = str(server.get("id", "N/A") or "N/A")
+        log.info("Connected to test server: %s – %s (id: %s)", server_name, server_location, server_id)
+        return
+
+    if event_type == "ping":
+        ping = event.get("ping", {})
+        progress = _format_progress_percent(ping.get("progress"))
+        if progress <= progress_state["ping"] and progress < 100:
+            return
+        progress_state["ping"] = progress
+        log.info("Idle Latency: %.2f ms (%d%%)", float(ping.get("latency", 0.0)), progress)
+        return
+
+    if event_type not in {"download", "upload"}:
+        return
+
+    payload = event.get(event_type, {})
+    progress = _format_progress_percent(payload.get("progress"))
+    if progress < 100 and progress < progress_state[event_type] + 5:
+        return
+
+    progress_state[event_type] = progress
+    bandwidth_bps = float(payload.get("bandwidth", 0.0) or 0.0) * 8
+    mbps = bandwidth_bps / 1_000_000
+    label = "Download" if event_type == "download" else "Upload"
+    log.info("%s: %.2f Mbps (%d%%)", label, mbps, progress)
+
+
+def _run_ookla_speedtest_with_progress(cmd, timeout):
+    final_payload = None
+    last_payload = None
+    raw_output = []
+    progress_state = {"ping": -20, "download": -5, "upload": -5}
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                process.kill()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+
+            stream = process.stdout
+            if stream is None:
+                break
+
+            ready, _, _ = select.select([stream], [], [], min(0.5, remaining))
+            if not ready:
+                if process.poll() is not None:
+                    break
+                continue
+
+            raw_line = stream.readline()
+            if raw_line == "":
+                if process.poll() is not None:
+                    break
+                continue
+
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            raw_output.append(line)
+
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if not isinstance(payload, dict):
+                continue
+
+            last_payload = payload
+            _maybe_log_ookla_progress(payload, progress_state)
+            if payload.get("type") == "result":
+                final_payload = payload
+
+        returncode = process.wait(timeout=1)
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
+
+    return returncode, final_payload or last_payload, raw_output
+
+
 def run_speedtest_with_retry(config):
     """Run speedtest with retry logic"""
     max_retries = config["speedtest"]["max_retries"]
@@ -205,7 +320,9 @@ def run_speedtest_with_retry(config):
         log.error("%s", e)
         sys.exit(1)
 
-    cmd = build_speedtest_command(speedtest_exe, provider, server_id=server_id)
+    run_source = os.getenv("SPEEDTEST_RUN_SOURCE", "scheduled").strip().lower()
+    live_progress = provider == "ookla" and run_source == "manual"
+    cmd = build_speedtest_command(speedtest_exe, provider, server_id=server_id, live_progress=live_progress)
     provider_label = "Ookla CLI" if provider == "ookla" else "speedtest-cli"
     server_label = f"Selected server #{server_id}" if server_id else "Automatic server selection"
 
@@ -224,16 +341,23 @@ def run_speedtest_with_retry(config):
             )
             log.info("Measuring download and upload throughput...")
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+            if live_progress:
+                returncode, raw_data, raw_output = _run_ookla_speedtest_with_progress(cmd, timeout)
+            else:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                returncode = result.returncode
+                raw_output = []
+                raw_data = json.loads(result.stdout) if result.stdout else None
+                if result.stderr:
+                    raw_output.append(result.stderr.strip())
 
-            if result.returncode == 0 and result.stdout:
+            if returncode == 0 and raw_data:
                 log.info("Speedtest finished, validating result payload...")
-                raw_data = json.loads(result.stdout)
                 normalized = normalize_speedtest_result(raw_data)
 
                 # Validate required normalized fields
@@ -243,9 +367,9 @@ def run_speedtest_with_retry(config):
 
                 write_error_log(config, f"Speedtest returned incomplete normalized data (attempt {attempt})")
             else:
-                write_error_log(config, f"Speedtest failed with return code {result.returncode} (attempt {attempt})")
-                if result.stderr:
-                    write_error_log(config, f"Error output: {result.stderr.strip()}")
+                write_error_log(config, f"Speedtest failed with return code {returncode} (attempt {attempt})")
+                if raw_output:
+                    write_error_log(config, f"Error output: {raw_output[-1]}")
 
         except subprocess.TimeoutExpired:
             write_error_log(config, f"Speedtest timed out after {timeout} seconds (attempt {attempt})")

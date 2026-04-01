@@ -194,6 +194,15 @@ def test_results_page_renders_results_table_on_separate_route(api_client):
     assert 'id="speedChart"' not in html
 
 
+def test_manual_run_stage_tracks_live_ookla_progress(api_client):
+    _, webapp, _, _, _ = api_client
+
+    assert webapp._infer_manual_run_stage("Connected to test server: Sky – Dublin (id: 71403)") == "Connecting to test server"
+    assert webapp._infer_manual_run_stage("Idle Latency: 6.42 ms (40%)") == "Measuring latency"
+    assert webapp._infer_manual_run_stage("Download: 100.00 Mbps (31%)") == "Measuring download speed"
+    assert webapp._infer_manual_run_stage("Upload: 36.00 Mbps (24%)") == "Measuring upload speed"
+
+
 def test_broadband_threshold_settings_update_metrics_and_alert_thresholds(api_client):
     client, _, config_path, _, csrf_token = api_client
 

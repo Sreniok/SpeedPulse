@@ -282,7 +282,7 @@ def _append_manual_run_log(line: str) -> None:
     with MANUAL_RUN_STATE_LOCK:
         logs = list(MANUAL_RUN_STATE.get("logs", []))
         logs.append(line)
-        MANUAL_RUN_STATE["logs"] = logs[-14:]
+        MANUAL_RUN_STATE["logs"] = logs[-60:]
         MANUAL_RUN_STATE["updated_at"] = _iso_now()
     _persist_manual_runtime_state()
 
@@ -373,6 +373,14 @@ def _infer_manual_run_stage(line: str) -> str | None:
         return "Selecting server"
     if "running" in text and "attempt" in text:
         return "Connecting to test server"
+    if "connected to test server:" in text:
+        return "Connecting to test server"
+    if "idle latency:" in text:
+        return "Measuring latency"
+    if text.startswith("download:") and "%" in text:
+        return "Measuring download speed"
+    if text.startswith("upload:") and "%" in text:
+        return "Measuring upload speed"
     if "measuring download and upload throughput" in text:
         return "Measuring line speed"
     if "waiting" in text and "before retry" in text:
