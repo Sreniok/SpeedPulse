@@ -2737,29 +2737,7 @@ button:active,
 .run-modal-action-button {
   width: 100%;
   min-height: 46px;
-  border-radius: 999px;
-}
-
-.run-modal-close-button {
-  padding-inline: 1.05rem;
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 90%, white 10%),
-    color-mix(in srgb, var(--surface) 90%, var(--bg) 10%)
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
-    0 14px 28px color-mix(in srgb, var(--bg) 18%, transparent);
-}
-
-.run-modal-close-button:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 84%, white 16%),
-    color-mix(in srgb, var(--surface) 86%, var(--bg) 14%)
-  );
+  border-radius: 16px;
 }
 
 .run-modal-dot,
