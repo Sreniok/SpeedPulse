@@ -4750,7 +4750,16 @@ button:active,
 
 @media (min-width: 1081px) {
   .dashboard-page-overview .sidebar {
+    padding: var(--space-5);
+    gap: var(--space-4);
+    overflow-y: auto;
+    scrollbar-gutter: stable;
     justify-content: flex-start;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer {
+    margin-top: auto;
+    padding: 0;
   }
 
   .dashboard-page-overview .sidebar .brand-lockup,
@@ -4816,6 +4825,79 @@ button:active,
     padding: 0.88rem 0.98rem;
     border-radius: 15px;
     font-size: 0.9rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-card-schedule,
+  .dashboard-page-overview .sidebar #sidebar-contract {
+    min-height: 170px;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-card-schedule #scan-plan {
+    font-size: 0.95rem;
+    line-height: 1.2;
+  }
+
+  .dashboard-page-overview .sidebar .schedule-detail-label {
+    font-size: 0.76rem;
+  }
+
+  .dashboard-page-overview .sidebar .schedule-detail-value {
+    line-height: 1.28;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-contract-detail,
+  .dashboard-page-overview .sidebar .sidebar-contract-remaining {
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    display: block;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-card {
+    gap: 0.8rem;
+    padding: 0.85rem;
+    border-radius: 18px;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-copy {
+    gap: 0.28rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-value {
+    font-size: 1.08rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-note {
+    display: block;
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-action {
+    min-height: 38px;
+    padding: 0.48rem 0.55rem;
+    border-radius: 12px;
+    font-size: 0.76rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-link-title {
+    font-size: 0.72rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-link-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-footer-link-icon svg {
+    width: 0.78rem;
+    height: 0.78rem;
   }
 
   .dashboard-page-overview .sidebar #sidebar-account-provider,
