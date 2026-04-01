@@ -8,6 +8,7 @@ let currentPayload = null;
 let currentPage = 1;
 let currentSort = { key: "timestamp_iso", direction: "desc" };
 let manualRunInFlight = false;
+let manualRunStartInFlight = false;
 let weeklyReportInFlight = false;
 let runModalTimerId = null;
 let runModalStartedAt = 0;
@@ -72,17 +73,22 @@ function updateServerSelectDisabled() {
   const defaultSelect = byId("server-select");
   if (defaultSelect) {
     defaultSelect.disabled =
-      manualRunInFlight || serverSettingsLoading || serverSettingsSaving;
+      manualRunInFlight ||
+      manualRunStartInFlight ||
+      serverSettingsLoading ||
+      serverSettingsSaving;
   }
 
   const modalSelect = byId("server-modal-select");
   if (modalSelect) {
-    modalSelect.disabled = manualRunInFlight || serverSettingsLoading;
+    modalSelect.disabled =
+      manualRunInFlight || manualRunStartInFlight || serverSettingsLoading;
   }
 
   const startButton = byId("server-modal-start");
   if (startButton) {
-    startButton.disabled = manualRunInFlight || serverSettingsLoading;
+    startButton.disabled =
+      manualRunInFlight || manualRunStartInFlight || serverSettingsLoading;
   }
 }
 
@@ -350,6 +356,8 @@ async function loadServerSettings() {
   try {
     const response = await fetch("/api/settings/server");
     if (response.status === 401) {
+      manualRunStartInFlight = false;
+      setRunButtonState(false);
       window.location.href = "/login";
       return;
     }
@@ -3006,12 +3014,14 @@ function exportResults() {
 }
 
 async function runSpeedtestNow(serverId = "") {
-  if (manualRunInFlight) {
+  if (manualRunInFlight || manualRunStartInFlight) {
     return;
   }
 
+  manualRunStartInFlight = true;
   clearMessage();
   setStatus("Starting speedtest...");
+  setRunButtonState(true);
 
   try {
     const response = await fetch("/api/run/speedtest", {
@@ -3034,6 +3044,7 @@ async function runSpeedtestNow(serverId = "") {
       response.ok &&
       (payload.status === "running" || response.status === 202)
     ) {
+      manualRunStartInFlight = false;
       manualRunInFlight = true;
       setRunButtonState(true);
       closeServerModal();
@@ -3045,6 +3056,7 @@ async function runSpeedtestNow(serverId = "") {
     }
 
     if (response.status === 409 && payload.status === "running") {
+      manualRunStartInFlight = false;
       manualRunInFlight = true;
       setRunButtonState(true);
       closeServerModal();
@@ -3056,6 +3068,8 @@ async function runSpeedtestNow(serverId = "") {
     }
 
     if (response.status === 429) {
+      manualRunStartInFlight = false;
+      setRunButtonState(false);
       showMessage(
         payload.message || "Please wait before running another test.",
         "warning",
@@ -3064,12 +3078,16 @@ async function runSpeedtestNow(serverId = "") {
       return;
     }
 
+    manualRunStartInFlight = false;
+    setRunButtonState(false);
     showMessage(
       payload.detail || payload.message || "Speed test failed.",
       "error",
     );
     setStatus("Speed test failed");
   } catch (error) {
+    manualRunStartInFlight = false;
+    setRunButtonState(false);
     showMessage("Unable to run speed test right now.", "error");
     setStatus("Speed test failed");
   }
