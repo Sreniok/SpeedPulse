@@ -365,8 +365,12 @@ function renderRunModal(status) {
   byId("run-modal-server-pill").textContent =
     status.selected_server_label || findServerLabel(status.selected_server_id);
   byId("run-modal-progress-bar").style.width = `${runStageProgress(status)}%`;
-  byId("run-modal-log").textContent =
-    (status.logs || []).join("\n") || "Waiting for speed test output...";
+  const runLog = byId("run-modal-log");
+  if (runLog) {
+    runLog.textContent =
+      (status.logs || []).join("\n") || "Waiting for speed test output...";
+    runLog.scrollTop = runLog.scrollHeight;
+  }
   const closeButton = byId("run-modal-close-action");
   if (closeButton) {
     const canClose = status.status === "completed" || status.status === "failed";
@@ -515,6 +519,11 @@ function closeRunModal() {
     window.clearInterval(runModalTimerId);
     runModalTimerId = null;
   }
+}
+
+function handleRunModalCloseAction() {
+  closeRunModal();
+  window.location.reload();
 }
 
 function stopRunStatusPolling() {
@@ -3458,7 +3467,10 @@ function bindEvents() {
   byId("server-modal-start")?.addEventListener("click", () => {
     void runSpeedtestNow(currentManualServerId());
   });
-  byId("run-modal-close-action")?.addEventListener("click", closeRunModal);
+  byId("run-modal-close-action")?.addEventListener(
+    "click",
+    handleRunModalCloseAction,
+  );
   byId("server-modal-cancel")?.addEventListener("click", closeServerModal);
   byId("server-modal-close")?.addEventListener("click", closeServerModal);
   byId("server-modal")?.addEventListener("close", syncBodyModalState);

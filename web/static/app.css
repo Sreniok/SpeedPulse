@@ -2732,6 +2732,31 @@ button:active,
   justify-content: flex-end;
 }
 
+.run-modal-close-button {
+  min-width: 108px;
+  min-height: 46px;
+  padding-inline: 1.05rem;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 90%, white 10%),
+    color-mix(in srgb, var(--surface) 90%, var(--bg) 10%)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 14px 28px color-mix(in srgb, var(--bg) 18%, transparent);
+}
+
+.run-modal-close-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 84%, white 16%),
+    color-mix(in srgb, var(--surface) 86%, var(--bg) 14%)
+  );
+}
+
 .run-modal-dot,
 .run-pulse {
   display: inline-block;
