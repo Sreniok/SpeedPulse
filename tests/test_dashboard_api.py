@@ -164,6 +164,37 @@ def test_metrics_payload_includes_sla_and_incidents(api_client):
     assert payload["incidents"][0]["primary_server"] == "Manchester"
 
 
+def test_overview_page_only_renders_summary_and_chart_sections(api_client):
+    client, _, _, _, _ = api_client
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'href="/results"' in html
+    assert 'href="#charts"' not in html
+    assert 'href="#latest-results"' not in html
+    assert 'id="hero-metrics"' in html
+    assert 'class="charts-grid"' in html
+    assert 'id="latest-table"' not in html
+    assert 'id="heatmap-section"' not in html
+    assert 'id="notification-history"' not in html
+
+
+def test_results_page_renders_results_table_on_separate_route(api_client):
+    client, _, _, _, _ = api_client
+
+    response = client.get("/results")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "Measurement Results" in html
+    assert 'nav-link active" href="/results"' in html
+    assert 'id="latest-table"' in html
+    assert 'id="hero-metrics"' not in html
+    assert 'id="speedChart"' not in html
+
+
 def test_broadband_threshold_settings_update_metrics_and_alert_thresholds(api_client):
     client, _, config_path, _, csrf_token = api_client
 

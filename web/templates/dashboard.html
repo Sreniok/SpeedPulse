@@ -12,7 +12,7 @@
       href="/logo.svg?v={{ logo_version }}"
       type="image/svg+xml"
     />
-    <title>SpeedPulse Dashboard</title>
+    <title>{{ page_title }}</title>
     <script src="/static/theme-catalog.js"></script>
     <script src="/static/theme-boot.js"></script>
     <link rel="stylesheet" href="/static/app.css?v={{ static_version }}" />
@@ -21,7 +21,7 @@
     <script src="/static/vendor/chart.umd.min.js" defer></script>
     <script src="/static/dashboard.js" defer></script>
   </head>
-  <body class="dash-body dashboard-page">
+  <body class="dash-body dashboard-page dashboard-page-{{ page_slug }}">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <div class="app-shell">
       <button
@@ -120,9 +120,8 @@
         </section>
 
         <nav class="nav-block">
-          <a class="nav-link active" href="#overview">Overview</a>
-          <a class="nav-link" href="#charts">Charts</a>
-          <a class="nav-link" href="#latest-results">Results</a>
+          <a class="nav-link{% if page_slug == 'overview' %} active{% endif %}" href="/">Overview</a>
+          <a class="nav-link{% if page_slug == 'results' %} active{% endif %}" href="/results">Results</a>
           <a class="nav-link" href="/settings">Settings</a>
         </nav>
 
@@ -217,12 +216,9 @@
       <main id="main-content" class="main-shell" tabindex="-1">
         <header class="topbar" id="overview">
           <div class="topbar-copy">
-            <p class="eyebrow">Dashboard</p>
-            <h1>Speed Test Results</h1>
-            <p class="topbar-text">
-              Newest results first, all scheduled scans available, fast manual
-              reruns when needed.
-            </p>
+            <p class="eyebrow">{{ page_eyebrow }}</p>
+            <h1>{{ page_heading }}</h1>
+            <p class="topbar-text">{{ page_description }}</p>
           </div>
 
           <div class="topbar-controls">
@@ -293,18 +289,6 @@
         ></section>
         <section class="status-line">
           <span id="status">Loading...</span>
-        </section>
-
-        <section class="section-jumpbar-wrap" aria-label="Dashboard sections">
-          <nav id="section-jumpbar" class="section-jumpbar">
-            <a class="nav-link nav-link-inline active" href="#overview"
-              >Overview</a
-            >
-            <a class="nav-link nav-link-inline" href="#charts">Charts</a>
-            <a class="nav-link nav-link-inline" href="#latest-results"
-              >Results</a
-            >
-          </nav>
         </section>
 
         <dialog
@@ -417,6 +401,7 @@
           </div>
         </section>
 
+        {% if page_slug == "overview" %}
         <section id="hero-metrics" class="hero-metrics"></section>
 
         <section class="charts-grid" id="charts">
@@ -555,7 +540,7 @@
             ></canvas>
           </section>
         </section>
-
+        {% elif page_slug == "results" %}
         <section class="panel results-panel" id="latest-results">
           <div class="panel-head panel-head-row">
             <div>
@@ -650,137 +635,7 @@
             </div>
           </div>
         </section>
-
-        <section class="panel panel-large panel-wide" id="heatmap-section">
-          <div class="panel-head">
-            <p class="eyebrow">Patterns</p>
-            <h2>Speed by time of day</h2>
-            <p class="panel-subtext">
-              Average download speed (Mbps) by hour and day of week. Darker =
-              faster.
-            </p>
-          </div>
-          <div id="heatmap-grid" class="heatmap-grid"></div>
-          <div class="heatmap-legend">
-            <span class="heatmap-legend-low">Slow</span>
-            <span class="heatmap-legend-bar"></span>
-            <span class="heatmap-legend-high">Fast</span>
-          </div>
-        </section>
-
-        <section class="insights-grid" id="reliability">
-          <section
-            class="panel panel-large sla-panel panel-collapsible is-collapsed"
-          >
-            <div class="panel-head panel-head-row">
-              <div>
-                <p class="eyebrow">SLA</p>
-                <h2>Threshold compliance</h2>
-                <p id="sla-summary" class="panel-subtext">
-                  Based on your configured thresholds across the selected
-                  window.
-                </p>
-              </div>
-              <button
-                class="btn-icon panel-collapse-toggle"
-                type="button"
-                aria-expanded="false"
-                aria-controls="sla-panel-body"
-                data-collapse-target="sla-panel-body"
-                data-collapse-name="SLA section"
-                aria-label="Expand SLA section"
-                title="Expand SLA section"
-              >
-                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
-              </button>
-            </div>
-            <div id="sla-panel-body" class="panel-collapse-body" hidden>
-              <div id="sla-cards" class="sla-cards"></div>
-              <div class="sla-deep-dive">
-                <section class="sla-chart-card">
-                  <div class="panel-head sla-section-head">
-                    <div>
-                      <h3>Breach breakdown</h3>
-                      <p id="sla-breakdown-summary" class="panel-subtext">
-                        Which thresholds are failing most often in this window.
-                      </p>
-                    </div>
-                  </div>
-                  <div class="sla-chart-wrap">
-                    <canvas
-                      id="slaBreakdownChart"
-                      aria-label="Breach breakdown by threshold type"
-                      role="img"
-                    ></canvas>
-                  </div>
-                </section>
-                <div id="sla-highlights" class="sla-highlights"></div>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel panel-large panel-collapsible is-collapsed">
-            <div class="panel-head panel-head-row">
-              <div>
-                <p class="eyebrow">Incidents</p>
-                <h2>Incident history</h2>
-                <p id="incident-summary" class="panel-subtext">
-                  Grouped from consecutive breached tests in the selected range.
-                </p>
-              </div>
-              <button
-                class="btn-icon panel-collapse-toggle"
-                type="button"
-                aria-expanded="false"
-                aria-controls="incident-panel-body"
-                data-collapse-target="incident-panel-body"
-                data-collapse-name="Incidents section"
-                aria-label="Expand incidents section"
-                title="Expand incidents section"
-              >
-                <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
-              </button>
-            </div>
-            <div id="incident-panel-body" class="panel-collapse-body" hidden>
-              <div id="incident-list" class="incident-list"></div>
-            </div>
-          </section>
-        </section>
-
-        <section
-          class="panel panel-large panel-wide panel-collapsible is-collapsed"
-          id="notification-history"
-        >
-          <div class="panel-head panel-head-row">
-            <div>
-              <p class="eyebrow">Activity</p>
-              <h2>Notification history</h2>
-              <p class="panel-subtext">
-                Recent alerts, weekly/monthly reports, and health checks that
-                were sent.
-              </p>
-            </div>
-            <button
-              class="btn-icon panel-collapse-toggle"
-              type="button"
-              aria-expanded="false"
-              aria-controls="notification-history-body"
-              data-collapse-target="notification-history-body"
-              data-collapse-name="Notification history section"
-              aria-label="Expand notification history section"
-              title="Expand notification history section"
-            >
-              <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
-            </button>
-          </div>
-          <div
-            id="notification-history-body"
-            class="panel-collapse-body"
-            hidden
-          >
-            <div id="notification-log" class="notification-log"></div>
-          </div>
-        </section>
+        {% endif %}
       </main>
     </div>
   </body>

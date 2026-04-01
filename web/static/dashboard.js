@@ -1260,6 +1260,7 @@ function reliabilityHighlightCard(
 
 function renderHeroMetrics(data) {
   const root = byId("hero-metrics");
+  if (!root) return;
   root.textContent = "";
   root.removeAttribute("aria-busy");
 
@@ -1808,13 +1809,22 @@ function renderScheduleNote(data) {
     currentServerLabel ||
     "Auto (nearest server)";
   const timesHost = byId("schedule-times");
+  const scanPlan = byId("scan-plan");
+  const scheduleServer = byId("schedule-server");
+  const scheduleWeekly = byId("schedule-weekly");
 
   const scheduledToday =
     data.today_scheduled_tests ?? data.today_tests ?? 0;
-  byId("scan-plan").textContent =
-    `${scheduledToday} / ${data.scheduled_tests_per_day || 0} scans today`;
-  byId("schedule-server").textContent = selectedServer;
-  byId("schedule-weekly").textContent = weekly;
+  if (scanPlan) {
+    scanPlan.textContent =
+      `${scheduledToday} / ${data.scheduled_tests_per_day || 0} scans today`;
+  }
+  if (scheduleServer) {
+    scheduleServer.textContent = selectedServer;
+  }
+  if (scheduleWeekly) {
+    scheduleWeekly.textContent = weekly;
+  }
 
   if (timesHost) {
     timesHost.textContent = "";
@@ -2175,6 +2185,20 @@ function renderCharts(data) {
   currentPayload = data;
   ensureHoverGuidePlugin();
 
+  if (speedChart) speedChart.destroy();
+  if (latencyChart) latencyChart.destroy();
+  if (thresholdChart) thresholdChart.destroy();
+  speedChart = undefined;
+  latencyChart = undefined;
+  thresholdChart = undefined;
+
+  const speedCanvas = byId("speedChart");
+  const latencyCanvas = byId("latencyChart");
+  const thresholdCanvas = byId("thresholdChart");
+  if (!speedCanvas || !latencyCanvas || !thresholdCanvas) {
+    return;
+  }
+
   const labels = data.timeseries.map((item) =>
     item.timestamp.slice(5, 16).replace("T", " "),
   );
@@ -2186,10 +2210,6 @@ function renderCharts(data) {
   const downloadTrend = rollingAverage(download, 7);
   const uploadTrend = rollingAverage(upload, 7);
   const hasTrendWindow = labels.length >= 3;
-
-  if (speedChart) speedChart.destroy();
-  if (latencyChart) latencyChart.destroy();
-  if (thresholdChart) thresholdChart.destroy();
 
   const thresholds = data.thresholds || {};
   const dlThreshold = Number(thresholds.download_mbps || 0);
@@ -2224,7 +2244,7 @@ function renderCharts(data) {
 
   const speedOptions = chartOptions();
 
-  speedChart = new Chart(byId("speedChart"), {
+  speedChart = new Chart(speedCanvas, {
     type: "line",
     data: {
       labels,
@@ -2277,7 +2297,7 @@ function renderCharts(data) {
 
   const latencyOptions = latencyChartOptions();
 
-  latencyChart = new Chart(byId("latencyChart"), {
+  latencyChart = new Chart(latencyCanvas, {
     type: "bar",
     data: {
       labels,
@@ -2339,7 +2359,7 @@ function renderCharts(data) {
   });
 
   const breaches = data.violations || {};
-  thresholdChart = new Chart(byId("thresholdChart"), {
+  thresholdChart = new Chart(thresholdCanvas, {
     type: "bar",
     data: {
       labels: [
@@ -2494,7 +2514,7 @@ function sortRows(rows) {
 }
 
 function filterRows(rows) {
-  const query = byId("table-search").value.trim().toLowerCase();
+  const query = String(byId("table-search")?.value || "").trim().toLowerCase();
   if (!query) return rows;
 
   return rows.filter((row) => {
@@ -2505,7 +2525,7 @@ function filterRows(rows) {
 }
 
 function pageSize() {
-  return Number(byId("page-size").value || "10");
+  return Number(byId("page-size")?.value || "10");
 }
 
 function totalPages(rows) {
@@ -2579,10 +2599,14 @@ function renderResultsSkeleton(rowCount = 5) {
     tbody.appendChild(row);
   }
 
-  byId("results-count").textContent = "Loading results...";
-  byId("page-indicator").textContent = "Page --";
-  byId("page-prev").disabled = true;
-  byId("page-next").disabled = true;
+  const resultsCount = byId("results-count");
+  const pageIndicator = byId("page-indicator");
+  const pagePrev = byId("page-prev");
+  const pageNext = byId("page-next");
+  if (resultsCount) resultsCount.textContent = "Loading results...";
+  if (pageIndicator) pageIndicator.textContent = "Page --";
+  if (pagePrev) pagePrev.disabled = true;
+  if (pageNext) pageNext.disabled = true;
 }
 
 function setDashboardLoadingState(isLoading, isInitial = false) {
@@ -2624,6 +2648,7 @@ function setChartsTransitioning(isTransitioning) {
 
 function renderTable() {
   const tbody = document.querySelector("#latest-table tbody");
+  if (!tbody) return;
   tbody.textContent = "";
 
   const rows = visibleRows();
@@ -2671,12 +2696,18 @@ function renderTable() {
 
   const rangeLabel = currentPayload?.range_label || "Selected range";
   const scheduledPerDay = currentPayload?.scheduled_tests_per_day || 0;
-  byId("results-count").textContent =
-    `Showing ${pagedRows.length} of ${rows.length} results | ${rangeLabel} | ${scheduledPerDay} scans scheduled daily`;
+  const resultsCount = byId("results-count");
+  const pageIndicator = byId("page-indicator");
+  const pagePrev = byId("page-prev");
+  const pageNext = byId("page-next");
 
-  byId("page-indicator").textContent = `Page ${currentPage} of ${pages}`;
-  byId("page-prev").disabled = currentPage <= 1;
-  byId("page-next").disabled = currentPage >= pages;
+  if (resultsCount) {
+    resultsCount.textContent =
+      `Showing ${pagedRows.length} of ${rows.length} results | ${rangeLabel} | ${scheduledPerDay} scans scheduled daily`;
+  }
+  if (pageIndicator) pageIndicator.textContent = `Page ${currentPage} of ${pages}`;
+  if (pagePrev) pagePrev.disabled = currentPage <= 1;
+  if (pageNext) pageNext.disabled = currentPage >= pages;
 }
 
 function updateSortIndicators() {
@@ -2735,7 +2766,7 @@ function bindSorting() {
 }
 
 function currentRangeSelection() {
-  const value = byId("range").value;
+  const value = byId("range")?.value || "today";
   if (value === "today") {
     return { mode: "today", days: null };
   }
@@ -3377,7 +3408,7 @@ function bindEvents() {
   if (weeklyReportButton) {
     weeklyReportButton.setAttribute("title", "Send weekly report email now (Shortcut: W)");
   }
-  byId("range").addEventListener("change", loadMetrics);
+  byId("range")?.addEventListener("change", loadMetrics);
   reportButton?.addEventListener("click", () => {
     void generateRangeReport();
   });
@@ -3394,39 +3425,39 @@ function bindEvents() {
     }
     openServerModal();
   });
-  byId("server-modal-start").addEventListener("click", () => {
+  byId("server-modal-start")?.addEventListener("click", () => {
     void runSpeedtestNow(currentManualServerId());
   });
-  byId("server-modal-cancel").addEventListener("click", closeServerModal);
-  byId("server-modal-close").addEventListener("click", closeServerModal);
-  byId("server-modal").addEventListener("close", syncBodyModalState);
-  byId("server-modal").addEventListener("cancel", (event) => {
+  byId("server-modal-cancel")?.addEventListener("click", closeServerModal);
+  byId("server-modal-close")?.addEventListener("click", closeServerModal);
+  byId("server-modal")?.addEventListener("close", syncBodyModalState);
+  byId("server-modal")?.addEventListener("cancel", (event) => {
     event.preventDefault();
     closeServerModal();
   });
-  byId("server-modal").addEventListener("click", (event) => {
+  byId("server-modal")?.addEventListener("click", (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     if (!event.target.closest(".dialog-card")) {
       closeServerModal();
     }
   });
-  byId("table-search").addEventListener("input", () => {
+  byId("table-search")?.addEventListener("input", () => {
     currentPage = 1;
     renderTable();
   });
-  byId("page-size").addEventListener("change", () => {
+  byId("page-size")?.addEventListener("change", () => {
     currentPage = 1;
     renderTable();
   });
-  byId("page-prev").addEventListener("click", () => {
+  byId("page-prev")?.addEventListener("click", () => {
     currentPage -= 1;
     renderTable();
   });
-  byId("page-next").addEventListener("click", () => {
+  byId("page-next")?.addEventListener("click", () => {
     currentPage += 1;
     renderTable();
   });
-  byId("export-results").addEventListener("click", exportResults);
+  byId("export-results")?.addEventListener("click", exportResults);
   document.querySelectorAll(".chart-save").forEach((btn) => {
     btn.addEventListener("click", () => saveChartAsPng(btn.dataset.chart));
   });
@@ -3478,8 +3509,11 @@ function bindEvents() {
       !event.ctrlKey &&
       !event.altKey
     ) {
-      byId("range").value = rangeKeys[event.key];
-      void loadMetrics();
+      const rangeSelect = byId("range");
+      if (rangeSelect) {
+        rangeSelect.value = rangeKeys[event.key];
+        void loadMetrics();
+      }
     }
   });
 }

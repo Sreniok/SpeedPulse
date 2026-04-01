@@ -31,7 +31,19 @@ def build_dashboard_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    def render_account_page(request: Request, template_name: str) -> Response:
+    def render_account_page(
+        request: Request,
+        template_name: str,
+        *,
+        page_title: str = "SpeedPulse Dashboard",
+        page_slug: str = "overview",
+        page_eyebrow: str = "Dashboard",
+        page_heading: str = "Speed Test Results",
+        page_description: str = (
+            "Newest results first, all scheduled scans available, fast manual "
+            "reruns when needed."
+        ),
+    ) -> Response:
         session = current_session(request)
         if not session:
             return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
@@ -54,6 +66,11 @@ def build_dashboard_router(
                 "github_url": github_project_url(config),
                 "github_sponsors_url": github_sponsors_url(config),
                 "ui_theme": ui_theme_preferences(config),
+                "page_title": page_title,
+                "page_slug": page_slug,
+                "page_eyebrow": page_eyebrow,
+                "page_heading": page_heading,
+                "page_description": page_description,
             },
         )
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -64,6 +81,21 @@ def build_dashboard_router(
     @router.get("/", response_class=HTMLResponse)
     def dashboard_page(request: Request) -> Response:
         return render_account_page(request, "dashboard.html")
+
+    @router.get("/results", response_class=HTMLResponse)
+    def results_page(request: Request) -> Response:
+        return render_account_page(
+            request,
+            "dashboard.html",
+            page_title="SpeedPulse Results",
+            page_slug="results",
+            page_eyebrow="Results",
+            page_heading="Measurement Results",
+            page_description=(
+                "Search, filter, and export your latest speed tests without "
+                "the dashboard charts."
+            ),
+        )
 
     @router.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> Response:
