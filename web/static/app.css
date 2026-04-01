@@ -4748,6 +4748,82 @@ button:active,
   }
 }
 
+@media (min-width: 1081px) {
+  .dashboard-page-overview .sidebar {
+    justify-content: flex-start;
+  }
+
+  .dashboard-page-overview .sidebar .brand-lockup,
+  .dashboard-page-overview .sidebar .sidebar-card {
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+  }
+
+  .dashboard-page-overview .sidebar .eyebrow {
+    margin: 0 0 0.35rem;
+    font-size: var(--type-label);
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-card p,
+  .dashboard-page-overview .sidebar .brand-user {
+    margin: 0.35rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .dashboard-page-overview .sidebar .brand-wordmark-svg {
+    max-width: 100%;
+    margin-top: 0.1rem;
+    margin-inline: 0;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-clock-card {
+    gap: 0.18rem;
+    padding-top: 0.82rem;
+    padding-bottom: 0.82rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-clock-time {
+    font-size: clamp(2rem, 2.8vw, 2.45rem);
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-clock-zone {
+    font-size: 0.8rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-account-user {
+    margin-bottom: 0.62rem;
+    padding-bottom: 0.62rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-card-account .sidebar-account-user-name {
+    font-size: 0.9rem;
+  }
+
+  .dashboard-page-overview .sidebar .sidebar-card-account strong {
+    font-size: 1.08rem;
+  }
+
+  .dashboard-page-overview .sidebar .nav-block {
+    gap: 0.4rem;
+  }
+
+  .dashboard-page-overview .sidebar > .nav-block:not(.nav-block-sections) {
+    gap: 0.46rem;
+  }
+
+  .dashboard-page-overview .sidebar > .nav-block:not(.nav-block-sections) .nav-link {
+    padding: 0.88rem 0.98rem;
+    border-radius: 15px;
+    font-size: 0.9rem;
+  }
+
+  .dashboard-page-overview .sidebar #sidebar-account-provider,
+  .dashboard-page-overview .sidebar #sidebar-account-ip {
+    display: block;
+  }
+}
+
 .panel-head-row {
   display: flex;
   justify-content: space-between;
