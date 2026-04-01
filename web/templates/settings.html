@@ -288,7 +288,7 @@
         <section class="settings-grid settings-grid-stack">
           <article
             id="section-appearance"
-            class="panel settings-card panel-collapsible"
+            class="panel settings-card panel-collapsible is-collapsed"
           >
             <div class="panel-head panel-head-row">
               <div>
@@ -304,19 +304,19 @@
                 <button
                   class="btn-icon panel-collapse-toggle"
                   type="button"
-                  aria-expanded="true"
+                  aria-expanded="false"
                   aria-controls="section-appearance-body"
                   data-collapse-target="section-appearance-body"
                   data-collapse-name="Appearance section"
-                  aria-label="Collapse Appearance section"
-                  title="Collapse Appearance section"
+                  aria-label="Expand Appearance section"
+                  title="Expand Appearance section"
                 >
                   <span class="panel-collapse-chevron" aria-hidden="true">▾</span>
                 </button>
               </div>
             </div>
 
-            <div id="section-appearance-body" class="panel-collapse-body">
+            <div id="section-appearance-body" class="panel-collapse-body" hidden>
               <div class="settings-fields settings-fields-split">
                 <div class="settings-field-group">
                   <label for="settings-theme-mode">Mode</label>

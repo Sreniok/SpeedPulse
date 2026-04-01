@@ -946,7 +946,7 @@ select {
 }
 
 .dashboard-page .app-shell {
-  grid-template-columns: calc(272px * var(--ui-scale)) 1fr;
+  grid-template-columns: calc(300px * var(--ui-scale)) 1fr;
 }
 
 .app-shell > * {
