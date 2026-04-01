@@ -121,7 +121,7 @@
 
         <nav class="nav-block">
           <a class="nav-link{% if page_slug == 'overview' %} active{% endif %}" href="/">Overview</a>
-          <a class="nav-link{% if page_slug == 'results' %} active{% endif %}" href="/results">Results</a>
+          <a class="nav-link" href="/#latest-results">Results</a>
           <a class="nav-link" href="/settings">Settings</a>
         </nav>
 
@@ -540,7 +540,9 @@
             ></canvas>
           </section>
         </section>
-        {% elif page_slug == "results" %}
+        {% endif %}
+
+        {% if page_slug == "overview" or page_slug == "results" %}
         <section class="panel results-panel" id="latest-results">
           <div class="panel-head panel-head-row">
             <div>
