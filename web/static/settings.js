@@ -17,6 +17,34 @@ const animatedSelectRenderMap = new WeakMap();
 const MAX_SCAN_CUSTOM_DAY = 31;
 let selectedScanCustomDays = [1];
 const uiCore = window.SpeedPulseUiCore || null;
+const CONTRACT_PROVIDER_DIRECTORY = {
+  IE: [
+    "Sky Ireland",
+    "Vodafone Ireland",
+    "Virgin Media Ireland",
+    "eir",
+    "SIRO",
+    "Digiweb",
+    "Pure Telecom",
+    "Imagine",
+    "Blacknight",
+    "Regional Broadband",
+  ],
+  GB: [
+    "Sky",
+    "BT",
+    "Virgin Media",
+    "TalkTalk",
+    "Vodafone UK",
+    "Plusnet",
+    "EE",
+    "Zen Internet",
+    "Hyperoptic",
+    "Community Fibre",
+    "Gigaclear",
+    "KCOM",
+  ],
+};
 
 function byId(id) {
   if (uiCore && typeof uiCore.byId === "function") {
@@ -1230,6 +1258,24 @@ function populateSettingsForm(payload) {
 
   byId("settings-contract-start").value = currentContract.start_date || "";
   byId("settings-contract-end").value = currentContract.end_date || "";
+  const detectedProvider = account.provider || "";
+  const providerCountry = normalizeProviderCountry(
+    currentContract.provider_country || "auto",
+  );
+  byId("settings-contract-provider-country").value = providerCountry;
+  byId("settings-contract-provider-select").dataset.currentProvider =
+    currentContract.provider || detectedProvider || "";
+  populateContractProviderOptions({
+    countryCode:
+      providerCountry === "auto"
+        ? inferProviderCountry({
+            timezone: app.timezone || "UTC",
+            provider: detectedProvider,
+          })
+        : providerCountry,
+    detectedProvider,
+    selectedProvider: currentContract.provider || detectedProvider || "",
+  });
   byId("settings-contract-download").value =
     currentContract.download_mbps || "";
   byId("settings-contract-upload").value = currentContract.upload_mbps || "";
@@ -1408,6 +1454,10 @@ function collectSettingsPayload() {
       current: {
         start_date: byId("settings-contract-start").value,
         end_date: byId("settings-contract-end").value,
+        provider: selectedContractProviderValue(),
+        provider_country: normalizeProviderCountry(
+          byId("settings-contract-provider-country").value,
+        ),
         download_mbps: Number(byId("settings-contract-download").value) || 0,
         upload_mbps: Number(byId("settings-contract-upload").value) || 0,
         reminder_enabled: byId("settings-contract-reminder").checked,
@@ -1827,6 +1877,127 @@ function renderContractDaysRemaining(endDate) {
   } else {
     el.textContent = `Contract expired ${Math.abs(diff)} day${Math.abs(diff) === 1 ? "" : "s"} ago.`;
   }
+}
+
+function normalizeProviderCountry(value) {
+  const normalized = String(value || "auto").trim().toUpperCase();
+  if (normalized === "IE" || normalized === "GB") return normalized;
+  return "auto";
+}
+
+function inferProviderCountry({ timezone = "", provider = "" } = {}) {
+  const tz = String(timezone || "").trim();
+  const isp = String(provider || "").trim().toLowerCase();
+  if (tz === "Europe/Dublin" || /\b(ireland|eir|siro|digiweb|pure telecom|imagine)\b/.test(isp)) {
+    return "IE";
+  }
+  if (
+    tz === "Europe/London" ||
+    /\b(uk|britain|england|scotland|wales|bt|talktalk|plusnet|hyperoptic|gigaclear|kcom)\b/.test(isp)
+  ) {
+    return "GB";
+  }
+  return "IE";
+}
+
+function providerOptionsForCountry(countryCode) {
+  return CONTRACT_PROVIDER_DIRECTORY[countryCode] || CONTRACT_PROVIDER_DIRECTORY.IE;
+}
+
+function populateContractProviderOptions({ countryCode, detectedProvider = "", selectedProvider = "" }) {
+  const select = byId("settings-contract-provider-select");
+  const customInput = byId("settings-contract-provider-custom");
+  const customGroup = byId("settings-contract-provider-custom-group");
+  if (!select || !customInput || !customGroup) return;
+
+  const options = providerOptionsForCountry(countryCode);
+  const desired = String(selectedProvider || detectedProvider || "").trim();
+  const matchedOption = options.find(
+    (option) => option.toLowerCase() === desired.toLowerCase(),
+  );
+
+  select.textContent = "";
+  const autoOption = document.createElement("option");
+  autoOption.value = "";
+  autoOption.textContent = detectedProvider
+    ? `Auto: ${detectedProvider}`
+    : "Auto: detected provider";
+  select.appendChild(autoOption);
+
+  options.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option;
+    element.textContent = option;
+    select.appendChild(element);
+  });
+
+  const customOption = document.createElement("option");
+  customOption.value = "__custom__";
+  customOption.textContent = "Custom provider";
+  select.appendChild(customOption);
+
+  if (!desired) {
+    select.value = "";
+    customInput.value = "";
+    customGroup.classList.add("hidden");
+  } else if (matchedOption) {
+    select.value = matchedOption;
+    customInput.value = "";
+    customGroup.classList.add("hidden");
+  } else if (desired.toLowerCase() === String(detectedProvider || "").trim().toLowerCase()) {
+    select.value = "";
+    customInput.value = "";
+    customGroup.classList.add("hidden");
+  } else {
+    select.value = "__custom__";
+    customInput.value = desired;
+    customGroup.classList.remove("hidden");
+  }
+}
+
+function selectedContractProviderValue() {
+  const select = byId("settings-contract-provider-select");
+  const customInput = byId("settings-contract-provider-custom");
+  const detectedInput = byId("settings-provider-detected");
+  if (!select || !customInput || !detectedInput) return "";
+
+  if (select.value === "__custom__") {
+    return customInput.value.trim();
+  }
+  if (!select.value) {
+    return detectedInput.value.trim();
+  }
+  return select.value.trim();
+}
+
+function syncContractProviderPicker() {
+  const countrySelect = byId("settings-contract-provider-country");
+  const detectedInput = byId("settings-provider-detected");
+  const contractProviderSelect = byId("settings-contract-provider-select");
+  const customGroup = byId("settings-contract-provider-custom-group");
+  if (!countrySelect || !detectedInput || !contractProviderSelect || !customGroup) return;
+
+  const resolvedCountry =
+    normalizeProviderCountry(countrySelect.value) === "auto"
+      ? inferProviderCountry({
+          timezone: byId("settings-app-timezone")?.value || "",
+          provider: detectedInput.value,
+        })
+      : normalizeProviderCountry(countrySelect.value);
+
+  populateContractProviderOptions({
+    countryCode: resolvedCountry,
+    detectedProvider: detectedInput.value.trim(),
+    selectedProvider:
+      selectedContractProviderValue() ||
+      contractProviderSelect.dataset.currentProvider ||
+      detectedInput.value.trim(),
+  });
+
+  customGroup.classList.toggle(
+    "hidden",
+    contractProviderSelect.value !== "__custom__",
+  );
 }
 
 function escapeHtml(value) {
@@ -2610,6 +2781,17 @@ function bindEvents() {
   });
   byId("settings-app-timezone").addEventListener("input", () => {
     syncTimezoneCheckLink();
+    if (normalizeProviderCountry(byId("settings-contract-provider-country")?.value) === "auto") {
+      syncContractProviderPicker();
+    }
+  });
+  byId("settings-contract-provider-country").addEventListener("change", () => {
+    syncContractProviderPicker();
+  });
+  byId("settings-contract-provider-select").addEventListener("change", () => {
+    const select = byId("settings-contract-provider-select");
+    const customGroup = byId("settings-contract-provider-custom-group");
+    customGroup?.classList.toggle("hidden", select?.value !== "__custom__");
   });
   byId("settings-add-scan-time").addEventListener("click", () => {
     addDailyScanTimeRow();

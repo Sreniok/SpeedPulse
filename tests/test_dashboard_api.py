@@ -204,6 +204,8 @@ def test_end_current_contract_returns_archived_summary_and_email_status(
     config["contract"]["current"] = {
         "start_date": "2026-03-13",
         "end_date": "2026-03-13",
+        "provider": "Sky Ireland",
+        "provider_country": "IE",
         "download_mbps": 1000,
         "upload_mbps": 100,
     }
@@ -225,7 +227,8 @@ def test_end_current_contract_returns_archived_summary_and_email_status(
     payload = response.json()
     assert payload["message"] == "Contract ended and archived."
     assert payload["email"]["sent"] is True
-    assert payload["archived"]["provider"] == "Example ISP"
+    assert payload["archived"]["provider"] == "Sky Ireland"
+    assert payload["archived"]["provider_country"] == "IE"
     assert payload["archived"]["summary"]["total_tests"] == 3
     assert payload["archived"]["summary"]["sources"]["scheduled"] == 3
     assert payload["archived"]["summary"]["sources"]["manual"] == 0
@@ -244,6 +247,8 @@ def test_settings_payload_enriches_contract_history_entries(api_client):
         {
             "start_date": "2026-03-13",
             "end_date": "2026-03-13",
+            "provider": "Sky Ireland",
+            "provider_country": "IE",
             "download_mbps": 1000,
             "upload_mbps": 100,
         }
@@ -256,7 +261,8 @@ def test_settings_payload_enriches_contract_history_entries(api_client):
     payload = response.json()
     history = payload["contract"]["history"]
     assert len(history) == 1
-    assert history[0]["provider"] == "Example ISP"
+    assert history[0]["provider"] == "Sky Ireland"
+    assert history[0]["provider_country"] == "IE"
     assert history[0]["summary"]["total_tests"] == 3
 
 

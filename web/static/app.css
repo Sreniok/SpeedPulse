@@ -5726,7 +5726,15 @@ label {
   margin: 0;
 }
 
-#contract-history-list,
+#contract-history-list {
+  display: flex;
+  gap: 0.85rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+}
+
 .contract-history-modal-list {
   display: grid;
   gap: 0.85rem;
@@ -5734,6 +5742,7 @@ label {
 
 .contract-history-card {
   margin: 0;
+  flex: 0 0 min(330px, 88vw);
 }
 
 .contract-mini-card {

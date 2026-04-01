@@ -817,6 +817,8 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
             "current": {
                 "start_date": str(current_contract.get("start_date", "")),
                 "end_date": str(current_contract.get("end_date", "")),
+                "provider": str(current_contract.get("provider", "") or detected_identity["provider"]),
+                "provider_country": _clean_provider_country(current_contract.get("provider_country", "auto")),
                 "download_mbps": current_contract.get("download_mbps", 0),
                 "upload_mbps": current_contract.get("upload_mbps", 0),
                 "reminder_enabled": bool(current_contract.get("reminder_enabled", False)),
@@ -2062,6 +2064,10 @@ async def update_notification_settings(request: Request) -> JSONResponse:
         current = contract_cfg.setdefault("current", {})
         current["start_date"] = _clean_env_value(contract_current.get("start_date", ""))
         current["end_date"] = _clean_env_value(contract_current.get("end_date", ""))
+        current["provider"] = _clean_env_value(contract_current.get("provider", ""))
+        current["provider_country"] = _clean_provider_country(
+            contract_current.get("provider_country", "auto"),
+        )
         try:
             current["download_mbps"] = float(contract_current.get("download_mbps", 0) or 0)
         except (TypeError, ValueError):
@@ -2441,6 +2447,13 @@ def _contract_period_identity(config: dict, start_str: str, end_str: str) -> dic
     }
 
 
+def _clean_provider_country(value: object, fallback: str = "auto") -> str:
+    normalized = str(value or fallback).strip().upper()
+    if normalized in {"AUTO", "IE", "GB"}:
+        return "auto" if normalized == "AUTO" else normalized
+    return fallback
+
+
 def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:
     """Build performance summary for a date range (contract period)."""
     try:
@@ -2537,6 +2550,7 @@ def _resolved_contract_entry(config: dict, entry: dict) -> dict:
     return {
         **entry,
         "provider": str(entry.get("provider", "") or detected_identity["provider"]),
+        "provider_country": _clean_provider_country(entry.get("provider_country", "auto")),
         "account_name": str(entry.get("account_name", "") or account_cfg.get("name", "")),
         "account_number": str(entry.get("account_number", "") or account_cfg.get("number", "")),
         "ip_address": str(entry.get("ip_address", "") or detected_identity["ip_address"]),
@@ -2645,7 +2659,8 @@ async def end_current_contract(request: Request) -> JSONResponse:
     summary = _contract_summary(config, start_str, end_str)
     archived = {
         **current,
-        "provider": detected_identity["provider"],
+        "provider": str(current.get("provider", "") or detected_identity["provider"]),
+        "provider_country": _clean_provider_country(current.get("provider_country", "auto")),
         "ip_address": detected_identity["ip_address"],
         "account_name": str(account_cfg.get("name", "")),
         "account_number": str(account_cfg.get("number", "")),

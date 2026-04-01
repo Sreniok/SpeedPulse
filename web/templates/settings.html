@@ -697,6 +697,39 @@
                   </h3>
                   <div class="settings-fields settings-fields-split">
                     <div class="settings-field-group">
+                      <label for="settings-contract-provider-country"
+                        >Provider country</label
+                      >
+                      <select id="settings-contract-provider-country">
+                        <option value="auto">Auto detect</option>
+                        <option value="IE">Ireland</option>
+                        <option value="GB">United Kingdom</option>
+                      </select>
+                    </div>
+                    <div class="settings-field-group">
+                      <label for="settings-contract-provider-select"
+                        >Contract provider</label
+                      >
+                      <select id="settings-contract-provider-select"></select>
+                      <p class="panel-subtext">
+                        Auto-picks the detected ISP, but you can override it for
+                        archived contracts.
+                      </p>
+                    </div>
+                    <div
+                      id="settings-contract-provider-custom-group"
+                      class="settings-field-group hidden"
+                    >
+                      <label for="settings-contract-provider-custom"
+                        >Custom provider</label
+                      >
+                      <input
+                        id="settings-contract-provider-custom"
+                        type="text"
+                        placeholder="Enter provider name"
+                      />
+                    </div>
+                    <div class="settings-field-group">
                       <label for="settings-contract-start"
                         >Contract start date</label
                       >
