@@ -3,7 +3,7 @@
 # Quick start:
 #   mkdir speedpulse && cd speedpulse
 #   curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
-#   export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.2.0   # optional: pin a specific tag
+#   export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.2.1   # optional: pin a specific tag
 #   docker compose up -d
 #
 # The "init" service runs once to create .env, data/config.json, etc.

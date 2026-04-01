@@ -39,7 +39,7 @@ It is designed as a strong portfolio project for Cloud / Platform / DevOps-style
 ```bash
 mkdir speedpulse && cd speedpulse
 curl -fsSL https://raw.githubusercontent.com/Sreniok/speedpulse/main/compose.deploy.yml -o docker-compose.yml
-export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.2.0
+export SPEEDPULSE_IMAGE=ghcr.io/sreniok/speedpulse:v1.2.1
 docker compose up -d
 ```
 
@@ -220,7 +220,7 @@ make password
 
 ## Releases
 
-- Current release target: `v1.2.0`
+- Current release target: `v1.2.1`
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Previous release draft: [RELEASE_NOTES_v1.1.9.md](RELEASE_NOTES_v1.1.9.md)
 - Previous short release body: [RELEASE_DESCRIPTION_v1.1.9.md](RELEASE_DESCRIPTION_v1.1.9.md)

@@ -136,6 +136,20 @@ def run_script(script_name: str) -> None:
         log(f"Job failed ({result.returncode}): {script_name}")
 
 
+def format_job_next_run(job: object) -> str:
+    """Best-effort next-run text for mixed APScheduler job implementations."""
+    raw_next_run = getattr(job, "next_run_time", None)
+    if raw_next_run is None:
+        return "n/a"
+    next_run = raw_next_run if isinstance(raw_next_run, datetime) else None
+    if next_run is None:
+        return str(raw_next_run)
+    try:
+        return next_run.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except Exception:
+        return str(next_run)
+
+
 def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
     scheduling = config.get("scheduling", {})
     notifications = config.get("notifications", {})
@@ -216,7 +230,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
             coalesce=True,
             misfire_grace_time=21600,
         )
-        next_run = weekly_job.next_run_time.strftime("%Y-%m-%d %H:%M:%S %Z") if weekly_job.next_run_time else "n/a"
+        next_run = format_job_next_run(weekly_job)
         log(f"Scheduled weekly report on {day_of_week} at {hour:02d}:{minute:02d} (next run: {next_run})")
     else:
         log("Weekly report schedule is disabled in settings")
@@ -243,7 +257,7 @@ def configure_scheduler(scheduler: BlockingScheduler, config: dict) -> None:
             coalesce=True,
             misfire_grace_time=21600,
         )
-        next_run = monthly_job.next_run_time.strftime("%Y-%m-%d %H:%M:%S %Z") if monthly_job.next_run_time else "n/a"
+        next_run = format_job_next_run(monthly_job)
         log(f"Scheduled monthly report on day 1 at {hour:02d}:{minute:02d} (next run: {next_run})")
     else:
         log("Monthly report schedule is disabled in settings")
