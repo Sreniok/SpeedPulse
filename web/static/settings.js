@@ -5,6 +5,7 @@ let settingsServerSelectionId = "";
 let savedBackupPasswordAvailable = false;
 let messageTimeoutId = 0;
 let confirmDialogResolver = null;
+let contractHistoryEntries = [];
 let originalUserAccount = {
   loginEmail: "",
   notificationEmail: "",
@@ -52,12 +53,21 @@ function modalIsOpen(id) {
 }
 
 function syncBodyModalState() {
+  const modalIds = [
+    "backup-restore-modal",
+    "settings-confirm-modal",
+    "contract-summary-modal",
+    "contract-history-modal",
+  ];
   if (uiCore && typeof uiCore.syncBodyModalState === "function") {
-    uiCore.syncBodyModalState(["backup-restore-modal", "settings-confirm-modal"]);
+    uiCore.syncBodyModalState(modalIds);
     return;
   }
 
-  document.body.classList.toggle("modal-open", modalIsOpen("backup-restore-modal") || modalIsOpen("settings-confirm-modal"));
+  document.body.classList.toggle(
+    "modal-open",
+    modalIds.some((id) => modalIsOpen(id)),
+  );
 }
 
 function settingsSaveButtons() {
@@ -1819,50 +1829,297 @@ function renderContractDaysRemaining(endDate) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatMetricNumber(value, digits = 2) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(digits) : (0).toFixed(digits);
+}
+
+function contractPeriodLabel(entry) {
+  return `${entry?.start_date || "?"} to ${entry?.end_date || "?"}`;
+}
+
+function contractContractedLabel(entry) {
+  return `${entry?.download_mbps || 0} / ${entry?.upload_mbps || 0} Mbps`;
+}
+
+function contractSummaryHeadline(entry) {
+  const summary = entry?.summary || {};
+  if ((summary.total_tests || 0) <= 0) {
+    return summary.message || "No speed test data found for this contract period.";
+  }
+
+  const download = summary.download || {};
+  const upload = summary.upload || {};
+  const ping = summary.ping || {};
+
+  return `${summary.total_tests} tests · DL avg ${formatMetricNumber(download.avg)} Mbps (min ${formatMetricNumber(download.min)} / max ${formatMetricNumber(download.max)}) · UL avg ${formatMetricNumber(upload.avg)} Mbps · Ping avg ${formatMetricNumber(ping.avg)} ms`;
+}
+
+function buildContractHistoryCardHtml(entry, { compact = false } = {}) {
+  const provider = escapeHtml(entry?.provider || "Unknown provider");
+  const accountName = escapeHtml(entry?.account_name || "");
+  const period = escapeHtml(contractPeriodLabel(entry));
+  const contracted = escapeHtml(contractContractedLabel(entry));
+  const summary = entry?.summary || {};
+  const sources = summary.sources || {};
+  const breaches = summary.breaches || {};
+  const tests = Number(summary.total_tests || 0);
+  const summaryHeadline = escapeHtml(contractSummaryHeadline(entry));
+  const latestTestAt = escapeHtml(summary.latest_test_at || "");
+  const metaLine = tests
+    ? `${Number(sources.scheduled || 0)} scheduled · ${Number(sources.manual || 0)} manual · ${Number(breaches.total || 0)} breaches`
+    : "Archived contract";
+  const compactClass = compact ? " contract-mini-card-compact" : "";
+
+  return `
+    <article class="contract-mini-card${compactClass}">
+      <div class="contract-mini-card-head">
+        <div>
+          <p class="eyebrow">Archived contract</p>
+          <h4>${provider}</h4>
+        </div>
+        <span class="contract-mini-card-chip">${period}</span>
+      </div>
+      <p class="contract-mini-card-account">${accountName || "&nbsp;"}</p>
+      <p class="contract-mini-card-contract">Contracted ${contracted}</p>
+      <p class="contract-mini-card-summary">${summaryHeadline}</p>
+      <div class="contract-mini-card-foot">
+        <span>${escapeHtml(metaLine)}</span>
+        <span>${latestTestAt ? `Last test ${latestTestAt}` : "Summary ready"}</span>
+      </div>
+      <div class="contract-mini-card-actions">
+        <button class="btn-muted btn-small contract-history-view" type="button">
+          View summary
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function setContractHistoryButtonsState(count) {
+  const buttons = [
+    byId("settings-contract-history"),
+    byId("settings-contract-history-inline"),
+  ].filter(Boolean);
+
+  buttons.forEach((button) => {
+    button.disabled = count === 0;
+  });
+
+  const primary = byId("settings-contract-history");
+  if (primary) {
+    primary.textContent = count > 0 ? `History (${count})` : "History";
+  }
+}
+
 function renderContractHistory(history) {
   const section = byId("contract-history-section");
   const list = byId("contract-history-list");
   if (!section || !list) return;
 
   list.textContent = "";
+  contractHistoryEntries = Array.isArray(history) ? history.slice() : [];
+  setContractHistoryButtonsState(contractHistoryEntries.length);
 
-  if (!history || history.length === 0) {
+  if (!contractHistoryEntries.length) {
     section.classList.add("hidden");
     return;
   }
 
   section.classList.remove("hidden");
 
-  history
+  contractHistoryEntries
     .slice()
     .reverse()
-    .forEach((entry, index) => {
+    .slice(0, 4)
+    .forEach((entry) => {
       const card = document.createElement("div");
       card.className = "contract-history-card";
-
-      const period = `${entry.start_date || "?"} to ${entry.end_date || "?"}`;
-      const speeds = `Contracted: ${entry.download_mbps || 0} / ${entry.upload_mbps || 0} Mbps`;
-      const summary = entry.summary || {};
-
-      let summaryHtml = "";
-      if (summary.total_tests > 0) {
-        const dl = summary.download || {};
-        const ul = summary.upload || {};
-        const ping = summary.ping || {};
-        summaryHtml = `
-        <div class="contract-history-summary">
-          <strong>${summary.total_tests} tests</strong> &middot;
-          DL avg ${dl.avg || 0} Mbps (min ${dl.min || 0} / max ${dl.max || 0}) &middot;
-          UL avg ${ul.avg || 0} Mbps &middot;
-          Ping avg ${ping.avg || 0} ms
-        </div>`;
-      } else if (summary.message) {
-        summaryHtml = `<div class="contract-history-message">${summary.message}</div>`;
-      }
-
-      card.innerHTML = `<div><strong>${period}</strong></div><div class="contract-history-speeds">${speeds}</div>${summaryHtml}`;
+      card.innerHTML = buildContractHistoryCardHtml(entry, { compact: true });
+      card
+        .querySelector(".contract-history-view")
+        ?.addEventListener("click", () => {
+          openContractSummaryModal(entry);
+        });
       list.appendChild(card);
     });
+}
+
+function openSettingsDialog(id) {
+  const modal = byId(id);
+  if (!modal) return;
+
+  if (isDialogElement(modal) && typeof modal.showModal === "function") {
+    if (!modal.open) {
+      modal.showModal();
+    }
+  } else {
+    modal.classList.remove("hidden");
+  }
+
+  syncBodyModalState();
+}
+
+function closeSettingsDialog(id) {
+  const modal = byId(id);
+  if (!modal) return;
+
+  if (isDialogElement(modal) && modal.open) {
+    modal.close();
+  } else {
+    modal.classList.add("hidden");
+  }
+
+  syncBodyModalState();
+}
+
+function renderContractSummaryModal(entry, { email = null } = {}) {
+  const summary = entry?.summary || {};
+  const body = byId("contract-summary-modal-body");
+  const eyebrow = byId("contract-summary-modal-eyebrow");
+  const title = byId("contract-summary-modal-title");
+  const copy = byId("contract-summary-modal-copy");
+  const emailStatus = byId("contract-summary-email-status");
+  if (!body || !eyebrow || !title || !copy || !emailStatus) return;
+
+  const provider = entry?.provider || "Unknown provider";
+  const period = contractPeriodLabel(entry);
+  const contracted = contractContractedLabel(entry);
+  const accountName = entry?.account_name || "Unknown account";
+  const accountNumber = entry?.account_number || "N/A";
+  const ipAddress = entry?.ip_address || "Not detected";
+  const tests = Number(summary.total_tests || 0);
+  const sources = summary.sources || {};
+  const breaches = summary.breaches || {};
+  const download = summary.download || {};
+  const upload = summary.upload || {};
+  const ping = summary.ping || {};
+  const jitter = summary.jitter || {};
+  const packetLoss = summary.packet_loss || {};
+
+  eyebrow.textContent = "Contract summary";
+  title.textContent = provider;
+  copy.textContent = `${period} · Contracted ${contracted}`;
+
+  if (email?.message) {
+    emailStatus.textContent = email.message;
+    emailStatus.classList.remove("hidden", "success-banner", "error-banner");
+    emailStatus.classList.add(email.sent ? "success-banner" : "error-banner");
+  } else {
+    emailStatus.textContent = "";
+    emailStatus.classList.add("hidden");
+    emailStatus.classList.remove("success-banner", "error-banner");
+  }
+
+  const emptyState =
+    tests === 0
+      ? `<div class="contract-summary-empty">${escapeHtml(summary.message || "No speed test data found for this contract period.")}</div>`
+      : "";
+
+  body.innerHTML = `
+    <section class="contract-summary-shell">
+      <div class="contract-summary-meta">
+        <div class="contract-summary-meta-item">
+          <span>Account</span>
+          <strong>${escapeHtml(accountName)}</strong>
+        </div>
+        <div class="contract-summary-meta-item">
+          <span>Account no.</span>
+          <strong>${escapeHtml(accountNumber)}</strong>
+        </div>
+        <div class="contract-summary-meta-item">
+          <span>IP</span>
+          <strong>${escapeHtml(ipAddress)}</strong>
+        </div>
+        <div class="contract-summary-meta-item">
+          <span>Tests</span>
+          <strong>${tests}</strong>
+        </div>
+      </div>
+      <div class="contract-summary-metrics">
+        <article class="contract-summary-metric">
+          <p class="eyebrow">Latency</p>
+          <div class="contract-summary-metric-value">${formatMetricNumber(ping.avg)} ms</div>
+          <p class="contract-summary-metric-note">Min ${formatMetricNumber(ping.min)} · Max ${formatMetricNumber(ping.max)}</p>
+        </article>
+        <article class="contract-summary-metric">
+          <p class="eyebrow">Download</p>
+          <div class="contract-summary-metric-value">${formatMetricNumber(download.avg)} Mbps</div>
+          <p class="contract-summary-metric-note">Min ${formatMetricNumber(download.min)} · Max ${formatMetricNumber(download.max)}</p>
+        </article>
+        <article class="contract-summary-metric">
+          <p class="eyebrow">Upload</p>
+          <div class="contract-summary-metric-value">${formatMetricNumber(upload.avg)} Mbps</div>
+          <p class="contract-summary-metric-note">Min ${formatMetricNumber(upload.min)} · Max ${formatMetricNumber(upload.max)}</p>
+        </article>
+      </div>
+      ${emptyState}
+      <div class="contract-summary-details-grid">
+        <section class="contract-summary-panel">
+          <p class="eyebrow">Breakdown</p>
+          <div class="contract-summary-detail-row"><span>Packet loss average</span><strong>${formatMetricNumber(packetLoss.avg)}%</strong></div>
+          <div class="contract-summary-detail-row"><span>Jitter average</span><strong>${formatMetricNumber(jitter.avg)} ms</strong></div>
+          <div class="contract-summary-detail-row"><span>Scheduled scans</span><strong>${Number(sources.scheduled || 0)}</strong></div>
+          <div class="contract-summary-detail-row"><span>Manual scans</span><strong>${Number(sources.manual || 0)}</strong></div>
+        </section>
+        <section class="contract-summary-panel">
+          <p class="eyebrow">Reliability</p>
+          <div class="contract-summary-detail-row"><span>Total breaches</span><strong>${Number(breaches.total || 0)}</strong></div>
+          <div class="contract-summary-detail-row"><span>Download / Upload</span><strong>${Number(breaches.download || 0)} / ${Number(breaches.upload || 0)}</strong></div>
+          <div class="contract-summary-detail-row"><span>Ping / Loss</span><strong>${Number(breaches.ping || 0)} / ${Number(breaches.loss || 0)}</strong></div>
+          <div class="contract-summary-detail-row"><span>Latest test</span><strong>${escapeHtml(summary.latest_test_at || "N/A")}</strong></div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function openContractSummaryModal(entry, options = {}) {
+  renderContractSummaryModal(entry, options);
+  openSettingsDialog("contract-summary-modal");
+  byId("contract-summary-modal-ok")?.focus();
+}
+
+function renderContractHistoryModal() {
+  const list = byId("contract-history-modal-list");
+  if (!list) return;
+
+  if (!contractHistoryEntries.length) {
+    list.innerHTML = '<div class="contract-history-modal-empty">No archived contracts yet.</div>';
+    return;
+  }
+
+  list.textContent = "";
+  contractHistoryEntries
+    .slice()
+    .reverse()
+    .forEach((entry) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "contract-history-modal-item";
+      wrapper.innerHTML = buildContractHistoryCardHtml(entry, { compact: false });
+      wrapper
+        .querySelector(".contract-history-view")
+        ?.addEventListener("click", () => {
+          closeSettingsDialog("contract-history-modal");
+          openContractSummaryModal(entry);
+        });
+      list.appendChild(wrapper);
+    });
+}
+
+function openContractHistoryModal() {
+  renderContractHistoryModal();
+  openSettingsDialog("contract-history-modal");
+  byId("contract-history-modal-dismiss")?.focus();
 }
 
 async function endCurrentContract() {
@@ -1902,8 +2159,19 @@ async function endCurrentContract() {
       );
     }
 
-    showMessage(payload.message || "Contract ended and archived.", "success");
-    void loadNotificationSettings();
+    if (payload.email?.sent === false) {
+      showMessage(
+        `${payload.message || "Contract ended and archived."} Email report could not be sent.`,
+        "warning",
+      );
+    } else {
+      showMessage(payload.message || "Contract ended and archived.", "success");
+    }
+
+    await loadNotificationSettings();
+    if (payload.archived) {
+      openContractSummaryModal(payload.archived, { email: payload.email || null });
+    }
   } catch (error) {
     showMessage(error.message || "Failed to end contract.", "error");
   } finally {
@@ -2349,6 +2617,12 @@ function bindEvents() {
   byId("settings-end-contract").addEventListener("click", () => {
     void endCurrentContract();
   });
+  byId("settings-contract-history").addEventListener("click", () => {
+    openContractHistoryModal();
+  });
+  byId("settings-contract-history-inline").addEventListener("click", () => {
+    openContractHistoryModal();
+  });
   byId("settings-contract-end").addEventListener("change", () => {
     renderContractDaysRemaining(byId("settings-contract-end").value);
   });
@@ -2408,6 +2682,38 @@ function bindEvents() {
   byId("settings-confirm-modal").addEventListener("click", (event) => {
     if (event.target === byId("settings-confirm-modal")) {
       closeConfirmDialog(false);
+    }
+  });
+  byId("contract-summary-modal-ok").addEventListener("click", () => {
+    closeSettingsDialog("contract-summary-modal");
+  });
+  byId("contract-summary-modal-close").addEventListener("click", () => {
+    closeSettingsDialog("contract-summary-modal");
+  });
+  byId("contract-summary-modal").addEventListener("close", syncBodyModalState);
+  byId("contract-summary-modal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeSettingsDialog("contract-summary-modal");
+  });
+  byId("contract-summary-modal").addEventListener("click", (event) => {
+    if (event.target === byId("contract-summary-modal")) {
+      closeSettingsDialog("contract-summary-modal");
+    }
+  });
+  byId("contract-history-modal-dismiss").addEventListener("click", () => {
+    closeSettingsDialog("contract-history-modal");
+  });
+  byId("contract-history-modal-close").addEventListener("click", () => {
+    closeSettingsDialog("contract-history-modal");
+  });
+  byId("contract-history-modal").addEventListener("close", syncBodyModalState);
+  byId("contract-history-modal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeSettingsDialog("contract-history-modal");
+  });
+  byId("contract-history-modal").addEventListener("click", (event) => {
+    if (event.target === byId("contract-history-modal")) {
+      closeSettingsDialog("contract-history-modal");
     }
   });
 }

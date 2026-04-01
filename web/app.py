@@ -22,6 +22,7 @@ import urllib.request
 from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -51,7 +52,7 @@ from measurement_store import (
     has_app_secret,
     set_app_secret,
 )
-from reporting import build_report_html, resolve_report_theme_id
+from reporting import build_contract_report_html, build_report_html, resolve_report_theme_id
 from state_store import (
     blocked_seconds as state_blocked_seconds,
 )
@@ -735,7 +736,10 @@ def dashboard_settings_payload(config: dict | None = None) -> dict:
 
     contract_cfg = loaded.get("contract", {})
     current_contract = contract_cfg.get("current", {})
-    contract_history = contract_cfg.get("history", [])
+    contract_history = [
+        _resolved_contract_entry(loaded, entry)
+        for entry in contract_cfg.get("history", [])
+    ]
     login_email = _resolve_login_email(loaded)
     notification_email = _resolve_notification_email(loaded)
     detected_identity = _detected_account_network_identity(loaded)
@@ -2408,6 +2412,35 @@ async def update_notification_email(request: Request) -> JSONResponse:
     return JSONResponse({"message": "Notification email saved. Used for alerts and weekly reports."})
 
 
+def _contract_metric_stats(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {"avg": 0.0, "min": 0.0, "max": 0.0}
+    return {
+        "avg": round(sum(values) / len(values), 2),
+        "min": round(min(values), 2),
+        "max": round(max(values), 2),
+    }
+
+
+def _contract_period_identity(config: dict, start_str: str, end_str: str) -> dict[str, str]:
+    fallback = _detected_account_network_identity(config)
+    try:
+        start_date = datetime.strptime(start_str, "%Y-%m-%d")
+        end_date = datetime.strptime(end_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except ValueError:
+        return fallback
+
+    entries = load_measurement_entries_in_range(config, start_date, end_date)
+    if not entries:
+        return fallback
+
+    latest = entries[-1]
+    return {
+        "provider": str(latest.get("isp", "") or fallback["provider"]),
+        "ip_address": str(latest.get("ip_address", "") or fallback["ip_address"]),
+    }
+
+
 def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:
     """Build performance summary for a date range (contract period)."""
     try:
@@ -2420,12 +2453,15 @@ def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:
         return {"error": "Invalid end date"}
 
     filtered = load_measurement_entries_in_range(config, start_date, end_date)
+    thresholds = config.get("thresholds", {})
 
     if not filtered:
         return {
             "start_date": start_str,
             "end_date": end_str,
             "total_tests": 0,
+            "sources": {"scheduled": 0, "manual": 0},
+            "breaches": {"download": 0, "upload": 0, "ping": 0, "loss": 0, "total": 0},
             "message": "No speed test data found for this period.",
         }
 
@@ -2434,32 +2470,130 @@ def _contract_summary(config: dict, start_str: str, end_str: str) -> dict:
     pings = [e["ping_ms"] for e in filtered]
     jitters = [e["jitter_ms"] for e in filtered]
     packet_losses = [e["packet_loss_percent"] for e in filtered]
-
-    def avg(vals: list[float]) -> float:
-        return round(sum(vals) / len(vals), 2) if vals else 0.0
+    manual_tests = sum(1 for entry in filtered if str(entry.get("source", "")).lower() == "manual")
+    scheduled_tests = len(filtered) - manual_tests
+    download_breaches = sum(
+        1
+        for entry in filtered
+        if _safe_float(entry.get("download_mbps"), 0.0)
+        < _safe_float(thresholds.get("download_mbps"), 0.0)
+    )
+    upload_breaches = sum(
+        1
+        for entry in filtered
+        if _safe_float(entry.get("upload_mbps"), 0.0)
+        < _safe_float(thresholds.get("upload_mbps"), 0.0)
+    )
+    ping_breaches = sum(
+        1
+        for entry in filtered
+        if _safe_float(entry.get("ping_ms"), 0.0)
+        > _safe_float(thresholds.get("ping_ms"), 9_999_999.0)
+    )
+    loss_breaches = sum(
+        1
+        for entry in filtered
+        if _safe_float(entry.get("packet_loss_percent"), 0.0)
+        > _safe_float(thresholds.get("packet_loss_percent"), 9_999_999.0)
+    )
+    latest_timestamp = max(
+        (
+            entry.get("timestamp")
+            for entry in filtered
+            if isinstance(entry.get("timestamp"), datetime)
+        ),
+        default=None,
+    )
 
     return {
         "start_date": start_str,
         "end_date": end_str,
         "total_tests": len(filtered),
-        "download": {
-            "avg": avg(downloads),
-            "min": round(min(downloads), 2),
-            "max": round(max(downloads), 2),
+        "latest_test_at": latest_timestamp.strftime("%Y-%m-%d %H:%M") if latest_timestamp else "",
+        "download": _contract_metric_stats(downloads),
+        "upload": _contract_metric_stats(uploads),
+        "ping": _contract_metric_stats(pings),
+        "jitter": _contract_metric_stats(jitters),
+        "packet_loss": _contract_metric_stats(packet_losses),
+        "jitter_avg": _contract_metric_stats(jitters)["avg"],
+        "packet_loss_avg": _contract_metric_stats(packet_losses)["avg"],
+        "sources": {"scheduled": scheduled_tests, "manual": manual_tests},
+        "breaches": {
+            "download": download_breaches,
+            "upload": upload_breaches,
+            "ping": ping_breaches,
+            "loss": loss_breaches,
+            "total": download_breaches + upload_breaches + ping_breaches + loss_breaches,
         },
-        "upload": {
-            "avg": avg(uploads),
-            "min": round(min(uploads), 2),
-            "max": round(max(uploads), 2),
-        },
-        "ping": {
-            "avg": avg(pings),
-            "min": round(min(pings), 2),
-            "max": round(max(pings), 2),
-        },
-        "jitter_avg": avg(jitters),
-        "packet_loss_avg": avg(packet_losses),
     }
+
+
+def _resolved_contract_entry(config: dict, entry: dict) -> dict:
+    start_str = str(entry.get("start_date", "") or "")
+    end_str = str(entry.get("end_date", "") or "")
+    detected_identity = _contract_period_identity(config, start_str, end_str)
+    account_cfg = config.get("account", {})
+
+    return {
+        **entry,
+        "provider": str(entry.get("provider", "") or detected_identity["provider"]),
+        "account_name": str(entry.get("account_name", "") or account_cfg.get("name", "")),
+        "account_number": str(entry.get("account_number", "") or account_cfg.get("number", "")),
+        "ip_address": str(entry.get("ip_address", "") or detected_identity["ip_address"]),
+        "summary": entry.get("summary") or (_contract_summary(config, start_str, end_str) if start_str and end_str else None),
+    }
+
+
+def _send_contract_report_email(config: dict, archived: dict) -> tuple[bool, str]:
+    summary = archived.get("summary") or {}
+    subject = (
+        f"SpeedPulse Contract Summary - "
+        f"{archived.get('provider') or 'Archived contract'} "
+        f"({archived.get('start_date') or '?'} to {archived.get('end_date') or '?'})"
+    )
+    body_html = build_contract_report_html(config, archived, summary)
+
+    try:
+        mail = load_mail_settings(config)
+    except Exception as exc:
+        LOGGER.warning("Contract archive email skipped: %s", exc)
+        return False, str(exc)
+
+    message = MIMEMultipart("alternative")
+    message["From"] = mail.from_addr
+    message["To"] = mail.to_addr
+    message["Subject"] = subject
+    message.attach(
+        MIMEText(
+            (
+                "SpeedPulse contract summary\n\n"
+                f"Provider: {archived.get('provider') or 'N/A'}\n"
+                f"Period: {archived.get('start_date') or '?'} to {archived.get('end_date') or '?'}\n"
+                f"Tests: {summary.get('total_tests', 0)}\n"
+            ),
+            "plain",
+            "utf-8",
+        )
+    )
+    message.attach(MIMEText(body_html, "html", "utf-8"))
+
+    try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
+        if mail.smtp_port == 465:
+            server = smtplib.SMTP_SSL(mail.smtp_server, mail.smtp_port, timeout=60)
+        else:
+            server = smtplib.SMTP(mail.smtp_server, mail.smtp_port, timeout=60)
+            server.starttls()
+
+        with server:
+            server.login(mail.smtp_username, mail.smtp_password)
+            server.send_message(message)
+
+        LOGGER.info("Contract summary email sent for %s", subject)
+        return True, "Contract summary report emailed successfully."
+    except Exception as exc:
+        LOGGER.exception("Failed to send contract summary email")
+        return False, str(exc)
 
 
 @APP.get("/api/contract/summary")
@@ -2474,20 +2608,18 @@ def contract_summary(request: Request) -> JSONResponse:
     end_str = current.get("end_date", "")
 
     result: dict = {
-        "current": {
-            **current,
-            "summary": _contract_summary(config, start_str, end_str) if start_str and end_str else None,
-        },
+        "current": _resolved_contract_entry(
+            config,
+            {
+                **current,
+                "summary": _contract_summary(config, start_str, end_str) if start_str and end_str else None,
+            },
+        ),
         "history": [],
     }
 
     for past in history:
-        s = past.get("start_date", "")
-        e = past.get("end_date", "")
-        result["history"].append({
-            **past,
-            "summary": past.get("summary") or (_contract_summary(config, s, e) if s and e else None),
-        })
+        result["history"].append(_resolved_contract_entry(config, past))
 
     return JSONResponse(result)
 
@@ -2508,8 +2640,18 @@ async def end_current_contract(request: Request) -> JSONResponse:
     if not start_str or not end_str:
         raise HTTPException(status_code=400, detail="Current contract has no start/end dates set")
 
+    detected_identity = _contract_period_identity(config, start_str, end_str)
+    account_cfg = config.get("account", {})
     summary = _contract_summary(config, start_str, end_str)
-    archived = {**current, "summary": summary}
+    archived = {
+        **current,
+        "provider": detected_identity["provider"],
+        "ip_address": detected_identity["ip_address"],
+        "account_name": str(account_cfg.get("name", "")),
+        "account_number": str(account_cfg.get("number", "")),
+        "summary": summary,
+        "archived_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
     history.append(archived)
 
     contract_cfg["current"] = {
@@ -2521,7 +2663,13 @@ async def end_current_contract(request: Request) -> JSONResponse:
 
     save_config(config)
 
+    email_sent, email_message = _send_contract_report_email(config, archived)
+
     return JSONResponse({
         "message": "Contract ended and archived.",
-        "archived": archived,
+        "archived": _resolved_contract_entry(config, archived),
+        "email": {
+            "sent": email_sent,
+            "message": email_message,
+        },
     })

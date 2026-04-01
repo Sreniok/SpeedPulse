@@ -811,6 +811,13 @@
                     >
                       End contract &amp; archive
                     </button>
+                    <button
+                      id="settings-contract-history"
+                      class="btn-muted settings-contract-history-trigger"
+                      type="button"
+                    >
+                      History
+                    </button>
                   </div>
                 </section>
               </div>
@@ -819,7 +826,16 @@
                 id="contract-history-section"
                 class="hidden contract-history-section"
               >
-                <h3 class="contract-history-heading">Previous contracts</h3>
+                <div class="contract-history-header">
+                  <h3 class="contract-history-heading">Previous contracts</h3>
+                  <button
+                    id="settings-contract-history-inline"
+                    class="btn-muted btn-small"
+                    type="button"
+                  >
+                    View all
+                  </button>
+                </div>
                 <div id="contract-history-list"></div>
               </div>
             </div>
@@ -1580,6 +1596,95 @@
                 type="button"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </dialog>
+
+        <dialog
+          id="contract-summary-modal"
+          class="dialog-modal"
+          aria-labelledby="contract-summary-modal-title"
+          aria-describedby="contract-summary-modal-copy"
+        >
+          <div class="dialog-card contract-summary-modal-card">
+            <div class="dialog-head">
+              <div>
+                <p id="contract-summary-modal-eyebrow" class="eyebrow">
+                  Contract summary
+                </p>
+                <h2 id="contract-summary-modal-title">Archived contract</h2>
+              </div>
+              <button
+                id="contract-summary-modal-close"
+                class="icon-button"
+                type="button"
+                aria-label="Close contract summary dialog"
+              >
+                ×
+              </button>
+            </div>
+            <p id="contract-summary-modal-copy" class="dialog-copy">
+              Final performance summary for this archived contract.
+            </p>
+            <div
+              id="contract-summary-email-status"
+              class="dialog-status hidden"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            ></div>
+            <div
+              id="contract-summary-modal-body"
+              class="contract-summary-modal-body"
+            ></div>
+            <div class="dialog-actions dialog-actions-split">
+              <button
+                id="contract-summary-modal-ok"
+                class="btn-primary"
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </dialog>
+
+        <dialog
+          id="contract-history-modal"
+          class="dialog-modal"
+          aria-labelledby="contract-history-modal-title"
+          aria-describedby="contract-history-modal-copy"
+        >
+          <div class="dialog-card contract-history-modal-card">
+            <div class="dialog-head">
+              <div>
+                <p class="eyebrow">History</p>
+                <h2 id="contract-history-modal-title">Archived contracts</h2>
+              </div>
+              <button
+                id="contract-history-modal-close"
+                class="icon-button"
+                type="button"
+                aria-label="Close contract history dialog"
+              >
+                ×
+              </button>
+            </div>
+            <p id="contract-history-modal-copy" class="dialog-copy">
+              Browse past contract summaries without leaving Settings.
+            </p>
+            <div
+              id="contract-history-modal-list"
+              class="contract-history-modal-list"
+            ></div>
+            <div class="dialog-actions dialog-actions-split">
+              <button
+                id="contract-history-modal-dismiss"
+                class="btn-ghost"
+                type="button"
+              >
+                Close
               </button>
             </div>
           </div>

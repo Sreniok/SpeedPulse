@@ -194,6 +194,72 @@ def test_results_page_renders_results_table_on_separate_route(api_client):
     assert 'id="speedChart"' not in html
 
 
+def test_end_current_contract_returns_archived_summary_and_email_status(
+    api_client,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, webapp, config_path, _, csrf_token = api_client
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["contract"]["current"] = {
+        "start_date": "2026-03-13",
+        "end_date": "2026-03-13",
+        "download_mbps": 1000,
+        "upload_mbps": 100,
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    monkeypatch.setattr(
+        webapp,
+        "_send_contract_report_email",
+        lambda loaded, archived: (True, "Contract summary report emailed successfully."),
+    )
+
+    response = client.post(
+        "/api/contract/end",
+        headers={"X-CSRF-Token": csrf_token},
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"] == "Contract ended and archived."
+    assert payload["email"]["sent"] is True
+    assert payload["archived"]["provider"] == "Example ISP"
+    assert payload["archived"]["summary"]["total_tests"] == 3
+    assert payload["archived"]["summary"]["sources"]["scheduled"] == 3
+    assert payload["archived"]["summary"]["sources"]["manual"] == 0
+    assert payload["archived"]["summary"]["breaches"]["total"] == 4
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["contract"]["current"]["start_date"] == ""
+    assert len(saved_config["contract"]["history"]) == 1
+
+
+def test_settings_payload_enriches_contract_history_entries(api_client):
+    client, _, config_path, _, _ = api_client
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["contract"]["history"] = [
+        {
+            "start_date": "2026-03-13",
+            "end_date": "2026-03-13",
+            "download_mbps": 1000,
+            "upload_mbps": 100,
+        }
+    ]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    response = client.get("/api/settings/notifications")
+
+    assert response.status_code == 200
+    payload = response.json()
+    history = payload["contract"]["history"]
+    assert len(history) == 1
+    assert history[0]["provider"] == "Example ISP"
+    assert history[0]["summary"]["total_tests"] == 3
+
+
 def test_manual_run_stage_tracks_live_ookla_progress(api_client):
     _, webapp, _, _, _ = api_client
 

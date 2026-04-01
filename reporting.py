@@ -1190,3 +1190,306 @@ def build_report_html(
 </body>
 </html>
 """
+
+
+def build_contract_report_html(
+    config: dict,
+    contract: dict,
+    summary: dict,
+    *,
+    generated_at: datetime | None = None,
+    theme_id: str | None = None,
+) -> str:
+    generated = generated_at or datetime.now()
+    theme = str(theme_id or resolve_report_theme_id(config)).strip().lower()
+    palette = report_palette(theme)
+
+    provider = escape(str(contract.get("provider", "") or "Unknown provider"))
+    account_name = escape(str(contract.get("account_name", "") or config.get("account", {}).get("name", "N/A")))
+    account_number = escape(str(contract.get("account_number", "") or config.get("account", {}).get("number", "N/A")))
+    ip_address = escape(str(contract.get("ip_address", "") or "Not detected"))
+    start_date = escape(str(contract.get("start_date", "") or "?"))
+    end_date = escape(str(contract.get("end_date", "") or "?"))
+    download_contract = _fmt(_as_number(contract.get("download_mbps")), 0)
+    upload_contract = _fmt(_as_number(contract.get("upload_mbps")), 0)
+
+    total_tests = int(summary.get("total_tests", 0) or 0)
+    download = summary.get("download", {}) or {}
+    upload = summary.get("upload", {}) or {}
+    ping = summary.get("ping", {}) or {}
+    jitter = summary.get("jitter", {}) or {}
+    packet_loss = summary.get("packet_loss", {}) or {}
+    sources = summary.get("sources", {}) or {}
+    breaches = summary.get("breaches", {}) or {}
+    empty_message = escape(str(summary.get("message", "") or ""))
+
+    metric_cards = "".join(
+        [
+            (
+                "<section class=\"metric-card\">"
+                "<p class=\"eyebrow\">Tests</p>"
+                f"<div class=\"metric-value\">{total_tests}</div>"
+                f"<p class=\"metric-note\">Scheduled {int(sources.get('scheduled', 0) or 0)} · Manual {int(sources.get('manual', 0) or 0)}</p>"
+                "</section>"
+            ),
+            (
+                "<section class=\"metric-card\">"
+                "<p class=\"eyebrow\">Download</p>"
+                f"<div class=\"metric-value\">{_fmt(_as_number(download.get('avg')), 2)} Mbps</div>"
+                f"<p class=\"metric-note\">Min {_fmt(_as_number(download.get('min')), 2)} · Max {_fmt(_as_number(download.get('max')), 2)}</p>"
+                "</section>"
+            ),
+            (
+                "<section class=\"metric-card\">"
+                "<p class=\"eyebrow\">Upload</p>"
+                f"<div class=\"metric-value\">{_fmt(_as_number(upload.get('avg')), 2)} Mbps</div>"
+                f"<p class=\"metric-note\">Min {_fmt(_as_number(upload.get('min')), 2)} · Max {_fmt(_as_number(upload.get('max')), 2)}</p>"
+                "</section>"
+            ),
+            (
+                "<section class=\"metric-card\">"
+                "<p class=\"eyebrow\">Latency</p>"
+                f"<div class=\"metric-value\">{_fmt(_as_number(ping.get('avg')), 2)} ms</div>"
+                f"<p class=\"metric-note\">Ping min {_fmt(_as_number(ping.get('min')), 2)} · max {_fmt(_as_number(ping.get('max')), 2)}</p>"
+                "</section>"
+            ),
+        ]
+    )
+
+    detail_rows = "".join(
+        [
+            (
+                "<div class=\"detail-row\">"
+                "<span>Jitter average</span>"
+                f"<strong>{_fmt(_as_number(jitter.get('avg')), 2)} ms</strong>"
+                "</div>"
+            ),
+            (
+                "<div class=\"detail-row\">"
+                "<span>Packet loss average</span>"
+                f"<strong>{_fmt(_as_number(packet_loss.get('avg')), 2)}%</strong>"
+                "</div>"
+            ),
+            (
+                "<div class=\"detail-row\">"
+                "<span>Threshold breaches</span>"
+                f"<strong>{int(breaches.get('total', 0) or 0)}</strong>"
+                "</div>"
+            ),
+            (
+                "<div class=\"detail-row\">"
+                "<span>Download / Upload / Ping / Loss</span>"
+                f"<strong>{int(breaches.get('download', 0) or 0)} / {int(breaches.get('upload', 0) or 0)} / "
+                f"{int(breaches.get('ping', 0) or 0)} / {int(breaches.get('loss', 0) or 0)}</strong>"
+                "</div>"
+            ),
+        ]
+    )
+
+    empty_state = ""
+    if total_tests == 0 and empty_message:
+        empty_state = f"<div class=\"empty-state\">{empty_message}</div>"
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpeedPulse Contract Summary</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --bg: {palette['bg']};
+      --surface: {palette['surface']};
+      --surface-alt: {palette['surface_alt']};
+      --text: {palette['text']};
+      --muted: {palette['muted']};
+      --accent: {palette['accent']};
+      --good: {palette['good']};
+      --warn: {palette['warn']};
+      --bad: {palette['bad']};
+      --border: {palette['border']};
+      --shadow: {palette['shadow']};
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      padding: 24px;
+      background:
+        radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--good) 10%, transparent), transparent 48%),
+        radial-gradient(820px 420px at 100% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 44%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg) 96%, black 4%), var(--bg));
+      color: var(--text);
+      font: 15px/1.5 "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+    }}
+    .report-shell {{
+      max-width: 1040px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }}
+    .topbar,
+    .panel,
+    .metric-card {{
+      background:
+        radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 58%),
+        linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white 4%), color-mix(in srgb, var(--surface) 92%, var(--bg) 8%));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }}
+    .topbar {{
+      border-radius: 26px;
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }}
+    .eyebrow {{
+      margin: 0;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }}
+    h1, h2 {{
+      margin: 0;
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+      font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+    }}
+    h1 {{
+      margin-top: 8px;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      font-weight: 820;
+    }}
+    .topbar-copy p,
+    .panel-subtext {{
+      color: var(--muted);
+      margin: 10px 0 0;
+    }}
+    .chip-row {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }}
+    .info-chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-alt) 92%, transparent);
+      font-size: 0.86rem;
+      color: var(--muted);
+    }}
+    .metrics-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }}
+    .metric-card {{
+      border-radius: 22px;
+      padding: 18px 18px 16px;
+    }}
+    .metric-value {{
+      margin-top: 8px;
+      font-size: clamp(1.5rem, 2.6vw, 2.15rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }}
+    .metric-note {{
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }}
+    .panel {{
+      border-radius: 24px;
+      padding: 20px 22px;
+    }}
+    .details-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }}
+    .detail-card {{
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-alt) 92%, transparent);
+    }}
+    .detail-row {{
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    }}
+    .detail-row:last-child {{
+      border-bottom: 0;
+      padding-bottom: 0;
+    }}
+    .detail-row span {{
+      color: var(--muted);
+    }}
+    .empty-state {{
+      margin-top: 16px;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      background: color-mix(in srgb, var(--surface-alt) 90%, transparent);
+    }}
+    @media (max-width: 880px) {{
+      body {{ padding: 16px; }}
+      .metrics-grid,
+      .details-grid {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="report-shell">
+    <section class="topbar">
+      <div class="topbar-copy">
+        <p class="eyebrow">Contract summary</p>
+        <h1>{provider}</h1>
+        <p>{start_date} to {end_date} · Contracted {download_contract} / {upload_contract} Mbps</p>
+        <div class="chip-row">
+          <span class="info-chip">{account_name}</span>
+          <span class="info-chip">Account {account_number}</span>
+          <span class="info-chip">IP {ip_address}</span>
+          <span class="info-chip">Generated {escape(generated.strftime("%Y-%m-%d %H:%M"))}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics-grid">
+      {metric_cards}
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Details</p>
+      <h2>Contract performance breakdown</h2>
+      <p class="panel-subtext">Full summary for the archived contract window.</p>
+      {empty_state}
+      <div class="details-grid">
+        <div class="detail-card">
+          <div class="detail-row"><span>Download average</span><strong>{_fmt(_as_number(download.get('avg')), 2)} Mbps</strong></div>
+          <div class="detail-row"><span>Download minimum</span><strong>{_fmt(_as_number(download.get('min')), 2)} Mbps</strong></div>
+          <div class="detail-row"><span>Download maximum</span><strong>{_fmt(_as_number(download.get('max')), 2)} Mbps</strong></div>
+          <div class="detail-row"><span>Upload average</span><strong>{_fmt(_as_number(upload.get('avg')), 2)} Mbps</strong></div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-row"><span>Ping average</span><strong>{_fmt(_as_number(ping.get('avg')), 2)} ms</strong></div>
+          <div class="detail-row"><span>Ping minimum</span><strong>{_fmt(_as_number(ping.get('min')), 2)} ms</strong></div>
+          <div class="detail-row"><span>Ping maximum</span><strong>{_fmt(_as_number(ping.get('max')), 2)} ms</strong></div>
+          {detail_rows}
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
+"""
