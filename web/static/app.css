@@ -2729,14 +2729,19 @@ button:active,
 
 .run-modal-actions {
   margin-top: 0.95rem;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.run-modal-action-button {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 999px;
 }
 
 .run-modal-close-button {
-  min-width: 108px;
-  min-height: 46px;
   padding-inline: 1.05rem;
-  border-radius: 999px;
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
   background: linear-gradient(
     180deg,

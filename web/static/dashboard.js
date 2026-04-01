@@ -372,11 +372,16 @@ function renderRunModal(status) {
     runLog.scrollTop = runLog.scrollHeight;
   }
   const closeButton = byId("run-modal-close-action");
+  const rerunButton = byId("run-modal-rerun-action");
+  const canClose = status.status === "completed" || status.status === "failed";
+  if (rerunButton) {
+    rerunButton.classList.toggle("hidden", !canClose);
+    rerunButton.disabled = !canClose || manualRunStartInFlight;
+  }
   if (closeButton) {
-    const canClose = status.status === "completed" || status.status === "failed";
     closeButton.classList.toggle("hidden", !canClose);
     closeButton.disabled = !canClose;
-    closeButton.textContent = status.status === "completed" ? "OK" : "Close";
+    closeButton.textContent = "Close";
   }
   renderRunLiveMetrics(status);
 }
@@ -524,6 +529,10 @@ function closeRunModal() {
 function handleRunModalCloseAction() {
   closeRunModal();
   window.location.reload();
+}
+
+function handleRunModalRerunAction() {
+  void runSpeedtestNow(currentManualServerId());
 }
 
 function stopRunStatusPolling() {
@@ -3467,6 +3476,10 @@ function bindEvents() {
   byId("server-modal-start")?.addEventListener("click", () => {
     void runSpeedtestNow(currentManualServerId());
   });
+  byId("run-modal-rerun-action")?.addEventListener(
+    "click",
+    handleRunModalRerunAction,
+  );
   byId("run-modal-close-action")?.addEventListener(
     "click",
     handleRunModalCloseAction,
