@@ -5762,17 +5762,31 @@ label {
   padding: 0.88rem 0.95rem;
 }
 
-.contract-mini-card-head {
+.contract-mini-card-topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.85rem;
 }
 
-.contract-mini-card-head h4 {
+.contract-mini-card-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) auto;
+  gap: 0.95rem;
+  align-items: stretch;
+}
+
+.contract-mini-card-provider h4 {
   margin: 0.28rem 0 0;
   font-size: 1.12rem;
   letter-spacing: -0.03em;
+}
+
+.contract-mini-card-provider {
+  display: grid;
+  align-content: start;
+  gap: 0.48rem;
+  min-width: 0;
 }
 
 .contract-mini-card-chip {
@@ -5798,28 +5812,55 @@ label {
 
 .contract-mini-card-account,
 .contract-mini-card-contract,
-.contract-mini-card-foot {
+.contract-mini-card-foot,
+.contract-mini-card-status {
   color: var(--muted);
   font-size: 0.9rem;
 }
 
-.contract-mini-card-summary {
-  font-size: 0.94rem;
-  line-height: 1.55;
+.contract-mini-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
 }
 
-.contract-mini-card-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.55rem 1rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+.contract-mini-stat {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.88rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  background:
+    radial-gradient(130% 135% at 100% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-alt) 96%, white 4%), color-mix(in srgb, var(--surface-alt) 92%, var(--bg) 8%));
+}
+
+.contract-mini-stat-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.contract-mini-stat-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .contract-mini-card-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  align-content: center;
+  justify-items: end;
+  gap: 0.75rem;
+  min-width: 120px;
+}
+
+.contract-mini-card-status {
+  margin: 0;
+  text-align: right;
 }
 
 .contract-summary-modal-card,
@@ -5947,11 +5988,26 @@ label {
 
 @media (max-width: 860px) {
   .contract-history-header,
-  .contract-mini-card-head,
   .contract-mini-card-foot,
   .contract-summary-detail-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .contract-mini-card-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-mini-card-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-mini-card-actions {
+    justify-items: stretch;
+  }
+
+  .contract-mini-card-status {
+    text-align: left;
   }
 
   .contract-summary-meta,

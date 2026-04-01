@@ -2045,32 +2045,48 @@ function buildContractHistoryCardHtml(entry, { compact = false } = {}) {
   const breaches = summary.breaches || {};
   const tests = Number(summary.total_tests || 0);
   const summaryHeadline = escapeHtml(contractSummaryHeadline(entry));
-  const latestTestAt = escapeHtml(summary.latest_test_at || "");
-  const metaLine = tests
-    ? `${Number(sources.scheduled || 0)} scheduled · ${Number(sources.manual || 0)} manual · ${Number(breaches.total || 0)} breaches`
-    : "Archived contract";
   const compactClass = compact ? " contract-mini-card-compact" : "";
 
   return `
     <article class="contract-mini-card${compactClass}">
-      <div class="contract-mini-card-head">
-        <div>
-          <p class="eyebrow">Archived contract</p>
-          <h4>${provider}</h4>
-        </div>
+      <div class="contract-mini-card-topbar">
+        <p class="eyebrow">Archived contract</p>
         <span class="contract-mini-card-chip">${period}</span>
       </div>
-      <p class="contract-mini-card-account">${accountName || "&nbsp;"}</p>
-      <p class="contract-mini-card-contract">Contracted ${contracted}</p>
-      <p class="contract-mini-card-summary">${summaryHeadline}</p>
-      <div class="contract-mini-card-foot">
-        <span>${escapeHtml(metaLine)}</span>
-        <span>${latestTestAt ? `Last test ${latestTestAt}` : "Summary ready"}</span>
-      </div>
-      <div class="contract-mini-card-actions">
-        <button class="btn-muted btn-small contract-history-view" type="button">
-          View summary
-        </button>
+      <div class="contract-mini-card-layout">
+        <div class="contract-mini-card-provider">
+          <h4>${provider}</h4>
+          <p class="contract-mini-card-account">${accountName || "&nbsp;"}</p>
+          <p class="contract-mini-card-contract">Contracted ${contracted}</p>
+        </div>
+        <div class="contract-mini-card-stats">
+          <section class="contract-mini-stat">
+            <p class="eyebrow">Tests</p>
+            <div class="contract-mini-stat-value">${tests}</div>
+            <p class="contract-mini-stat-note">${Number(sources.scheduled || 0)} scheduled · ${Number(sources.manual || 0)} manual</p>
+          </section>
+          <section class="contract-mini-stat">
+            <p class="eyebrow">Download</p>
+            <div class="contract-mini-stat-value">${formatMetricNumber(download.avg)} Mbps</div>
+            <p class="contract-mini-stat-note">Min ${formatMetricNumber(download.min)} · Max ${formatMetricNumber(download.max)}</p>
+          </section>
+          <section class="contract-mini-stat">
+            <p class="eyebrow">Upload</p>
+            <div class="contract-mini-stat-value">${formatMetricNumber(upload.avg)} Mbps</div>
+            <p class="contract-mini-stat-note">Min ${formatMetricNumber(upload.min)} · Max ${formatMetricNumber(upload.max)}</p>
+          </section>
+          <section class="contract-mini-stat">
+            <p class="eyebrow">Latency</p>
+            <div class="contract-mini-stat-value">${formatMetricNumber(ping.avg)} ms</div>
+            <p class="contract-mini-stat-note">Min ${formatMetricNumber(ping.min)} · Max ${formatMetricNumber(ping.max)}</p>
+          </section>
+        </div>
+        <div class="contract-mini-card-actions">
+          <p class="contract-mini-card-status">Summary ready</p>
+          <button class="btn-muted btn-small contract-history-view" type="button">
+            View summary
+          </button>
+        </div>
       </div>
     </article>
   `;
