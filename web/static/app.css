@@ -1107,10 +1107,14 @@ select {
     gap: 0.24rem;
   }
 
-  .dashboard-page .sidebar .nav-link {
-    padding: 0.56rem 0.68rem;
+  .dashboard-page .sidebar > .nav-block:not(.nav-block-sections) {
+    gap: 0.3rem;
+  }
+
+  .dashboard-page .sidebar > .nav-block:not(.nav-block-sections) .nav-link {
+    padding: 0.68rem 0.76rem;
     border-radius: 12px;
-    font-size: 0.82rem;
+    font-size: 0.86rem;
   }
 
   .dashboard-page .sidebar .schedule-chip-group {
@@ -1494,6 +1498,10 @@ select {
   gap: 0.4rem;
 }
 
+.sidebar > .nav-block:not(.nav-block-sections) {
+  gap: 0.46rem;
+}
+
 .nav-link {
   position: relative;
   display: flex;
@@ -1566,6 +1574,12 @@ select {
     color-mix(in srgb, var(--accent) 22%, transparent)
   );
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+.sidebar > .nav-block:not(.nav-block-sections) .nav-link {
+  padding: 0.88rem 0.98rem;
+  border-radius: 15px;
+  font-size: 0.9rem;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -4675,9 +4689,13 @@ button:active,
     gap: 0.18rem;
   }
 
-  .dashboard-page .sidebar .nav-link {
-    padding: 0.46rem 0.58rem;
-    font-size: 0.76rem;
+  .dashboard-page .sidebar > .nav-block:not(.nav-block-sections) {
+    gap: 0.22rem;
+  }
+
+  .dashboard-page .sidebar > .nav-block:not(.nav-block-sections) .nav-link {
+    padding: 0.54rem 0.62rem;
+    font-size: 0.78rem;
   }
 
   .dashboard-page .sidebar .schedule-chip-group {
