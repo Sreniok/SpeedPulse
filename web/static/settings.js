@@ -2104,7 +2104,12 @@ function setContractHistoryButtonsState(count) {
 
   const primary = byId("settings-contract-history");
   if (primary) {
-    primary.textContent = count > 0 ? `History (${count})` : "History";
+    primary.textContent = count > 1 ? `History (${count})` : "History";
+  }
+
+  const inline = byId("settings-contract-history-inline");
+  if (inline) {
+    inline.classList.toggle("hidden", count <= 1);
   }
 }
 
@@ -2127,7 +2132,7 @@ function renderContractHistory(history) {
   contractHistoryEntries
     .slice()
     .reverse()
-    .slice(0, 4)
+    .slice(0, 1)
     .forEach((entry) => {
       const card = document.createElement("div");
       card.className = "contract-history-card";
