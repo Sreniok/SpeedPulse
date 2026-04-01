@@ -1047,6 +1047,11 @@ select {
   .dashboard-page .sidebar {
     padding: 0.82rem 0.78rem 0.88rem;
     gap: 0.68rem;
+    justify-content: space-between;
+  }
+
+  .dashboard-page .sidebar .sidebar-footer {
+    margin-top: 0;
   }
 
   .dashboard-page .sidebar .brand-lockup,
