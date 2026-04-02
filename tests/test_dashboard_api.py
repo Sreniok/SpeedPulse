@@ -475,49 +475,18 @@ def test_notification_settings_timezone_persist_to_config_and_env(api_client):
     response = client.post(
         "/api/settings/notifications",
         headers={"X-CSRF-Token": csrf_token},
-        json={
-            "account_name": settings_payload["account"]["name"],
-            "broadband_provider": settings_payload["account"]["provider"],
-            "broadband_account_number": settings_payload["account"]["number"],
-            "smtp_server": settings_payload["email"]["smtp_server"],
-            "smtp_port": settings_payload["email"]["smtp_port"],
-            "smtp_username": settings_payload["email"]["smtp_username"],
-            "smtp_password": "",
-            "email_from": settings_payload["email"]["from"],
-            "app_timezone": "Europe/Warsaw",
-            "send_realtime_alerts": settings_payload["email"]["send_realtime_alerts"],
-            "weekly_report_enabled": settings_payload["notifications"]["weekly_report_enabled"],
-            "weekly_report_time": settings_payload["notifications"]["weekly_report_time"],
-            "monthly_report_enabled": settings_payload["notifications"]["monthly_report_enabled"],
-            "monthly_report_time": settings_payload["notifications"]["monthly_report_time"],
-            "scan_enabled": settings_payload["notifications"]["scan_enabled"],
-            "scan_frequency": settings_payload["notifications"]["scan_frequency"],
-            "scan_weekly_day": settings_payload["notifications"]["scan_weekly_day"],
-            "scan_monthly_day": settings_payload["notifications"]["scan_monthly_day"],
-            "scan_custom_days": settings_payload["notifications"]["scan_custom_days"],
-            "test_times": settings_payload["notifications"]["test_times"],
-            "server_id": settings_payload["server_selection_id"],
-            "push_events": settings_payload["notifications"]["push_events"],
-            "ui_theme": settings_payload["ui_theme"],
-            "report_theme_id": settings_payload["notifications"]["report_theme_id"],
-            "webhook_enabled": settings_payload["notifications"]["webhook_enabled"],
-            "webhook_url": settings_payload["notifications"]["webhook_url"],
-            "ntfy_enabled": settings_payload["notifications"]["ntfy_enabled"],
-            "ntfy_server": settings_payload["notifications"]["ntfy_server"],
-            "ntfy_topic": settings_payload["notifications"]["ntfy_topic"],
-            "thresholds": settings_payload["thresholds"],
-            "contract": settings_payload["contract"],
-            "backup": settings_payload["backup"],
-        },
+        json={"app_timezone": "Europe/Warsaw"},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["app"]["timezone"] == "Europe/Warsaw"
     assert payload["application_time"]["timezone"] == "Europe/Warsaw"
+    assert payload["notifications"]["test_times"] == settings_payload["notifications"]["test_times"]
 
     saved_config = json.loads(config_path.read_text(encoding="utf-8"))
     assert saved_config["app"]["timezone"] == "Europe/Warsaw"
+    assert saved_config["scheduling"]["test_times"] == settings_payload["notifications"]["test_times"]
 
     env_text = env_path.read_text(encoding="utf-8")
     assert 'APP_TIMEZONE="Europe/Warsaw"' in env_text
@@ -526,6 +495,54 @@ def test_notification_settings_timezone_persist_to_config_and_env(api_client):
     metrics_response = client.get("/api/metrics?mode=today")
     assert metrics_response.status_code == 200
     assert metrics_response.json()["application_time"]["timezone"] == "Europe/Warsaw"
+
+
+def test_notification_settings_account_save_does_not_require_email_or_schedule_payload(api_client):
+    client, _, config_path, env_path, csrf_token = api_client
+
+    response = client.post(
+        "/api/settings/notifications",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "account_name": "Updated Account",
+            "broadband_account_number": "9988",
+            "thresholds": {
+                "download_mbps": 650,
+                "upload_mbps": 90,
+            },
+            "contract": {
+                "current": {
+                    "start_date": "2026-01-01",
+                    "end_date": "2027-01-01",
+                    "provider": "Vodafone Ireland",
+                    "provider_country": "IE",
+                    "download_mbps": 1000,
+                    "upload_mbps": 100,
+                    "reminder_enabled": True,
+                    "reminder_days": 21,
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["account"]["name"] == "Updated Account"
+    assert payload["account"]["number"] == "9988"
+    assert payload["thresholds"]["download_mbps"] == 650
+    assert payload["thresholds"]["upload_mbps"] == 90
+    assert payload["notifications"]["test_times"] == ["08:00", "16:00", "22:00"]
+    assert payload["email"]["smtp_server"] == "smtp.example.com"
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["account"]["name"] == "Updated Account"
+    assert saved_config["account"]["number"] == "9988"
+    assert saved_config["thresholds"]["download_mbps"] == 650
+    assert saved_config["thresholds"]["upload_mbps"] == 90
+    assert saved_config["scheduling"]["test_times"] == ["08:00", "16:00", "22:00"]
+
+    env_text = env_path.read_text(encoding="utf-8")
+    assert 'APP_TIMEZONE="Europe/Warsaw"' not in env_text
 
 
 def test_notification_settings_store_smtp_password_encrypted(api_client):

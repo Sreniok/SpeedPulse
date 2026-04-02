@@ -1949,63 +1949,110 @@ async def update_notification_settings(request: Request) -> JSONResponse:
 
     payload = await request.json()
 
-    account_name = _clean_env_value(payload.get("account_name", ""))
-    broadband_provider = _clean_env_value(payload.get("broadband_provider", ""))
-    broadband_account_number = _clean_env_value(payload.get("broadband_account_number", ""))
-    smtp_server = _clean_env_value(payload.get("smtp_server", ""))
-    smtp_username = _clean_env_value(payload.get("smtp_username", ""))
-    smtp_password = str(payload.get("smtp_password", "") or "")
-    email_from = _clean_env_value(payload.get("email_from", ""))
-    weekly_report_time = _clean_env_value(payload.get("weekly_report_time", "Monday 08:00"))
-    monthly_report_time = _clean_env_value(payload.get("monthly_report_time", "08:00"))
-    app_timezone = _clean_env_value(payload.get("app_timezone", ""))
-    scan_enabled = bool(payload.get("scan_enabled", True))
-    scan_frequency = _clean_scan_frequency(payload.get("scan_frequency", "daily"), "daily")
-    scan_weekly_day = _clean_weekday_name(payload.get("scan_weekly_day", "Monday"), "Monday")
-    scan_monthly_day = _safe_int(payload.get("scan_monthly_day", 1), 1)
-    scan_custom_days = _normalize_scan_custom_days(payload.get("scan_custom_days", [scan_monthly_day]))
-    test_times = _normalize_test_times(payload.get("test_times", ["08:00", "16:00", "22:00"]))
-    selected_server_id = _clean_env_value(payload.get("server_id", ""))
-    push_events = _normalize_push_events(payload.get("push_events", {}))
-    report_theme_id = _clean_theme_id(payload.get("report_theme_id", "default-dark"))
+    config = load_config()
+    account_cfg = config.setdefault("account", {})
+    email_cfg = config.setdefault("email", {})
+    scheduling_cfg = config.setdefault("scheduling", {})
+    notifications_cfg = config.setdefault("notifications", {})
+    speedtest_cfg = config.setdefault("speedtest", {})
+    app_cfg = config.setdefault("app", {})
+    backup_cfg = config.setdefault("backup", {})
+
+    account_requested = any(
+        key in payload
+        for key in ("account_name", "broadband_provider", "broadband_account_number", "thresholds", "contract")
+    )
+    email_requested = any(
+        key in payload
+        for key in ("smtp_server", "smtp_port", "smtp_username", "smtp_password", "email_from", "send_realtime_alerts")
+    )
+    general_requested = "app_timezone" in payload
+    schedule_requested = any(
+        key in payload
+        for key in (
+            "weekly_report_enabled",
+            "weekly_report_time",
+            "monthly_report_enabled",
+            "monthly_report_time",
+            "scan_enabled",
+            "scan_frequency",
+            "scan_weekly_day",
+            "scan_monthly_day",
+            "scan_custom_days",
+            "test_times",
+            "server_id",
+        )
+    )
+    push_requested = any(
+        key in payload
+        for key in ("push_events", "webhook_enabled", "webhook_url", "ntfy_enabled", "ntfy_server", "ntfy_topic")
+    )
+    theme_requested = any(
+        key in payload
+        for key in ("ui_theme", "ui_theme_mode", "ui_theme_light", "ui_theme_dark", "report_theme_id")
+    )
+    backup_requested = "backup" in payload or "backup_password" in payload
+
+    account_name = _clean_env_value(payload.get("account_name", account_cfg.get("name", "")))
+    broadband_provider = _clean_env_value(payload.get("broadband_provider", account_cfg.get("provider", "")))
+    broadband_account_number = _clean_env_value(payload.get("broadband_account_number", account_cfg.get("number", "")))
+
+    smtp_server = _clean_env_value(payload.get("smtp_server", os.getenv("SMTP_SERVER", email_cfg.get("smtp_server", ""))))
+    smtp_username = _clean_env_value(payload.get("smtp_username", os.getenv("SMTP_USERNAME", email_cfg.get("from", ""))))
+    smtp_password = str(payload.get("smtp_password", "") or "") if "smtp_password" in payload else ""
+    email_from = _clean_env_value(payload.get("email_from", os.getenv("EMAIL_FROM", email_cfg.get("from", smtp_username))))
+    app_timezone = _clean_env_value(payload.get("app_timezone", app_cfg.get("timezone", "")))
+
+    weekly_report_time = _clean_env_value(payload.get("weekly_report_time", scheduling_cfg.get("weekly_report_time", "Monday 08:00")))
+    monthly_report_time = _clean_env_value(payload.get("monthly_report_time", scheduling_cfg.get("monthly_report_time", "08:00")))
+    scan_enabled = bool(payload.get("scan_enabled", scheduling_cfg.get("scan_enabled", True)))
+    scan_frequency = _clean_scan_frequency(payload.get("scan_frequency", scheduling_cfg.get("scan_frequency", "daily")), "daily")
+    scan_weekly_day = _clean_weekday_name(payload.get("scan_weekly_day", scheduling_cfg.get("scan_weekly_day", "Monday")), "Monday")
+    scan_monthly_day = _safe_int(payload.get("scan_monthly_day", scheduling_cfg.get("scan_monthly_day", 1)), 1)
+    scan_custom_days = _normalize_scan_custom_days(payload.get("scan_custom_days", scheduling_cfg.get("scan_custom_days", [scan_monthly_day])))
+    test_times = _normalize_test_times(payload.get("test_times", scheduling_cfg.get("test_times", ["08:00", "16:00", "22:00"])))
+    selected_server_id = _clean_env_value(payload.get("server_id", speedtest_cfg.get("server_id", "")))
+
+    push_events = _normalize_push_events(payload.get("push_events", notifications_cfg.get("push_events", {})))
+    report_theme_id = _clean_theme_id(payload.get("report_theme_id", notifications_cfg.get("report_theme_id", "default-dark")))
     ui_theme_payload = payload.get("ui_theme", {})
     ui_theme_mode = _clean_theme_mode(
-        ui_theme_payload.get("mode", payload.get("ui_theme_mode", "system")),
+        ui_theme_payload.get("mode", payload.get("ui_theme_mode", app_cfg.get("ui_theme_mode", "system"))),
         "system",
     )
     ui_theme_light = _clean_theme_id(
-        ui_theme_payload.get("light", payload.get("ui_theme_light", "github-light")),
+        ui_theme_payload.get("light", payload.get("ui_theme_light", app_cfg.get("ui_theme_light", "github-light"))),
         "github-light",
     )
     ui_theme_dark = _clean_theme_id(
-        ui_theme_payload.get("dark", payload.get("ui_theme_dark", "github-dark")),
+        ui_theme_payload.get("dark", payload.get("ui_theme_dark", app_cfg.get("ui_theme_dark", "github-dark"))),
         "github-dark",
     )
 
     try:
-        smtp_port = int(payload.get("smtp_port", 465))
+        smtp_port = int(payload.get("smtp_port", os.getenv("SMTP_PORT", str(email_cfg.get("smtp_port", 465)))))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="SMTP port must be numeric") from None
 
     if selected_server_id and not selected_server_id.isdigit():
         raise HTTPException(status_code=400, detail="server_id must be numeric or empty")
 
-    if smtp_port < 1 or smtp_port > 65535:
-        raise HTTPException(status_code=400, detail="SMTP port must be in range 1-65535")
+    if email_requested:
+        if smtp_port < 1 or smtp_port > 65535:
+            raise HTTPException(status_code=400, detail="SMTP port must be in range 1-65535")
+        if not smtp_server or not smtp_username or not email_from:
+            raise HTTPException(status_code=400, detail="SMTP server, username, and from address are required")
 
-    if not smtp_server or not smtp_username or not email_from:
-        raise HTTPException(status_code=400, detail="SMTP server, username, and from address are required")
+    if schedule_requested:
+        if not _validate_weekly_schedule(weekly_report_time):
+            raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
+        if not _validate_hhmm(monthly_report_time):
+            raise HTTPException(status_code=400, detail="Monthly report time must use HH:MM format")
+        if scan_monthly_day < 1 or scan_monthly_day > 31:
+            raise HTTPException(status_code=400, detail="Monthly scan day must be between 1 and 31")
+        if scan_frequency == "custom" and not scan_custom_days:
+            raise HTTPException(status_code=400, detail="Select at least one custom scan day")
 
-    if not _validate_weekly_schedule(weekly_report_time):
-        raise HTTPException(status_code=400, detail="Weekly report time must use format like 'Monday 08:00'")
-    if not _validate_hhmm(monthly_report_time):
-        raise HTTPException(status_code=400, detail="Monthly report time must use HH:MM format")
-    if scan_monthly_day < 1 or scan_monthly_day > 31:
-        raise HTTPException(status_code=400, detail="Monthly scan day must be between 1 and 31")
-    if scan_frequency == "custom" and not scan_custom_days:
-        raise HTTPException(status_code=400, detail="Select at least one custom scan day")
-
-    config = load_config()
     if not app_timezone:
         app_timezone, _ = _resolve_app_timezone(config)
     if not _is_valid_timezone(app_timezone):
@@ -2013,55 +2060,68 @@ async def update_notification_settings(request: Request) -> JSONResponse:
             status_code=400,
             detail="Application timezone must be a valid IANA timezone (for example: Europe/Warsaw).",
         )
-    account_cfg = config.setdefault("account", {})
-    email_cfg = config.setdefault("email", {})
-    scheduling_cfg = config.setdefault("scheduling", {})
-    notifications_cfg = config.setdefault("notifications", {})
-    speedtest_cfg = config.setdefault("speedtest", {})
-    app_cfg = config.setdefault("app", {})
 
     detected_identity = _detected_account_network_identity(config)
     effective_provider = detected_identity["provider"] or broadband_provider
 
-    account_cfg["name"] = account_name
-    account_cfg["provider"] = effective_provider
-    account_cfg["ip_address"] = detected_identity["ip_address"]
-    account_cfg["number"] = broadband_account_number
+    if account_requested:
+        account_cfg["name"] = account_name
+        account_cfg["provider"] = effective_provider
+        account_cfg["ip_address"] = detected_identity["ip_address"]
+        account_cfg["number"] = broadband_account_number
 
-    email_cfg["smtp_server"] = smtp_server
-    email_cfg["smtp_port"] = smtp_port
-    email_cfg["from"] = email_from
-    email_cfg["send_realtime_alerts"] = bool(payload.get("send_realtime_alerts", True))
+    if email_requested:
+        email_cfg["smtp_server"] = smtp_server
+        email_cfg["smtp_port"] = smtp_port
+        email_cfg["from"] = email_from
+        email_cfg["send_realtime_alerts"] = bool(payload.get("send_realtime_alerts", email_cfg.get("send_realtime_alerts", True)))
 
-    scheduling_cfg["test_times"] = test_times
-    scheduling_cfg["weekly_report_time"] = weekly_report_time
-    scheduling_cfg["monthly_report_time"] = monthly_report_time
-    scheduling_cfg["scan_enabled"] = scan_enabled
-    scheduling_cfg["scan_frequency"] = scan_frequency
-    scheduling_cfg["scan_weekly_day"] = scan_weekly_day
-    scheduling_cfg["scan_monthly_day"] = scan_monthly_day
-    scheduling_cfg["scan_custom_days"] = scan_custom_days
-    speedtest_cfg["server_id"] = selected_server_id
+    if schedule_requested:
+        scheduling_cfg["test_times"] = test_times
+        scheduling_cfg["weekly_report_time"] = weekly_report_time
+        scheduling_cfg["monthly_report_time"] = monthly_report_time
+        scheduling_cfg["scan_enabled"] = scan_enabled
+        scheduling_cfg["scan_frequency"] = scan_frequency
+        scheduling_cfg["scan_weekly_day"] = scan_weekly_day
+        scheduling_cfg["scan_monthly_day"] = scan_monthly_day
+        scheduling_cfg["scan_custom_days"] = scan_custom_days
+        speedtest_cfg["server_id"] = selected_server_id
+        notifications_cfg["weekly_report_enabled"] = bool(
+            payload.get("weekly_report_enabled", notifications_cfg.get("weekly_report_enabled", True))
+        )
+        notifications_cfg["monthly_report_enabled"] = bool(
+            payload.get("monthly_report_enabled", notifications_cfg.get("monthly_report_enabled", False))
+        )
 
-    notifications_cfg["weekly_report_enabled"] = bool(payload.get("weekly_report_enabled", True))
-    notifications_cfg["monthly_report_enabled"] = bool(payload.get("monthly_report_enabled", False))
-    notifications_cfg["push_events"] = push_events
-    notifications_cfg["report_theme_id"] = report_theme_id
-    notifications_cfg["webhook_enabled"] = bool(payload.get("webhook_enabled", False))
-    notifications_cfg["webhook_url"] = _clean_env_value(payload.get("webhook_url", ""))
-    notifications_cfg["ntfy_enabled"] = bool(payload.get("ntfy_enabled", False))
-    notifications_cfg["ntfy_server"] = _clean_env_value(payload.get("ntfy_server", "https://ntfy.sh")) or "https://ntfy.sh"
-    notifications_cfg["ntfy_topic"] = _clean_env_value(payload.get("ntfy_topic", ""))
-    app_cfg["ui_theme_mode"] = ui_theme_mode
-    app_cfg["ui_theme_light"] = ui_theme_light
-    app_cfg["ui_theme_dark"] = ui_theme_dark
-    app_cfg["timezone"] = app_timezone
+    if push_requested:
+        notifications_cfg["push_events"] = push_events
+        notifications_cfg["webhook_enabled"] = bool(payload.get("webhook_enabled", notifications_cfg.get("webhook_enabled", False)))
+        notifications_cfg["webhook_url"] = _clean_env_value(
+            payload.get("webhook_url", notifications_cfg.get("webhook_url", ""))
+        )
+        notifications_cfg["ntfy_enabled"] = bool(payload.get("ntfy_enabled", notifications_cfg.get("ntfy_enabled", False)))
+        notifications_cfg["ntfy_server"] = (
+            _clean_env_value(payload.get("ntfy_server", notifications_cfg.get("ntfy_server", "https://ntfy.sh")))
+            or "https://ntfy.sh"
+        )
+        notifications_cfg["ntfy_topic"] = _clean_env_value(
+            payload.get("ntfy_topic", notifications_cfg.get("ntfy_topic", ""))
+        )
+
+    if theme_requested:
+        notifications_cfg["report_theme_id"] = report_theme_id
+        app_cfg["ui_theme_mode"] = ui_theme_mode
+        app_cfg["ui_theme_light"] = ui_theme_light
+        app_cfg["ui_theme_dark"] = ui_theme_dark
+
+    if general_requested:
+        app_cfg["timezone"] = app_timezone
 
     contract_payload = payload.get("contract", {})
     if contract_payload:
-        contract_current = contract_payload.get("current", {})
         contract_cfg = config.setdefault("contract", {})
         current = contract_cfg.setdefault("current", {})
+        contract_current = contract_payload.get("current", {})
         current["start_date"] = _clean_env_value(contract_current.get("start_date", ""))
         current["end_date"] = _clean_env_value(contract_current.get("end_date", ""))
         current["provider"] = _clean_env_value(contract_current.get("provider", ""))
@@ -2099,7 +2159,6 @@ async def update_notification_settings(request: Request) -> JSONResponse:
 
     backup_payload = payload.get("backup", {})
     if backup_payload:
-        backup_cfg = config.setdefault("backup", {})
         backup_cfg["scheduled_backup_enabled"] = bool(backup_payload.get("scheduled_backup_enabled", False))
         raw_time = _clean_env_value(backup_payload.get("scheduled_backup_time", "03:00"))
         if not re.fullmatch(r"\d{2}:\d{2}", raw_time):
@@ -2127,39 +2186,49 @@ async def update_notification_settings(request: Request) -> JSONResponse:
 
     save_config(config)
 
-    env_updates = {
-        "SMTP_SERVER": smtp_server,
-        "SMTP_PORT": str(smtp_port),
-        "SMTP_USERNAME": smtp_username,
-        "EMAIL_FROM": email_from,
-        "APP_TIMEZONE": app_timezone,
-        "TZ": app_timezone,
-    }
-    if smtp_password.strip():
-        if encrypted_secret_store_enabled():
-            try:
-                set_app_secret("smtp_password", smtp_password)
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to store SMTP password securely: {exc}",
-                ) from exc
-            env_updates["SMTP_PASSWORD"] = ""
-        else:
-            env_updates["SMTP_PASSWORD"] = smtp_password
+    env_updates: dict[str, str] = {}
+    if email_requested:
+        env_updates.update(
+            {
+                "SMTP_SERVER": smtp_server,
+                "SMTP_PORT": str(smtp_port),
+                "SMTP_USERNAME": smtp_username,
+                "EMAIL_FROM": email_from,
+            }
+        )
+        if smtp_password.strip():
+            if encrypted_secret_store_enabled():
+                try:
+                    set_app_secret("smtp_password", smtp_password)
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to store SMTP password securely: {exc}",
+                    ) from exc
+                env_updates["SMTP_PASSWORD"] = ""
+            else:
+                env_updates["SMTP_PASSWORD"] = smtp_password
+
+    if general_requested:
+        env_updates["APP_TIMEZONE"] = app_timezone
+        env_updates["TZ"] = app_timezone
+
     if backup_password.strip():
         env_updates["BACKUP_PASSWORD"] = backup_password
 
-    try:
-        _update_env_file(env_updates)
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update .env: {exc}") from exc
+    if env_updates:
+        try:
+            _update_env_file(env_updates)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to update .env: {exc}") from exc
 
-    _apply_runtime_env(env_updates)
+        _apply_runtime_env(env_updates)
 
     response_payload = dashboard_settings_payload(config)
     response_payload["message"] = (
-        "Settings saved. Schedule changes will be picked up automatically within 10 seconds."
+        "Settings saved. Scheduler changes will be picked up automatically within 10 seconds."
+        if general_requested or schedule_requested or backup_requested
+        else "Settings saved."
     )
     response_payload["restart_required"] = False
     return JSONResponse(response_payload)

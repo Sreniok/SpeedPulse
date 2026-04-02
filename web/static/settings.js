@@ -1405,47 +1405,11 @@ function collectAppearancePayload() {
   };
 }
 
-function collectSettingsPayload() {
-  const uiTheme = currentUiThemePreferences();
+function collectAccountSettingsPayload() {
   return {
     account_name: byId("settings-account-name").value.trim(),
     broadband_provider: byId("settings-provider-detected").value.trim(),
     broadband_account_number: byId("settings-account-number").value.trim(),
-    smtp_server: byId("settings-smtp-server").value.trim(),
-    smtp_port: Number(byId("settings-smtp-port").value || "465"),
-    smtp_username: byId("settings-smtp-username").value.trim(),
-    smtp_password: byId("settings-smtp-password").value,
-    email_from: byId("settings-email-from").value.trim(),
-    app_timezone: byId("settings-app-timezone").value.trim(),
-    send_realtime_alerts: byId("settings-realtime-alerts").checked,
-    weekly_report_enabled: byId("settings-weekly-enabled").checked,
-    weekly_report_time: buildWeeklySchedule(),
-    monthly_report_enabled: byId("settings-monthly-enabled").checked,
-    monthly_report_time: byId("settings-monthly-time").value || "08:00",
-    scan_enabled: byId("settings-scan-enabled").checked,
-    scan_frequency:
-      String(byId("settings-scan-frequency").value || "daily").trim().toLowerCase(),
-    scan_weekly_day: String(byId("settings-scan-weekly-day").value || "Monday"),
-    scan_monthly_day: Number(byId("settings-scan-monthly-day").value || "1"),
-    scan_custom_days: normalizeScanCustomDays(selectedScanCustomDays),
-    test_times: collectDailyScanTimes(),
-    server_id: byId("settings-schedule-server").value,
-    push_events: {
-      alert: byId("settings-push-event-alert").checked,
-      weekly_report: byId("settings-push-event-weekly").checked,
-      monthly_report: byId("settings-push-event-monthly").checked,
-      health_check: byId("settings-push-event-health").checked,
-    },
-    ui_theme: uiTheme,
-    ui_theme_mode: uiTheme.mode,
-    ui_theme_light: uiTheme.light,
-    ui_theme_dark: uiTheme.dark,
-    report_theme_id: currentThemeId(),
-    webhook_enabled: byId("settings-webhook-enabled").checked,
-    webhook_url: byId("settings-webhook-url").value.trim(),
-    ntfy_enabled: byId("settings-ntfy-enabled").checked,
-    ntfy_server: byId("settings-ntfy-server").value.trim(),
-    ntfy_topic: byId("settings-ntfy-topic").value.trim(),
     thresholds: {
       download_mbps: Number(byId("settings-threshold-download").value) || 0,
       upload_mbps: Number(byId("settings-threshold-upload").value) || 0,
@@ -1465,6 +1429,61 @@ function collectSettingsPayload() {
           Number(byId("settings-contract-reminder-days").value) || 31,
       },
     },
+  };
+}
+
+function collectEmailSettingsPayload() {
+  return {
+    smtp_server: byId("settings-smtp-server").value.trim(),
+    smtp_port: Number(byId("settings-smtp-port").value || "465"),
+    smtp_username: byId("settings-smtp-username").value.trim(),
+    smtp_password: byId("settings-smtp-password").value,
+    email_from: byId("settings-email-from").value.trim(),
+    send_realtime_alerts: byId("settings-realtime-alerts").checked,
+  };
+}
+
+function collectGeneralSettingsPayload() {
+  return {
+    app_timezone: byId("settings-app-timezone").value.trim(),
+  };
+}
+
+function collectScheduleSettingsPayload() {
+  return {
+    weekly_report_enabled: byId("settings-weekly-enabled").checked,
+    weekly_report_time: buildWeeklySchedule(),
+    monthly_report_enabled: byId("settings-monthly-enabled").checked,
+    monthly_report_time: byId("settings-monthly-time").value || "08:00",
+    scan_enabled: byId("settings-scan-enabled").checked,
+    scan_frequency:
+      String(byId("settings-scan-frequency").value || "daily").trim().toLowerCase(),
+    scan_weekly_day: String(byId("settings-scan-weekly-day").value || "Monday"),
+    scan_monthly_day: Number(byId("settings-scan-monthly-day").value || "1"),
+    scan_custom_days: normalizeScanCustomDays(selectedScanCustomDays),
+    test_times: collectDailyScanTimes(),
+    server_id: byId("settings-schedule-server").value,
+  };
+}
+
+function collectPushSettingsPayload() {
+  return {
+    push_events: {
+      alert: byId("settings-push-event-alert").checked,
+      weekly_report: byId("settings-push-event-weekly").checked,
+      monthly_report: byId("settings-push-event-monthly").checked,
+      health_check: byId("settings-push-event-health").checked,
+    },
+    webhook_enabled: byId("settings-webhook-enabled").checked,
+    webhook_url: byId("settings-webhook-url").value.trim(),
+    ntfy_enabled: byId("settings-ntfy-enabled").checked,
+    ntfy_server: byId("settings-ntfy-server").value.trim(),
+    ntfy_topic: byId("settings-ntfy-topic").value.trim(),
+  };
+}
+
+function collectBackupSettingsPayload() {
+  return {
     backup: {
       scheduled_backup_enabled: byId("settings-scheduled-backup-enabled")
         .checked,
@@ -1478,6 +1497,30 @@ function collectSettingsPayload() {
       max_backups: Number(byId("settings-scheduled-backup-max").value) || 10,
     },
     backup_password: byId("settings-scheduled-backup-password").value,
+  };
+}
+
+function collectSettingsPayload(scope = "all") {
+  const scopedPayloads = {
+    general: collectGeneralSettingsPayload,
+    account: collectAccountSettingsPayload,
+    schedule: collectScheduleSettingsPayload,
+    email: collectEmailSettingsPayload,
+    push: collectPushSettingsPayload,
+    backup: collectBackupSettingsPayload,
+  };
+
+  if (scope in scopedPayloads) {
+    return scopedPayloads[scope]();
+  }
+
+  return {
+    ...collectGeneralSettingsPayload(),
+    ...collectAccountSettingsPayload(),
+    ...collectScheduleSettingsPayload(),
+    ...collectEmailSettingsPayload(),
+    ...collectPushSettingsPayload(),
+    ...collectBackupSettingsPayload(),
   };
 }
 
@@ -1527,8 +1570,15 @@ async function loadScheduledServerOptions() {
   }
 }
 
-async function saveNotificationSettings() {
-  const saveButtons = settingsSaveButtons();
+async function saveNotificationSettings(scope = "all", triggerButton = null) {
+  const saveButtons =
+    triggerButton instanceof HTMLButtonElement
+      ? [triggerButton]
+      : settingsSaveButtons().filter((button) => {
+          if (!(button instanceof HTMLButtonElement)) return false;
+          if (scope === "all") return true;
+          return button.dataset.settingsScope === scope;
+        });
   saveButtons.forEach((button) => {
     button.disabled = true;
   });
@@ -1540,7 +1590,7 @@ async function saveNotificationSettings() {
         "Content-Type": "application/json",
         "X-CSRF-Token": csrfToken,
       },
-      body: JSON.stringify(collectSettingsPayload()),
+      body: JSON.stringify(collectSettingsPayload(scope)),
     });
 
     if (response.status === 401) {
@@ -1555,7 +1605,12 @@ async function saveNotificationSettings() {
       );
     }
 
-    byId("settings-smtp-password").value = "";
+    if (scope === "email" || scope === "all") {
+      byId("settings-smtp-password").value = "";
+    }
+    if (scope === "backup" || scope === "all") {
+      byId("settings-scheduled-backup-password").value = "";
+    }
     populateSettingsForm(payload);
     showMessage(payload.message || "Settings saved.", "success");
   } catch (error) {
@@ -2762,7 +2817,10 @@ function bindEvents() {
   }
   settingsSaveButtons().forEach((button) => {
     button.addEventListener("click", () => {
-      void saveNotificationSettings();
+      void saveNotificationSettings(
+        button.dataset.settingsScope || "all",
+        button,
+      );
     });
   });
   byId("settings-save-user-account").addEventListener("click", () => {
