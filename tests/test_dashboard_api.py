@@ -328,9 +328,9 @@ def test_download_archived_contract_report_endpoint(api_client):
     response = client.get(f"/api/contract/report/download?contract_key={contract_key}")
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["content-type"].startswith("application/zip")
     assert "attachment; filename=" in response.headers["content-disposition"]
-    assert "SpeedPulse Contract Summary" in response.text
+    assert response.content.startswith(b"PK")
 
 
 def test_manual_run_stage_tracks_live_ookla_progress(api_client):

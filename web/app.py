@@ -6,6 +6,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -2822,10 +2824,14 @@ def download_archived_contract_report(request: Request, contract_key: str) -> Re
     provider_slug = re.sub(r"[^a-z0-9]+", "-", str(archived.get("provider", "contract-summary")).lower()).strip("-")
     start_slug = str(archived.get("start_date", "") or "start")
     end_slug = str(archived.get("end_date", "") or "end")
-    filename = f"speedpulse-contract-summary-{provider_slug or 'contract'}-{start_slug}-to-{end_slug}.html"
+    base_name = f"speedpulse-contract-summary-{provider_slug or 'contract'}-{start_slug}-to-{end_slug}"
+
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(f"{base_name}.html", html)
 
     return Response(
-        content=html.encode("utf-8"),
-        media_type="text/html; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=archive_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{base_name}.zip"'},
     )
