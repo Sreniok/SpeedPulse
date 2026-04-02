@@ -5732,12 +5732,8 @@ label {
 }
 
 #contract-history-list {
-  display: flex;
+  display: grid;
   gap: 0.85rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 0.25rem;
-  scrollbar-width: thin;
 }
 
 .contract-history-modal-list {
@@ -5747,7 +5743,8 @@ label {
 
 .contract-history-card {
   margin: 0;
-  flex: 0 0 min(330px, 88vw);
+  width: 100%;
+  min-width: 0;
 }
 
 .contract-mini-card {
@@ -5765,6 +5762,21 @@ label {
 .contract-mini-card-compact {
   gap: 0.68rem;
   padding: 0.88rem 0.95rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-layout {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
+  gap: 0.8rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contract-mini-card-compact .contract-mini-card-actions {
+  grid-column: 1 / -1;
+  justify-items: start;
+  align-content: start;
 }
 
 .contract-mini-card-topbar {
@@ -6004,6 +6016,10 @@ label {
   }
 
   .contract-mini-card-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-mini-card-compact .contract-mini-card-layout {
     grid-template-columns: 1fr;
   }
 
