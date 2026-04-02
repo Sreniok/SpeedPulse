@@ -2096,6 +2096,9 @@ function buildContractHistoryCardHtml(entry, { compact = false } = {}) {
   const period = escapeHtml(contractPeriodLabel(entry));
   const contracted = escapeHtml(contractContractedLabel(entry));
   const summary = entry?.summary || {};
+  const download = summary.download || {};
+  const upload = summary.upload || {};
+  const ping = summary.ping || {};
   const sources = summary.sources || {};
   const breaches = summary.breaches || {};
   const tests = Number(summary.total_tests || 0);
