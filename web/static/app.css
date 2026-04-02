@@ -3805,6 +3805,11 @@ button:active,
   gap: 0.75rem;
 }
 
+.settings-fields-contract {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
 .settings-fields-schedule {
   margin-top: 0.85rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -4108,6 +4113,10 @@ button:active,
 
 .settings-broadband-block .panel-subtext {
   margin-top: 0;
+}
+
+.settings-contract-provider-note {
+  max-width: 34ch;
 }
 
 .settings-fields-reminder {
@@ -5325,6 +5334,10 @@ label {
     grid-template-columns: 1fr;
   }
 
+  .settings-fields-contract {
+    grid-template-columns: 1fr;
+  }
+
   .settings-schedule-shell {
     grid-template-columns: 1fr;
   }
@@ -5716,7 +5729,9 @@ label {
 }
 
 .contract-history-section {
-  margin-top: 1.5rem;
+  margin-top: 1.15rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
 }
 
 .contract-history-header {
@@ -5729,6 +5744,8 @@ label {
 
 .contract-history-heading {
   margin: 0;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
 }
 
 #contract-history-list {
@@ -5764,6 +5781,10 @@ label {
   padding: 0.88rem 0.95rem;
 }
 
+.contract-mini-card-compact .contract-mini-card-topbar {
+  gap: 0.65rem;
+}
+
 .contract-mini-card-compact .contract-mini-card-layout {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
   gap: 0.8rem;
@@ -5777,6 +5798,41 @@ label {
   grid-column: 1 / -1;
   justify-items: start;
   align-content: start;
+  gap: 0.55rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-provider h4 {
+  font-size: 1.02rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-account,
+.contract-mini-card-compact .contract-mini-card-contract,
+.contract-mini-card-compact .contract-mini-card-status {
+  font-size: 0.84rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-chip {
+  padding: 0.34rem 0.62rem;
+  font-size: 0.75rem;
+}
+
+.contract-mini-card-compact .contract-mini-stat {
+  gap: 0.34rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+}
+
+.contract-mini-card-compact .contract-mini-stat-value {
+  font-size: 1.22rem;
+}
+
+.contract-mini-card-compact .contract-mini-stat-note {
+  font-size: 0.76rem;
+}
+
+.contract-mini-card-compact .contract-history-view {
+  min-height: 36px;
+  padding-inline: 0.8rem;
 }
 
 .contract-mini-card-topbar {
