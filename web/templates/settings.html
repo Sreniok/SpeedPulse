@@ -1696,11 +1696,98 @@
                 Download
               </button>
               <button
+                id="contract-summary-modal-edit"
+                class="btn-ghost"
+                type="button"
+              >
+                Edit
+              </button>
+              <button
                 id="contract-summary-modal-ok"
                 class="btn-primary"
                 type="button"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </dialog>
+
+        <dialog
+          id="contract-edit-modal"
+          class="dialog-modal"
+          aria-labelledby="contract-edit-modal-title"
+          aria-describedby="contract-edit-modal-copy"
+        >
+          <div class="dialog-card contract-edit-modal-card">
+            <div class="dialog-head">
+              <div>
+                <p class="eyebrow">Edit</p>
+                <h2 id="contract-edit-modal-title">Archived contract</h2>
+              </div>
+              <button
+                id="contract-edit-modal-close"
+                class="icon-button"
+                type="button"
+                aria-label="Close archived contract editor"
+              >
+                ×
+              </button>
+            </div>
+            <p id="contract-edit-modal-copy" class="dialog-copy">
+              Update the archived contract details stored in history.
+            </p>
+            <div
+              id="contract-edit-modal-status"
+              class="dialog-status hidden"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            ></div>
+            <div class="settings-fields settings-fields-split settings-fields-contract-edit">
+              <div class="settings-field-group">
+                <label for="contract-edit-provider">Provider</label>
+                <input id="contract-edit-provider" type="text" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-account-name">Account holder</label>
+                <input id="contract-edit-account-name" type="text" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-account-number">Account number</label>
+                <input id="contract-edit-account-number" type="text" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-start">Contract start date</label>
+                <input id="contract-edit-start" type="date" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-end">Contract end date</label>
+                <input id="contract-edit-end" type="date" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-download">Contracted download (Mbps)</label>
+                <input id="contract-edit-download" type="number" min="0" step="1" />
+              </div>
+              <div class="settings-field-group">
+                <label for="contract-edit-upload">Contracted upload (Mbps)</label>
+                <input id="contract-edit-upload" type="number" min="0" step="1" />
+              </div>
+            </div>
+            <div class="dialog-actions contract-summary-actions">
+              <button
+                id="contract-edit-modal-save"
+                class="btn-primary"
+                type="button"
+              >
+                Save changes
+              </button>
+              <button
+                id="contract-edit-modal-cancel"
+                class="btn-ghost"
+                type="button"
+              >
+                Cancel
               </button>
             </div>
           </div>

@@ -333,6 +333,58 @@ def test_download_archived_contract_report_endpoint(api_client):
     assert response.content.startswith(b"PK")
 
 
+def test_update_archived_contract_endpoint(api_client):
+    client, _, config_path, _, csrf_token = api_client
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["contract"]["history"] = [
+        {
+            "start_date": "2026-03-13",
+            "end_date": "2026-03-13",
+            "provider": "Sky Ireland",
+            "provider_country": "IE",
+            "download_mbps": 1000,
+            "upload_mbps": 100,
+            "account_name": "Old Name",
+            "account_number": "1234",
+            "archived_at": "2026-03-14 09:00:00",
+        }
+    ]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    payload = client.get("/api/settings/notifications").json()
+    contract_key = payload["contract"]["history"][0]["contract_key"]
+
+    response = client.post(
+        "/api/contract/history/update",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "contract_key": contract_key,
+            "provider": "Vodafone Ireland",
+            "account_name": "Updated Name",
+            "account_number": "9988",
+            "start_date": "2026-03-13",
+            "end_date": "2026-03-14",
+            "download_mbps": 500,
+            "upload_mbps": 50,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["archived"]["provider"] == "Vodafone Ireland"
+    assert body["archived"]["account_name"] == "Updated Name"
+    assert body["archived"]["account_number"] == "9988"
+    assert body["archived"]["end_date"] == "2026-03-14"
+    assert body["archived"]["download_mbps"] == 500
+    assert body["archived"]["upload_mbps"] == 50
+    assert body["archived"]["contract_key"]
+
+    saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_config["contract"]["history"][0]["provider"] == "Vodafone Ireland"
+    assert saved_config["contract"]["history"][0]["account_name"] == "Updated Name"
+
+
 def test_manual_run_stage_tracks_live_ookla_progress(api_client):
     _, webapp, _, _, _ = api_client
 

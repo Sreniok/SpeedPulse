@@ -2598,6 +2598,15 @@ button:active,
   min-width: 160px;
 }
 
+.contract-edit-modal-card {
+  width: min(820px, calc(100vw - 2rem));
+}
+
+.settings-fields-contract-edit {
+  margin-top: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dialog-action-button {
   width: 100%;
 }
@@ -5344,6 +5353,10 @@ label {
   }
 
   .settings-fields-contract {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-fields-contract-edit {
     grid-template-columns: 1fr;
   }
 

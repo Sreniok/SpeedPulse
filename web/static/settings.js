@@ -13,6 +13,7 @@ let originalUserAccount = {
 let settingsClockTimerId = null;
 let settingsClockState = null;
 let activeContractSummaryKey = "";
+let activeContractSummaryEntry = null;
 const animatedSelectSyncMap = new WeakMap();
 const animatedSelectRenderMap = new WeakMap();
 const MAX_SCAN_CUSTOM_DAY = 31;
@@ -57,6 +58,7 @@ function syncBodyModalState() {
     "backup-restore-modal",
     "settings-confirm-modal",
     "contract-summary-modal",
+    "contract-edit-modal",
     "contract-history-modal",
   ];
   if (uiCore && typeof uiCore.syncBodyModalState === "function") {
@@ -2135,6 +2137,7 @@ function renderContractSummaryModal(entry, { email = null } = {}) {
   const period = contractPeriodLabel(entry);
   const contracted = contractContractedLabel(entry);
   activeContractSummaryKey = String(entry?.contract_key || "").trim();
+  activeContractSummaryEntry = entry || null;
   const accountName = entry?.account_name || "Unknown account";
   const accountNumber = entry?.account_number || "N/A";
   const ipAddress = entry?.ip_address || "Not detected";
@@ -2166,6 +2169,10 @@ function renderContractSummaryModal(entry, { email = null } = {}) {
   }
   if (downloadButton) {
     downloadButton.disabled = !activeContractSummaryKey;
+  }
+  const editButton = byId("contract-summary-modal-edit");
+  if (editButton) {
+    editButton.disabled = !activeContractSummaryKey;
   }
 
   const emptyState =
@@ -2235,6 +2242,106 @@ function openContractSummaryModal(entry, options = {}) {
   renderContractSummaryModal(entry, options);
   openSettingsDialog("contract-summary-modal");
   byId("contract-summary-modal-ok")?.focus();
+}
+
+function replaceArchivedContractEntry(previousKey, updatedEntry) {
+  contractHistoryEntries = contractHistoryEntries.map((entry) =>
+    String(entry?.contract_key || "") === String(previousKey || "")
+      ? updatedEntry
+      : entry,
+  );
+  renderContractHistory(contractHistoryEntries);
+  if (modalIsOpen("contract-history-modal")) {
+    renderContractHistoryModal();
+  }
+}
+
+function openArchivedContractEditModal() {
+  const entry = activeContractSummaryEntry;
+  if (!entry) return;
+
+  byId("contract-edit-provider").value = entry.provider || "";
+  byId("contract-edit-account-name").value = entry.account_name || "";
+  byId("contract-edit-account-number").value = entry.account_number || "";
+  byId("contract-edit-start").value = entry.start_date || "";
+  byId("contract-edit-end").value = entry.end_date || "";
+  byId("contract-edit-download").value = entry.download_mbps || "";
+  byId("contract-edit-upload").value = entry.upload_mbps || "";
+
+  const statusNode = byId("contract-edit-modal-status");
+  if (statusNode) {
+    statusNode.textContent = "";
+    statusNode.classList.add("hidden");
+    statusNode.classList.remove("success-banner", "error-banner");
+  }
+
+  closeSettingsDialog("contract-summary-modal");
+  openSettingsDialog("contract-edit-modal");
+  byId("contract-edit-modal-save")?.focus();
+}
+
+async function saveArchivedContractEdits() {
+  const previousKey = String(activeContractSummaryKey || "").trim();
+  const saveButton = byId("contract-edit-modal-save");
+  const statusNode = byId("contract-edit-modal-status");
+  if (!previousKey || !saveButton || !statusNode) return;
+
+  saveButton.disabled = true;
+  try {
+    const response = await fetch("/api/contract/history/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        contract_key: previousKey,
+        provider: byId("contract-edit-provider").value.trim(),
+        account_name: byId("contract-edit-account-name").value.trim(),
+        account_number: byId("contract-edit-account-number").value.trim(),
+        start_date: byId("contract-edit-start").value,
+        end_date: byId("contract-edit-end").value,
+        download_mbps: Number(byId("contract-edit-download").value || "0"),
+        upload_mbps: Number(byId("contract-edit-upload").value || "0"),
+      }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to update archived contract",
+      );
+    }
+
+    const updatedEntry = payload.archived || null;
+    if (!updatedEntry) {
+      throw new Error("Archived contract update returned no contract data.");
+    }
+
+    statusNode.textContent = payload.message || "Archived contract updated.";
+    statusNode.classList.remove("hidden", "error-banner");
+    statusNode.classList.add("success-banner");
+    replaceArchivedContractEntry(previousKey, updatedEntry);
+    activeContractSummaryKey = String(updatedEntry.contract_key || "").trim();
+    activeContractSummaryEntry = updatedEntry;
+
+    window.setTimeout(() => {
+      closeSettingsDialog("contract-edit-modal");
+      openContractSummaryModal(updatedEntry);
+    }, 200);
+  } catch (error) {
+    statusNode.textContent =
+      error.message || "Failed to update archived contract.";
+    statusNode.classList.remove("hidden", "success-banner");
+    statusNode.classList.add("error-banner");
+  } finally {
+    saveButton.disabled = false;
+  }
 }
 
 async function emailContractSummaryReport() {
@@ -2898,6 +3005,9 @@ function bindEvents() {
   byId("contract-summary-modal-download").addEventListener("click", () => {
     downloadContractSummaryReport();
   });
+  byId("contract-summary-modal-edit").addEventListener("click", () => {
+    openArchivedContractEditModal();
+  });
   byId("contract-summary-modal-close").addEventListener("click", () => {
     closeSettingsDialog("contract-summary-modal");
   });
@@ -2925,6 +3035,37 @@ function bindEvents() {
   byId("contract-history-modal").addEventListener("click", (event) => {
     if (event.target === byId("contract-history-modal")) {
       closeSettingsDialog("contract-history-modal");
+    }
+  });
+  byId("contract-edit-modal-save").addEventListener("click", () => {
+    void saveArchivedContractEdits();
+  });
+  byId("contract-edit-modal-cancel").addEventListener("click", () => {
+    closeSettingsDialog("contract-edit-modal");
+    if (activeContractSummaryEntry) {
+      openContractSummaryModal(activeContractSummaryEntry);
+    }
+  });
+  byId("contract-edit-modal-close").addEventListener("click", () => {
+    closeSettingsDialog("contract-edit-modal");
+    if (activeContractSummaryEntry) {
+      openContractSummaryModal(activeContractSummaryEntry);
+    }
+  });
+  byId("contract-edit-modal").addEventListener("close", syncBodyModalState);
+  byId("contract-edit-modal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeSettingsDialog("contract-edit-modal");
+    if (activeContractSummaryEntry) {
+      openContractSummaryModal(activeContractSummaryEntry);
+    }
+  });
+  byId("contract-edit-modal").addEventListener("click", (event) => {
+    if (event.target === byId("contract-edit-modal")) {
+      closeSettingsDialog("contract-edit-modal");
+      if (activeContractSummaryEntry) {
+        openContractSummaryModal(activeContractSummaryEntry);
+      }
     }
   });
 }

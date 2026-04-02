@@ -2653,6 +2653,15 @@ def _resolved_archived_contract_entry_by_key(config: dict, contract_key: str) ->
     raise HTTPException(status_code=404, detail="Archived contract not found.")
 
 
+def _resolved_archived_contract_slot_by_key(config: dict, contract_key: str) -> tuple[dict, dict]:
+    history = config.get("contract", {}).get("history", [])
+    for raw_entry in history:
+        resolved = _resolved_contract_entry(config, raw_entry)
+        if _contract_report_key(resolved) == contract_key:
+            return raw_entry, resolved
+    raise HTTPException(status_code=404, detail="Archived contract not found.")
+
+
 def _send_contract_report_email(config: dict, archived: dict) -> tuple[bool, str]:
     summary = archived.get("summary") or {}
     subject = (
@@ -2834,4 +2843,58 @@ def download_archived_contract_report(request: Request, contract_key: str) -> Re
         content=archive_buffer.getvalue(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{base_name}.zip"'},
+    )
+
+
+@APP.post("/api/contract/history/update")
+async def update_archived_contract(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    contract_key = str(payload.get("contract_key", "") or "").strip()
+    if not contract_key:
+        raise HTTPException(status_code=400, detail="Archived contract key is required.")
+
+    config = load_config()
+    raw_entry, resolved_entry = _resolved_archived_contract_slot_by_key(config, contract_key)
+
+    provider = _clean_env_value(payload.get("provider", resolved_entry.get("provider", "")))
+    account_name = _clean_env_value(payload.get("account_name", resolved_entry.get("account_name", "")))
+    account_number = _clean_env_value(payload.get("account_number", resolved_entry.get("account_number", "")))
+    start_date = _clean_env_value(payload.get("start_date", resolved_entry.get("start_date", "")))
+    end_date = _clean_env_value(payload.get("end_date", resolved_entry.get("end_date", "")))
+
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="Archived contract must keep start and end dates.")
+
+    try:
+        download_mbps = float(payload.get("download_mbps", resolved_entry.get("download_mbps", 0)) or 0)
+        upload_mbps = float(payload.get("upload_mbps", resolved_entry.get("upload_mbps", 0)) or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Contracted speeds must be numeric.") from None
+
+    if download_mbps < 0 or upload_mbps < 0:
+        raise HTTPException(status_code=400, detail="Contracted speeds must be 0 or higher.")
+
+    identity = _contract_period_identity(config, start_date, end_date)
+    raw_entry["provider"] = provider
+    raw_entry["provider_country"] = "auto"
+    raw_entry["account_name"] = account_name
+    raw_entry["account_number"] = account_number
+    raw_entry["start_date"] = start_date
+    raw_entry["end_date"] = end_date
+    raw_entry["download_mbps"] = download_mbps
+    raw_entry["upload_mbps"] = upload_mbps
+    raw_entry["ip_address"] = identity["ip_address"]
+    raw_entry["summary"] = _contract_summary(config, start_date, end_date)
+
+    save_config(config)
+    updated_entry = _resolved_contract_entry(config, raw_entry)
+
+    return JSONResponse(
+        {
+            "message": "Archived contract updated.",
+            "archived": updated_entry,
+        }
     )
