@@ -29,7 +29,7 @@ from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -2616,7 +2616,7 @@ def _resolved_contract_entry(config: dict, entry: dict) -> dict:
     detected_identity = _contract_period_identity(config, start_str, end_str)
     account_cfg = config.get("account", {})
 
-    return {
+    resolved = {
         **entry,
         "provider": str(entry.get("provider", "") or detected_identity["provider"]),
         "provider_country": _clean_provider_country(entry.get("provider_country", "auto")),
@@ -2625,6 +2625,30 @@ def _resolved_contract_entry(config: dict, entry: dict) -> dict:
         "ip_address": str(entry.get("ip_address", "") or detected_identity["ip_address"]),
         "summary": entry.get("summary") or (_contract_summary(config, start_str, end_str) if start_str and end_str else None),
     }
+    resolved["contract_key"] = _contract_report_key(resolved)
+    return resolved
+
+
+def _contract_report_key(entry: dict) -> str:
+    raw = "|".join(
+        [
+            str(entry.get("archived_at", "") or ""),
+            str(entry.get("start_date", "") or ""),
+            str(entry.get("end_date", "") or ""),
+            str(entry.get("provider", "") or ""),
+            str(entry.get("account_number", "") or ""),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _resolved_archived_contract_entry_by_key(config: dict, contract_key: str) -> dict:
+    history = config.get("contract", {}).get("history", [])
+    for raw_entry in history:
+        resolved = _resolved_contract_entry(config, raw_entry)
+        if _contract_report_key(resolved) == contract_key:
+            return resolved
+    raise HTTPException(status_code=404, detail="Archived contract not found.")
 
 
 def _send_contract_report_email(config: dict, archived: dict) -> tuple[bool, str]:
@@ -2757,3 +2781,51 @@ async def end_current_contract(request: Request) -> JSONResponse:
             "message": email_message,
         },
     })
+
+
+@APP.post("/api/contract/report/email")
+async def email_archived_contract_report(request: Request) -> JSONResponse:
+    session = require_session(request)
+    require_csrf(request, session)
+
+    payload = await request.json()
+    contract_key = str(payload.get("contract_key", "") or "").strip()
+    if not contract_key:
+        raise HTTPException(status_code=400, detail="Archived contract key is required.")
+
+    config = load_config()
+    archived = _resolved_archived_contract_entry_by_key(config, contract_key)
+    email_sent, email_message = _send_contract_report_email(config, archived)
+
+    return JSONResponse(
+        {
+            "ok": email_sent,
+            "message": email_message,
+        },
+        status_code=200 if email_sent else 400,
+    )
+
+
+@APP.get("/api/contract/report/download")
+def download_archived_contract_report(request: Request, contract_key: str) -> Response:
+    require_session(request)
+
+    key = str(contract_key or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="Archived contract key is required.")
+
+    config = load_config()
+    archived = _resolved_archived_contract_entry_by_key(config, key)
+    summary = archived.get("summary") or {}
+    html = build_contract_report_html(config, archived, summary)
+
+    provider_slug = re.sub(r"[^a-z0-9]+", "-", str(archived.get("provider", "contract-summary")).lower()).strip("-")
+    start_slug = str(archived.get("start_date", "") or "start")
+    end_slug = str(archived.get("end_date", "") or "end")
+    filename = f"speedpulse-contract-summary-{provider_slug or 'contract'}-{start_slug}-to-{end_slug}.html"
+
+    return Response(
+        content=html.encode("utf-8"),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

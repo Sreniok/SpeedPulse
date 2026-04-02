@@ -12,6 +12,7 @@ let originalUserAccount = {
 };
 let settingsClockTimerId = null;
 let settingsClockState = null;
+let activeContractSummaryKey = "";
 const animatedSelectSyncMap = new WeakMap();
 const animatedSelectRenderMap = new WeakMap();
 const MAX_SCAN_CUSTOM_DAY = 31;
@@ -2126,11 +2127,14 @@ function renderContractSummaryModal(entry, { email = null } = {}) {
   const title = byId("contract-summary-modal-title");
   const copy = byId("contract-summary-modal-copy");
   const emailStatus = byId("contract-summary-email-status");
+  const emailButton = byId("contract-summary-modal-email");
+  const downloadButton = byId("contract-summary-modal-download");
   if (!body || !eyebrow || !title || !copy || !emailStatus) return;
 
   const provider = entry?.provider || "Unknown provider";
   const period = contractPeriodLabel(entry);
   const contracted = contractContractedLabel(entry);
+  activeContractSummaryKey = String(entry?.contract_key || "").trim();
   const accountName = entry?.account_name || "Unknown account";
   const accountNumber = entry?.account_number || "N/A";
   const ipAddress = entry?.ip_address || "Not detected";
@@ -2155,6 +2159,13 @@ function renderContractSummaryModal(entry, { email = null } = {}) {
     emailStatus.textContent = "";
     emailStatus.classList.add("hidden");
     emailStatus.classList.remove("success-banner", "error-banner");
+  }
+
+  if (emailButton) {
+    emailButton.disabled = !activeContractSummaryKey;
+  }
+  if (downloadButton) {
+    downloadButton.disabled = !activeContractSummaryKey;
   }
 
   const emptyState =
@@ -2224,6 +2235,56 @@ function openContractSummaryModal(entry, options = {}) {
   renderContractSummaryModal(entry, options);
   openSettingsDialog("contract-summary-modal");
   byId("contract-summary-modal-ok")?.focus();
+}
+
+async function emailContractSummaryReport() {
+  const contractKey = String(activeContractSummaryKey || "").trim();
+  const emailButton = byId("contract-summary-modal-email");
+  const statusNode = byId("contract-summary-email-status");
+  if (!contractKey || !emailButton || !statusNode) return;
+
+  emailButton.disabled = true;
+  try {
+    const response = await fetch("/api/contract/report/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({ contract_key: contractKey }),
+    });
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        payload.detail || payload.message || "Failed to email contract report",
+      );
+    }
+
+    statusNode.textContent =
+      payload.message || "Contract summary report emailed successfully.";
+    statusNode.classList.remove("hidden", "error-banner");
+    statusNode.classList.add("success-banner");
+  } catch (error) {
+    statusNode.textContent =
+      error.message || "Failed to email contract summary report.";
+    statusNode.classList.remove("hidden", "success-banner");
+    statusNode.classList.add("error-banner");
+  } finally {
+    emailButton.disabled = false;
+  }
+}
+
+function downloadContractSummaryReport() {
+  const contractKey = String(activeContractSummaryKey || "").trim();
+  if (!contractKey) return;
+  window.location.href =
+    `/api/contract/report/download?contract_key=${encodeURIComponent(contractKey)}`;
 }
 
 function renderContractHistoryModal() {
@@ -2830,6 +2891,12 @@ function bindEvents() {
   });
   byId("contract-summary-modal-ok").addEventListener("click", () => {
     closeSettingsDialog("contract-summary-modal");
+  });
+  byId("contract-summary-modal-email").addEventListener("click", () => {
+    void emailContractSummaryReport();
+  });
+  byId("contract-summary-modal-download").addEventListener("click", () => {
+    downloadContractSummaryReport();
   });
   byId("contract-summary-modal-close").addEventListener("click", () => {
     closeSettingsDialog("contract-summary-modal");

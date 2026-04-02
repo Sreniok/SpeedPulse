@@ -2589,6 +2589,15 @@ button:active,
   gap: 0.75rem;
 }
 
+.contract-summary-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.contract-summary-actions .btn-primary {
+  min-width: 160px;
+}
+
 .dialog-action-button {
   width: 100%;
 }

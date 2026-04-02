@@ -263,7 +263,74 @@ def test_settings_payload_enriches_contract_history_entries(api_client):
     assert len(history) == 1
     assert history[0]["provider"] == "Sky Ireland"
     assert history[0]["provider_country"] == "IE"
+    assert history[0]["contract_key"]
     assert history[0]["summary"]["total_tests"] == 3
+
+
+def test_email_archived_contract_report_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):
+    client, webapp, config_path, _, csrf_token = api_client
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["contract"]["history"] = [
+        {
+            "start_date": "2026-03-13",
+            "end_date": "2026-03-13",
+            "provider": "Sky Ireland",
+            "provider_country": "IE",
+            "download_mbps": 1000,
+            "upload_mbps": 100,
+            "archived_at": "2026-03-14 09:00:00",
+        }
+    ]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    payload = client.get("/api/settings/notifications").json()
+    contract_key = payload["contract"]["history"][0]["contract_key"]
+
+    monkeypatch.setattr(
+        webapp,
+        "_send_contract_report_email",
+        lambda loaded, archived: (True, "Contract summary report emailed successfully."),
+    )
+
+    response = client.post(
+        "/api/contract/report/email",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"contract_key": contract_key},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert "emailed successfully" in body["message"].lower()
+
+
+def test_download_archived_contract_report_endpoint(api_client):
+    client, _, config_path, _, _ = api_client
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["contract"]["history"] = [
+        {
+            "start_date": "2026-03-13",
+            "end_date": "2026-03-13",
+            "provider": "Sky Ireland",
+            "provider_country": "IE",
+            "download_mbps": 1000,
+            "upload_mbps": 100,
+            "archived_at": "2026-03-14 09:00:00",
+        }
+    ]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    payload = client.get("/api/settings/notifications").json()
+    contract_key = payload["contract"]["history"][0]["contract_key"]
+
+    response = client.get(f"/api/contract/report/download?contract_key={contract_key}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "attachment; filename=" in response.headers["content-disposition"]
+    assert "SpeedPulse Contract Summary" in response.text
 
 
 def test_manual_run_stage_tracks_live_ookla_progress(api_client):
