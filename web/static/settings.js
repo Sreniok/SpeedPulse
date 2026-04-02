@@ -2242,7 +2242,7 @@ function renderContractHistoryModal() {
     .forEach((entry) => {
       const wrapper = document.createElement("div");
       wrapper.className = "contract-history-modal-item";
-      wrapper.innerHTML = buildContractHistoryCardHtml(entry, { compact: false });
+      wrapper.innerHTML = buildContractHistoryCardHtml(entry, { compact: true });
       wrapper
         .querySelector(".contract-history-view")
         ?.addEventListener("click", () => {

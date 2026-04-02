@@ -5786,18 +5786,19 @@ label {
 }
 
 .contract-mini-card-compact .contract-mini-card-layout {
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
-  gap: 0.8rem;
+  grid-template-columns: minmax(170px, 210px) minmax(0, 1fr) minmax(104px, 118px);
+  gap: 0.72rem;
 }
 
 .contract-mini-card-compact .contract-mini-card-stats {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(92px, 1fr));
+  gap: 0.58rem;
 }
 
 .contract-mini-card-compact .contract-mini-card-actions {
-  grid-column: 1 / -1;
-  justify-items: start;
-  align-content: start;
+  grid-column: auto;
+  justify-items: end;
+  align-content: center;
   gap: 0.55rem;
 }
 
@@ -5818,21 +5819,25 @@ label {
 
 .contract-mini-card-compact .contract-mini-stat {
   gap: 0.34rem;
-  padding: 0.72rem 0.78rem;
+  padding: 0.68rem 0.72rem;
   border-radius: 16px;
 }
 
 .contract-mini-card-compact .contract-mini-stat-value {
-  font-size: 1.22rem;
+  font-size: 1.08rem;
 }
 
 .contract-mini-card-compact .contract-mini-stat-note {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .contract-mini-card-compact .contract-history-view {
   min-height: 36px;
-  padding-inline: 0.8rem;
+  padding-inline: 0.72rem;
+}
+
+.contract-mini-card-compact .contract-mini-card-status {
+  text-align: right;
 }
 
 .contract-mini-card-topbar {
