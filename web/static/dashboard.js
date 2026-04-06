@@ -1270,6 +1270,79 @@ function metricCard(
   return card;
 }
 
+function scanActivityCard(scheduledToday, scheduledCount, manualToday) {
+  const scheduledTrend = scanSummary(scheduledToday, scheduledCount);
+  const manualTrend = manualScanSummary(manualToday);
+
+  const card = document.createElement("article");
+  card.className = "metric-card metric-card-scan-activity";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "metric-title-row";
+
+  const titleEl = document.createElement("h3");
+  titleEl.textContent = "Scan activity";
+  titleRow.appendChild(titleEl);
+
+  const infoButton = document.createElement("button");
+  infoButton.type = "button";
+  infoButton.className = "metric-info";
+  infoButton.setAttribute("aria-label", "About scan activity");
+  infoButton.setAttribute(
+    "data-tooltip",
+    "Scheduled scans run automatically at configured times, while manual scans are started from the dashboard.",
+  );
+  infoButton.textContent = "i";
+  titleRow.appendChild(infoButton);
+  card.appendChild(titleRow);
+
+  const rows = document.createElement("div");
+  rows.className = "metric-scan-activity-grid";
+
+  const scheduledRow = document.createElement("div");
+  scheduledRow.className = "metric-scan-activity-item";
+
+  const scheduledLabel = document.createElement("span");
+  scheduledLabel.className = "metric-scan-activity-label";
+  scheduledLabel.textContent = "Scheduled";
+
+  const scheduledValue = document.createElement("strong");
+  scheduledValue.className = "metric-scan-activity-value";
+  scheduledValue.textContent = `${scheduledToday} / ${scheduledCount || 0}`;
+
+  const scheduledNote = document.createElement("p");
+  scheduledNote.className = `metric-note ${scheduledTrend.tone}`;
+  scheduledNote.textContent = scheduledTrend.label;
+
+  scheduledRow.appendChild(scheduledLabel);
+  scheduledRow.appendChild(scheduledValue);
+  scheduledRow.appendChild(scheduledNote);
+
+  const manualRow = document.createElement("div");
+  manualRow.className = "metric-scan-activity-item";
+
+  const manualLabel = document.createElement("span");
+  manualLabel.className = "metric-scan-activity-label";
+  manualLabel.textContent = "Manual";
+
+  const manualValue = document.createElement("strong");
+  manualValue.className = "metric-scan-activity-value";
+  manualValue.textContent = String(manualToday);
+
+  const manualNote = document.createElement("p");
+  manualNote.className = `metric-note ${manualTrend.tone}`;
+  manualNote.textContent = manualTrend.label;
+
+  manualRow.appendChild(manualLabel);
+  manualRow.appendChild(manualValue);
+  manualRow.appendChild(manualNote);
+
+  rows.appendChild(scheduledRow);
+  rows.appendChild(manualRow);
+  card.appendChild(rows);
+  return card;
+}
+
 function reliabilityHighlightCard(
   title,
   valueText,
@@ -1362,11 +1435,6 @@ function renderHeroMetrics(data) {
         );
   const scheduledToday = data.today_scheduled_tests ?? data.today_tests ?? 0;
   const manualToday = data.today_manual_tests || 0;
-  const todayTrend = scanSummary(
-    scheduledToday,
-    data.scheduled_tests_per_day || 0,
-  );
-  const manualTrend = manualScanSummary(manualToday);
   const downloadSeries = recentMetricSeries(data.timeseries, "download_mbps");
   const uploadSeries = recentMetricSeries(data.timeseries, "upload_mbps");
   const pingSeries = recentMetricSeries(data.timeseries, "ping_ms");
@@ -1432,19 +1500,10 @@ function renderHeroMetrics(data) {
         },
       },
     ),
-    metricCard(
-      "Scheduled scans",
-      `${scheduledToday} / ${data.scheduled_tests_per_day || 0}`,
-      todayTrend.label,
-      todayTrend.tone,
-      { reserveDeltaSpace: true },
-    ),
-    metricCard(
-      "Manual scans",
-      `${manualToday}`,
-      manualTrend.label,
-      manualTrend.tone,
-      { reserveDeltaSpace: true },
+    scanActivityCard(
+      scheduledToday,
+      data.scheduled_tests_per_day || 0,
+      manualToday,
     ),
   ];
 
@@ -1465,7 +1524,7 @@ function renderHeroMetrics(data) {
   heroMetricLastValues.set("latest_ping", latestPingValue);
 }
 
-function renderHeroMetricsSkeleton(cardCount = 5) {
+function renderHeroMetricsSkeleton(cardCount = 4) {
   const root = byId("hero-metrics");
   if (!root) return;
 
