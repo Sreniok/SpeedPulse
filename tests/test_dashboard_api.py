@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,11 @@ from backup_manager import validate_backup
 from db_migrate import import_logs
 from measurement_store import get_app_secret, run_migrations
 
-LOG_FIXTURE = """\
-Date: 13-03-2026
+
+def build_log_fixture(measurement_date: datetime) -> str:
+    date_text = measurement_date.strftime("%d-%m-%Y")
+    return f"""\
+Date: {date_text}
 Time: 08:00
 Server: London
 ISP: Example ISP
@@ -24,7 +28,7 @@ Packet Loss: 0%
 Download: 610 Mbps
 Upload: 95 Mbps
 
-Date: 13-03-2026
+Date: {date_text}
 Time: 16:00
 Server: Manchester
 ISP: Example ISP
@@ -34,7 +38,7 @@ Packet Loss: 1.2%
 Download: 420 Mbps
 Upload: 70 Mbps
 
-Date: 13-03-2026
+Date: {date_text}
 Time: 22:00
 Server: London
 ISP: Example ISP
@@ -46,11 +50,19 @@ Upload: 92 Mbps
 """
 
 
+def recent_measurement_datetime() -> datetime:
+    return datetime.now() - timedelta(days=1)
+
+
 @pytest.fixture()
 def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     log_dir = tmp_path / "Log"
     log_dir.mkdir()
-    (log_dir / "speed_log_week_11.txt").write_text(LOG_FIXTURE, encoding="utf-8")
+    recent_measurement_date = recent_measurement_datetime()
+    (log_dir / "speed_log_week_11.txt").write_text(
+        build_log_fixture(recent_measurement_date),
+        encoding="utf-8",
+    )
 
     config_path = tmp_path / "config.json"
     env_path = tmp_path / ".env"
@@ -138,7 +150,7 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
             }
         )
         client.cookies.set(webapp.SESSION_COOKIE, token)
-        yield client, webapp, config_path, env_path, csrf_token
+        yield client, webapp, config_path, env_path, csrf_token, recent_measurement_date
 
     if webapp.MANUAL_SPEEDTEST_LOCK.locked():
         webapp.MANUAL_SPEEDTEST_LOCK.release()
@@ -149,7 +161,7 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
 
 def test_metrics_payload_includes_sla_and_incidents(api_client):
-    client, _, _, _, _ = api_client
+    client, _, _, _, _, _ = api_client
 
     response = client.get("/api/metrics?mode=days&days=30")
 
@@ -165,7 +177,7 @@ def test_metrics_payload_includes_sla_and_incidents(api_client):
 
 
 def test_overview_page_only_renders_summary_and_chart_sections(api_client):
-    client, _, _, _, _ = api_client
+    client, _, _, _, _, _ = api_client
 
     response = client.get("/")
 
@@ -181,7 +193,7 @@ def test_overview_page_only_renders_summary_and_chart_sections(api_client):
 
 
 def test_results_page_renders_results_table_on_separate_route(api_client):
-    client, _, _, _, _ = api_client
+    client, _, _, _, _, _ = api_client
 
     response = client.get("/results")
 
@@ -198,12 +210,13 @@ def test_end_current_contract_returns_archived_summary_and_email_status(
     api_client,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    client, webapp, config_path, _, csrf_token = api_client
+    client, webapp, config_path, _, csrf_token, recent_measurement_date = api_client
+    contract_date = recent_measurement_date.strftime("%Y-%m-%d")
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["contract"]["current"] = {
-        "start_date": "2026-03-13",
-        "end_date": "2026-03-13",
+        "start_date": contract_date,
+        "end_date": contract_date,
         "provider": "Sky Ireland",
         "provider_country": "IE",
         "download_mbps": 1000,
@@ -240,13 +253,14 @@ def test_end_current_contract_returns_archived_summary_and_email_status(
 
 
 def test_settings_payload_enriches_contract_history_entries(api_client):
-    client, _, config_path, _, _ = api_client
+    client, _, config_path, _, _, recent_measurement_date = api_client
+    contract_date = recent_measurement_date.strftime("%Y-%m-%d")
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["contract"]["history"] = [
         {
-            "start_date": "2026-03-13",
-            "end_date": "2026-03-13",
+            "start_date": contract_date,
+            "end_date": contract_date,
             "provider": "Sky Ireland",
             "provider_country": "IE",
             "download_mbps": 1000,
@@ -268,13 +282,14 @@ def test_settings_payload_enriches_contract_history_entries(api_client):
 
 
 def test_email_archived_contract_report_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):
-    client, webapp, config_path, _, csrf_token = api_client
+    client, webapp, config_path, _, csrf_token, recent_measurement_date = api_client
+    contract_date = recent_measurement_date.strftime("%Y-%m-%d")
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["contract"]["history"] = [
         {
-            "start_date": "2026-03-13",
-            "end_date": "2026-03-13",
+            "start_date": contract_date,
+            "end_date": contract_date,
             "provider": "Sky Ireland",
             "provider_country": "IE",
             "download_mbps": 1000,
@@ -306,13 +321,14 @@ def test_email_archived_contract_report_endpoint(api_client, monkeypatch: pytest
 
 
 def test_download_archived_contract_report_endpoint(api_client):
-    client, _, config_path, _, _ = api_client
+    client, _, config_path, _, _, recent_measurement_date = api_client
+    contract_date = recent_measurement_date.strftime("%Y-%m-%d")
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["contract"]["history"] = [
         {
-            "start_date": "2026-03-13",
-            "end_date": "2026-03-13",
+            "start_date": contract_date,
+            "end_date": contract_date,
             "provider": "Sky Ireland",
             "provider_country": "IE",
             "download_mbps": 1000,
@@ -334,13 +350,14 @@ def test_download_archived_contract_report_endpoint(api_client):
 
 
 def test_update_archived_contract_endpoint(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, recent_measurement_date = api_client
+    contract_date = recent_measurement_date.strftime("%Y-%m-%d")
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["contract"]["history"] = [
         {
-            "start_date": "2026-03-13",
-            "end_date": "2026-03-13",
+            "start_date": contract_date,
+            "end_date": contract_date,
             "provider": "Sky Ireland",
             "provider_country": "IE",
             "download_mbps": 1000,
@@ -363,7 +380,7 @@ def test_update_archived_contract_endpoint(api_client):
             "provider": "Vodafone Ireland",
             "account_name": "Updated Name",
             "account_number": "9988",
-            "start_date": "2026-03-13",
+            "start_date": contract_date,
             "end_date": "2026-03-14",
             "download_mbps": 500,
             "upload_mbps": 50,
@@ -386,7 +403,7 @@ def test_update_archived_contract_endpoint(api_client):
 
 
 def test_manual_run_stage_tracks_live_ookla_progress(api_client):
-    _, webapp, _, _, _ = api_client
+    _, webapp, _, _, _, _ = api_client
 
     assert webapp._infer_manual_run_stage("Connected to test server: Sky – Dublin (id: 71403)") == "Connecting to test server"
     assert webapp._infer_manual_run_stage("Idle Latency: 6.42 ms (40%)") == "Measuring latency"
@@ -395,7 +412,7 @@ def test_manual_run_stage_tracks_live_ookla_progress(api_client):
 
 
 def test_broadband_threshold_settings_update_metrics_and_alert_thresholds(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     current_settings = client.get("/api/settings/notifications")
     assert current_settings.status_code == 200
@@ -451,7 +468,7 @@ def test_broadband_threshold_settings_update_metrics_and_alert_thresholds(api_cl
 
 
 def test_notification_email_settings_persist_to_config_and_env(api_client):
-    client, _, config_path, env_path, csrf_token = api_client
+    client, _, config_path, env_path, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/notification-email",
@@ -467,7 +484,7 @@ def test_notification_email_settings_persist_to_config_and_env(api_client):
 
 
 def test_login_email_update_no_longer_requires_current_password(api_client):
-    client, _, _, env_path, csrf_token = api_client
+    client, _, _, env_path, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/login-email",
@@ -485,7 +502,7 @@ def test_login_email_update_no_longer_requires_current_password(api_client):
 
 
 def test_user_account_combined_save_updates_notification_email_only(api_client):
-    client, _, config_path, env_path, csrf_token = api_client
+    client, _, config_path, env_path, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/user-account",
@@ -513,7 +530,7 @@ def test_user_account_combined_save_updates_notification_email_only(api_client):
 
 
 def test_user_account_combined_save_updates_login_email_without_password(api_client):
-    client, _, _, env_path, csrf_token = api_client
+    client, _, _, env_path, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/user-account",
@@ -541,7 +558,7 @@ def test_user_account_combined_save_updates_login_email_without_password(api_cli
 
 
 def test_server_selection_settings_persist_to_config(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/server",
@@ -557,7 +574,7 @@ def test_server_selection_settings_persist_to_config(api_client):
 
 
 def test_appearance_settings_persist_theme_preferences(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/appearance",
@@ -585,7 +602,7 @@ def test_appearance_settings_persist_theme_preferences(api_client):
 
 
 def test_notification_settings_timezone_persist_to_config_and_env(api_client):
-    client, _, config_path, env_path, csrf_token = api_client
+    client, _, config_path, env_path, csrf_token, _ = api_client
 
     current_settings = client.get("/api/settings/notifications")
     assert current_settings.status_code == 200
@@ -617,7 +634,7 @@ def test_notification_settings_timezone_persist_to_config_and_env(api_client):
 
 
 def test_notification_settings_account_save_does_not_require_email_or_schedule_payload(api_client):
-    client, _, config_path, env_path, csrf_token = api_client
+    client, _, config_path, env_path, csrf_token, _ = api_client
 
     response = client.post(
         "/api/settings/notifications",
@@ -665,7 +682,7 @@ def test_notification_settings_account_save_does_not_require_email_or_schedule_p
 
 
 def test_notification_settings_store_smtp_password_encrypted(api_client):
-    client, _, _, env_path, csrf_token = api_client
+    client, _, _, env_path, csrf_token, _ = api_client
 
     current_settings = client.get("/api/settings/notifications")
     assert current_settings.status_code == 200
@@ -717,7 +734,7 @@ def test_notification_settings_store_smtp_password_encrypted(api_client):
 
 
 def test_manual_speedtest_start_and_status_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):
-    client, webapp, _, _, csrf_token = api_client
+    client, webapp, _, _, csrf_token, _ = api_client
 
     class DummyThread:
         def __init__(self, target=None, kwargs=None, name=None, daemon=None):
@@ -755,7 +772,7 @@ def test_manual_speedtest_start_and_status_endpoint(api_client, monkeypatch: pyt
 
 
 def test_manual_weekly_report_send_now_endpoint(api_client, monkeypatch: pytest.MonkeyPatch):
-    client, webapp, _, _, csrf_token = api_client
+    client, webapp, _, _, csrf_token, _ = api_client
 
     monkeypatch.setattr(
         webapp,
@@ -775,7 +792,7 @@ def test_manual_weekly_report_send_now_endpoint(api_client, monkeypatch: pytest.
 
 
 def test_manual_weekly_report_send_now_endpoint_returns_failure(api_client, monkeypatch: pytest.MonkeyPatch):
-    client, webapp, _, _, csrf_token = api_client
+    client, webapp, _, _, csrf_token, _ = api_client
 
     monkeypatch.setattr(
         webapp,
@@ -795,7 +812,7 @@ def test_manual_weekly_report_send_now_endpoint_returns_failure(api_client, monk
 
 
 def test_manual_backup_create_saves_to_backup_directory(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     response = client.post(
         "/api/backup/create",
@@ -817,7 +834,7 @@ def test_manual_backup_create_saves_to_backup_directory(api_client):
 
 
 def test_manual_backup_saved_file_can_be_downloaded(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     create_response = client.post(
         "/api/backup/create",
@@ -840,7 +857,7 @@ def test_manual_backup_saved_file_can_be_downloaded(api_client):
 
 
 def test_manual_backup_can_save_and_download_in_one_request(api_client):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
 
     response = client.post(
         "/api/backup/create",
@@ -860,7 +877,7 @@ def test_manual_backup_can_save_and_download_in_one_request(api_client):
 def test_manual_backup_uses_saved_scheduler_password_when_blank(
     api_client, monkeypatch: pytest.MonkeyPatch
 ):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
     monkeypatch.setenv("BACKUP_PASSWORD", "schedulerpass123")
 
     response = client.post(
@@ -879,7 +896,7 @@ def test_manual_backup_uses_saved_scheduler_password_when_blank(
 def test_manual_backup_allows_one_off_password_override(
     api_client, monkeypatch: pytest.MonkeyPatch
 ):
-    client, _, config_path, _, csrf_token = api_client
+    client, _, config_path, _, csrf_token, _ = api_client
     monkeypatch.setenv("BACKUP_PASSWORD", "schedulerpass123")
 
     response = client.post(
@@ -899,7 +916,7 @@ def test_manual_backup_allows_one_off_password_override(
 
 
 def test_manual_backup_requires_password_when_no_saved_password(api_client):
-    client, _, _, _, csrf_token = api_client
+    client, _, _, _, csrf_token, _ = api_client
 
     response = client.post(
         "/api/backup/create",
@@ -912,7 +929,7 @@ def test_manual_backup_requires_password_when_no_saved_password(api_client):
 
 
 def test_backup_restore_returns_restart_required(api_client, monkeypatch: pytest.MonkeyPatch):
-    client, webapp, _, _, csrf_token = api_client
+    client, webapp, _, _, csrf_token, _ = api_client
 
     monkeypatch.setattr(
         webapp,
@@ -935,7 +952,7 @@ def test_backup_restore_returns_restart_required(api_client, monkeypatch: pytest
 
 
 def test_backup_restore_requires_backup_password(api_client):
-    client, _, _, _, csrf_token = api_client
+    client, _, _, _, csrf_token, _ = api_client
     response = client.post(
         "/api/backup/restore",
         headers={"X-CSRF-Token": csrf_token},
