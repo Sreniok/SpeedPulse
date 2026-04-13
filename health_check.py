@@ -7,7 +7,7 @@ Performs daily health checks and sends email alerts when issues are detected
 import os
 import smtplib
 import sys
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -16,6 +16,18 @@ from mail_settings import load_mail_settings
 from measurement_repository import load_measurement_entries
 from measurement_store import record_notification_event
 from push_notifications import send_ntfy_event, send_webhook_event
+
+_SCHEDULE_LOOKBACK_DAYS = 400
+_DEFAULT_TEST_TIMES = ["08:00", "16:00", "22:00"]
+_WEEKDAY_MAP = {
+    "mon": 0,
+    "tue": 1,
+    "wed": 2,
+    "thu": 3,
+    "fri": 4,
+    "sat": 5,
+    "sun": 6,
+}
 
 
 def load_config():
@@ -81,13 +93,6 @@ def check_log_files(config):
     if len(log_files) > 60:  # More than a year of logs
         issues.append(f"Too many log files ({len(log_files)}). Consider archiving old logs.")
 
-    # Check if current week's log file exists
-    current_week = datetime.now().isocalendar()[1]
-    current_log = log_dir / f"speed_log_week_{current_week}.txt"
-
-    if not current_log.exists():
-        issues.append(f"Current week's log file (week {current_week}) does not exist")
-
     return {
         'healthy': len(issues) == 0,
         'total_size_mb': round(total_size_mb, 2),
@@ -96,29 +101,150 @@ def check_log_files(config):
     }
 
 
-def check_last_speedtest(config):
-    """Check when the last successful speedtest was run"""
+def _parse_test_times(config):
+    scheduling = config.get("scheduling", {})
+    raw_times = scheduling.get("test_times", _DEFAULT_TEST_TIMES)
+    if not isinstance(raw_times, list):
+        raw_times = _DEFAULT_TEST_TIMES
+
+    parsed_times = []
+    for raw_value in raw_times:
+        value = str(raw_value or "").strip()
+        if not value or ":" not in value:
+            continue
+        hour_str, minute_str = value.split(":", 1)
+        try:
+            parsed_times.append(time(int(hour_str), int(minute_str)))
+        except ValueError:
+            continue
+
+    return sorted(parsed_times)
+
+
+def _parse_scan_frequency(config):
+    frequency = str(
+        config.get("scheduling", {}).get("scan_frequency", "daily") or "daily"
+    ).strip().lower()
+    return frequency if frequency in {"daily", "weekly", "monthly", "custom"} else "daily"
+
+
+def _normalize_custom_scan_days(values):
+    if not isinstance(values, list):
+        return [1]
+
+    normalized = sorted(
+        {
+            day
+            for day in (
+                int(value) for value in values if str(value).strip().isdigit()
+            )
+            if 1 <= day <= 31
+        }
+    )
+    return normalized or [1]
+
+
+def _speedtest_completion_grace_period(config):
+    speedtest_cfg = config.get("speedtest", {})
+
     try:
-        entries = load_measurement_entries(config)
-        if not entries:
+        max_retries = max(1, int(speedtest_cfg.get("max_retries", 3) or 3))
+    except (TypeError, ValueError):
+        max_retries = 3
+
+    try:
+        timeout_seconds = max(0, int(speedtest_cfg.get("timeout_seconds", 120) or 120))
+    except (TypeError, ValueError):
+        timeout_seconds = 120
+
+    try:
+        retry_delay_seconds = max(0, int(speedtest_cfg.get("retry_delay_seconds", 30) or 30))
+    except (TypeError, ValueError):
+        retry_delay_seconds = 30
+
+    estimated_runtime = (max_retries * timeout_seconds) + (max(0, max_retries - 1) * retry_delay_seconds)
+    return timedelta(seconds=max(estimated_runtime, 600))
+
+
+def _is_scheduled_scan_day(config, target_date):
+    scheduling = config.get("scheduling", {})
+    frequency = _parse_scan_frequency(config)
+
+    if frequency == "weekly":
+        weekday_name = str(scheduling.get("scan_weekly_day", "Monday") or "Monday").strip().lower()[:3]
+        return target_date.weekday() == _WEEKDAY_MAP.get(weekday_name, 0)
+    if frequency == "monthly":
+        try:
+            day_of_month = int(scheduling.get("scan_monthly_day", 1) or 1)
+        except (TypeError, ValueError):
+            day_of_month = 1
+        day_of_month = max(1, min(31, day_of_month))
+        return target_date.day == day_of_month
+    if frequency == "custom":
+        return target_date.day in _normalize_custom_scan_days(scheduling.get("scan_custom_days", []))
+    return True
+
+
+def _latest_due_scheduled_run(config, now=None):
+    scheduling = config.get("scheduling", {})
+    if not bool(scheduling.get("scan_enabled", True)):
+        return None
+
+    test_times = _parse_test_times(config)
+    if not test_times:
+        return None
+
+    current_time = (now or datetime.now()).replace(second=0, microsecond=0)
+    due_cutoff = current_time - _speedtest_completion_grace_period(config)
+
+    for day_offset in range(_SCHEDULE_LOOKBACK_DAYS + 1):
+        candidate_date = due_cutoff.date() - timedelta(days=day_offset)
+        if not _is_scheduled_scan_day(config, candidate_date):
+            continue
+
+        for test_time in reversed(test_times):
+            candidate_run = datetime.combine(candidate_date, test_time)
+            if candidate_run <= due_cutoff:
+                return candidate_run
+
+    return None
+
+
+def check_last_speedtest(config):
+    """Check whether the latest due scheduled speed test completed."""
+    try:
+        entries = []
+        for entry in load_measurement_entries(config):
+            timestamp = entry.get("timestamp")
+            if timestamp is None or not hasattr(timestamp, "strftime"):
+                continue
+            if str(entry.get("source", "scheduled")).strip().lower() != "scheduled":
+                continue
+            entries.append(entry)
+        last_test = entries[-1]["timestamp"] if entries else None
+        hours_ago = None
+        if last_test is not None:
+            hours_ago = (datetime.now() - last_test).total_seconds() / 3600
+
+        expected_run = _latest_due_scheduled_run(config)
+        if expected_run is None:
             return {
-                'healthy': False,
-                'last_test': None,
-                'hours_ago': None,
-                'issue': 'No speed test measurements found'
+                'healthy': True,
+                'last_test': last_test.strftime("%Y-%m-%d %H:%M:%S") if last_test else None,
+                'hours_ago': round(hours_ago, 1) if hours_ago is not None else None,
+                'issue': None
             }
 
-        last_test = entries[-1]["timestamp"]
-        hours_ago = (datetime.now() - last_test).total_seconds() / 3600
-
-        # Alert if last test was more than 24 hours ago
-        healthy = hours_ago < 24
+        healthy = last_test is not None and last_test >= expected_run
 
         return {
             'healthy': healthy,
-            'last_test': last_test.strftime("%Y-%m-%d %H:%M:%S"),
-            'hours_ago': round(hours_ago, 1),
-            'issue': f'Last test was {round(hours_ago, 1)} hours ago' if not healthy else None
+            'last_test': last_test.strftime("%Y-%m-%d %H:%M:%S") if last_test else None,
+            'hours_ago': round(hours_ago, 1) if hours_ago is not None else None,
+            'issue': (
+                f"Scheduled speed test due at {expected_run.strftime('%Y-%m-%d %H:%M')} has not completed"
+                if not healthy else None
+            )
         }
 
     except Exception as e:
