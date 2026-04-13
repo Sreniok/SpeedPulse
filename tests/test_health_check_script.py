@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from datetime import datetime
@@ -13,10 +14,14 @@ measurement_store_stub.list_speed_tests = lambda *args, **kwargs: []
 measurement_store_stub.record_notification_event = lambda *args, **kwargs: None
 sys.modules.setdefault("measurement_store", measurement_store_stub)
 
-import health_check
+
+def _health_check_module():
+    return importlib.import_module("health_check")
 
 
 def _freeze_now(monkeypatch: pytest.MonkeyPatch, frozen_now: datetime) -> None:
+    health_check = _health_check_module()
+
     class FrozenDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -58,6 +63,7 @@ def _entry(timestamp: datetime, source: str = "scheduled") -> dict:
 
 
 def test_check_log_files_does_not_require_current_week_file(tmp_path: Path) -> None:
+    health_check = _health_check_module()
     log_dir = tmp_path / "Log"
     log_dir.mkdir()
     (log_dir / "speed_log_week_15.txt").write_text("historical log\n", encoding="utf-8")
@@ -71,6 +77,7 @@ def test_check_log_files_does_not_require_current_week_file(tmp_path: Path) -> N
 def test_daily_schedule_before_first_monday_run_uses_previous_due_slot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    health_check = _health_check_module()
     log_dir = tmp_path / "Log"
     log_dir.mkdir()
     config = _build_config(log_dir)
@@ -91,6 +98,7 @@ def test_daily_schedule_before_first_monday_run_uses_previous_due_slot(
 def test_daily_schedule_reports_a_missed_due_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    health_check = _health_check_module()
     log_dir = tmp_path / "Log"
     log_dir.mkdir()
     config = _build_config(log_dir)
@@ -134,6 +142,7 @@ def test_non_daily_schedules_use_the_latest_due_slot(
     frozen_now: datetime,
     last_scheduled: datetime,
 ) -> None:
+    health_check = _health_check_module()
     log_dir = tmp_path / "Log"
     log_dir.mkdir()
     config = _build_config(log_dir, **scheduling_overrides)
