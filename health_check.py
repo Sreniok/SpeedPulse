@@ -282,6 +282,7 @@ def check_error_log(config):
             try:
                 # Extract timestamp [YYYY-MM-DD HH:MM:SS]
                 if line.startswith('['):
+                if line.startswith('[') and "] ERROR:" in line:
                     timestamp_str = line[1:20]
                     error_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
                     hours_ago = (now - error_time).total_seconds() / 3600

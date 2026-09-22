@@ -157,3 +157,24 @@ def test_non_daily_schedules_use_the_latest_due_slot(
 
     assert result["healthy"] is True
     assert result["issue"] is None
+
+
+def test_check_error_log_counts_only_error_lines(tmp_path: Path) -> None:
+    health_check = _health_check_module()
+    error_log = tmp_path / "errors.log"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    error_log.write_text(
+        f"[{now_str}] WARNING: Speedtest failed return code 2 (attempt 1/3)\n"
+        f"[{now_str}] WARNING: Diagnostic output\n"
+        f"[{now_str}] ERROR: Speedtest failed after 3 attempts\n",
+        encoding="utf-8",
+    )
+
+    config = {
+        "paths": {"error_log": str(error_log)},
+    }
+
+    result = health_check.check_error_log(config)
+    assert result["recent_errors"] == 1
+    assert result["healthy"] is True
+

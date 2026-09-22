@@ -45,6 +45,7 @@ def write_error_log(config, message):
         f.write(log_entry)
 
     log.warning("%s", message)
+    log.error("%s", message)
 
 
 def resolve_speedtest_executable(config):
@@ -311,6 +312,7 @@ def run_speedtest_with_retry(config):
         speedtest_exe = resolve_speedtest_executable(config)
         provider = detect_speedtest_provider(speedtest_exe)
         server_id = resolve_server_id(config)
+        preferred_server_id = resolve_server_id(config)
     except FileNotFoundError:
         write_error_log(config, "No speedtest executable found. Install `speedtest` or `speedtest-cli`.")
         log.error("No speedtest executable found in PATH.")
@@ -325,17 +327,41 @@ def run_speedtest_with_retry(config):
     cmd = build_speedtest_command(speedtest_exe, provider, server_id=server_id, live_progress=live_progress)
     provider_label = "Ookla CLI" if provider == "ookla" else "speedtest-cli"
     server_label = f"Selected server #{server_id}" if server_id else "Automatic server selection"
+    server_label = (
+        f"Selected preferred server #{preferred_server_id}"
+        if preferred_server_id
+        else "Automatic server selection"
+    )
 
     log.info("Using %s via %s", provider_label, Path(speedtest_exe).name)
     log.info("%s", server_label)
 
     for attempt in range(1, max_retries + 1):
+        is_fallback = bool(preferred_server_id and attempt == max_retries and max_retries > 1)
+        current_server_id = None if is_fallback else preferred_server_id
+
+        if is_fallback:
+            log.info(
+                "Preferred server #%s failed on previous attempts; final retry will use automatic server selection",
+                preferred_server_id,
+            )
+
+        cmd = build_speedtest_command(
+            speedtest_exe,
+            provider,
+            server_id=current_server_id,
+            live_progress=live_progress,
+        )
+
+        server_desc = f", server_id={current_server_id}" if current_server_id else ", automatic server selection"
+
         try:
             log.info(
                 "Running %s via %s%s (attempt %d/%d)",
                 provider_label,
                 Path(speedtest_exe).name,
                 f", server_id={server_id}" if server_id else "",
+                server_desc,
                 attempt,
                 max_retries,
             )
@@ -365,21 +391,58 @@ def run_speedtest_with_retry(config):
 
                 # Validate required normalized fields
                 if all(key in normalized for key in ["download_bps", "upload_bps", "ping_ms"]):
+                    if is_fallback:
+                        log.info(
+                            "Fallback server selected by Ookla: %s – %s (id: %s)",
+                            normalized.get("server_name", "Unknown"),
+                            normalized.get("server_location", "Unknown"),
+                            normalized.get("server_id", "N/A"),
+                        )
                     log.info("Speedtest completed successfully")
                     return normalized
 
                 write_error_log(config, f"Speedtest returned incomplete normalized data (attempt {attempt})")
+                log.warning(
+                    "Speedtest returned incomplete normalized data (attempt %d/%d)",
+                    attempt,
+                    max_retries,
+                )
             else:
                 write_error_log(config, f"Speedtest failed with return code {returncode} (attempt {attempt})")
+                log.warning(
+                    "Speedtest failed with return code %s (attempt %d/%d)",
+                    returncode,
+                    attempt,
+                    max_retries,
+                )
                 if raw_output:
                     write_error_log(config, f"Error output: {raw_output[-1]}")
+                    log.warning("Diagnostic error output: %s", raw_output[-1])
 
         except subprocess.TimeoutExpired:
             write_error_log(config, f"Speedtest timed out after {timeout} seconds (attempt {attempt})")
+            log.warning(
+                "Speedtest timed out after %d seconds (attempt %d/%d)",
+                timeout,
+                attempt,
+                max_retries,
+            )
         except json.JSONDecodeError as e:
             write_error_log(config, f"Failed to parse speedtest JSON output (attempt {attempt}): {e}")
+            log.warning(
+                "Failed to parse speedtest JSON output (attempt %d/%d): %s",
+                attempt,
+                max_retries,
+                e,
+            )
         except Exception as e:
             write_error_log(config, f"Speedtest failed with error: {e} (attempt {attempt})")
+            log.warning(
+                "Speedtest failed with error: %s (attempt %d/%d)",
+                e,
+                attempt,
+                max_retries,
+            )
 
         if attempt < max_retries:
             log.info("Waiting %d seconds before retry...", retry_delay)
