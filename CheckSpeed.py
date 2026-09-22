@@ -44,7 +44,6 @@ def write_error_log(config, message):
     with open(error_log, "a", encoding="utf-8") as f:
         f.write(log_entry)
 
-    log.warning("%s", message)
     log.error("%s", message)
 
 
@@ -311,7 +310,6 @@ def run_speedtest_with_retry(config):
     try:
         speedtest_exe = resolve_speedtest_executable(config)
         provider = detect_speedtest_provider(speedtest_exe)
-        server_id = resolve_server_id(config)
         preferred_server_id = resolve_server_id(config)
     except FileNotFoundError:
         write_error_log(config, "No speedtest executable found. Install `speedtest` or `speedtest-cli`.")
@@ -324,9 +322,7 @@ def run_speedtest_with_retry(config):
 
     run_source = os.getenv("SPEEDTEST_RUN_SOURCE", "scheduled").strip().lower()
     live_progress = provider == "ookla" and run_source == "manual"
-    cmd = build_speedtest_command(speedtest_exe, provider, server_id=server_id, live_progress=live_progress)
     provider_label = "Ookla CLI" if provider == "ookla" else "speedtest-cli"
-    server_label = f"Selected server #{server_id}" if server_id else "Automatic server selection"
     server_label = (
         f"Selected preferred server #{preferred_server_id}"
         if preferred_server_id
@@ -360,7 +356,6 @@ def run_speedtest_with_retry(config):
                 "Running %s via %s%s (attempt %d/%d)",
                 provider_label,
                 Path(speedtest_exe).name,
-                f", server_id={server_id}" if server_id else "",
                 server_desc,
                 attempt,
                 max_retries,
@@ -401,14 +396,12 @@ def run_speedtest_with_retry(config):
                     log.info("Speedtest completed successfully")
                     return normalized
 
-                write_error_log(config, f"Speedtest returned incomplete normalized data (attempt {attempt})")
                 log.warning(
                     "Speedtest returned incomplete normalized data (attempt %d/%d)",
                     attempt,
                     max_retries,
                 )
             else:
-                write_error_log(config, f"Speedtest failed with return code {returncode} (attempt {attempt})")
                 log.warning(
                     "Speedtest failed with return code %s (attempt %d/%d)",
                     returncode,
@@ -416,11 +409,9 @@ def run_speedtest_with_retry(config):
                     max_retries,
                 )
                 if raw_output:
-                    write_error_log(config, f"Error output: {raw_output[-1]}")
                     log.warning("Diagnostic error output: %s", raw_output[-1])
 
         except subprocess.TimeoutExpired:
-            write_error_log(config, f"Speedtest timed out after {timeout} seconds (attempt {attempt})")
             log.warning(
                 "Speedtest timed out after %d seconds (attempt %d/%d)",
                 timeout,
@@ -428,7 +419,6 @@ def run_speedtest_with_retry(config):
                 max_retries,
             )
         except json.JSONDecodeError as e:
-            write_error_log(config, f"Failed to parse speedtest JSON output (attempt {attempt}): {e}")
             log.warning(
                 "Failed to parse speedtest JSON output (attempt %d/%d): %s",
                 attempt,
@@ -436,7 +426,6 @@ def run_speedtest_with_retry(config):
                 e,
             )
         except Exception as e:
-            write_error_log(config, f"Speedtest failed with error: {e} (attempt {attempt})")
             log.warning(
                 "Speedtest failed with error: %s (attempt %d/%d)",
                 e,
